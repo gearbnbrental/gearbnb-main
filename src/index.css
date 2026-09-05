@@ -1,0 +1,48 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&display=swap');
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-brand-brown: #4b3425;
+  --color-brand-olive: #7b8f52;
+  --color-brand-forest: #2d5a46;
+  --color-brand-forest-dark: #264d3c;
+  --color-brand-navy: #20435c;
+  --color-brand-cream: #f1e3c6;
+
+  --color-page: #faf6ec;
+  --color-page-band: #faf6ec;
+
+  --color-surface: #ffffff;
+  --color-surface-muted: #f8f5ef;
+  --color-surface-strong: #f3f0e8;
+  --color-ink: #111827;
+  --color-ink-muted: #4b5563;
+  --color-ink-faint: #9ca3af;
+  --color-line: #e5e7eb;
+  --color-line-soft: #f3f4f6;
+  --color-accent: #2d5a46;
+
+  --font-serif: 'Playfair Display', ui-serif, Georgia, serif;
+}
+
+.dark {
+  --color-page: #1a1512;
+  --color-page-band: #1a1512;
+
+  --color-surface: #241e19;
+  --color-surface-muted: #2a231d;
+  --color-surface-strong: #332b23;
+  --color-ink: #f3ede3;
+  --color-ink-muted: #c7bcae;
+  --color-ink-faint: #8f8377;
+  --color-line: #3d332a;
+  --color-line-soft: #2d2620;
+  --color-accent: #7fcaa2;
+}
+
+body {
+  background-color: var(--color-page);
+  transition: background-color 0.2s ease;
+}
