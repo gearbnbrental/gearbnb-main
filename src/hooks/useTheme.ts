@@ -5,9 +5,11 @@ type Theme = 'light' | 'dark';
 const STORAGE_KEY = 'gearbnb-theme';
 
 function getInitialTheme(): Theme {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === 'light' || stored === 'dark') return stored;
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  // Mirrors index.html's own pre-hydration script exactly (see its comment) — light by default,
+  // dark only once the customer has explicitly chosen it via the in-app toggle. Deliberately does
+  // NOT fall back to prefers-color-scheme; the two must never disagree, or the page would flash
+  // from whichever this function picks to whatever the inline script already applied.
+  return localStorage.getItem(STORAGE_KEY) === 'dark' ? 'dark' : 'light';
 }
 
 export function useTheme() {

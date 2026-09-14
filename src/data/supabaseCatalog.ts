@@ -1,15 +1,22 @@
 import { supabase } from '../supabase';
-import type { Destination, IndividualItem, KitEdition, PackageKit } from '../types/gearbnb';
-import { mockDestinations, mockIndividualItems, mockPackages } from './mockData';
+import type { IndividualItem, KitEdition, PackageKit } from '../types/gearbnb';
+import { mockIndividualItems, mockPackages } from './mockData';
 
 /** Raw shape of a row in the `packages` table (RMS Prisma schema, only the columns we use). */
 interface PackageRow {
   id: string;
+  packageNumber: string;
   name: string;
   description: string | null;
   price48hCentavos: number | null;
   price72hCentavos: number | null;
+  /** Admin-configured rate charged per day beyond the 72h tier — see PackageKit.extraPerDayPrice.
+   *  Null/0 means no rate has been configured yet (never a reason to invent one here). */
+  extraPerDayCentavos: number | null;
   depositCentavos: number;
+  /** Storage path (within the public "inventory-photos" bucket) of this package's admin-uploaded
+   * image, or null when none has been set yet — see resolvePackageImageUrl. */
+  imageStoragePath: string | null;
 }
 
 /** Raw shape of a row in the `rentable_gears` table. */
@@ -22,41 +29,14 @@ interface RentableGearRow {
   depositCentavos: number;
 }
 
-/** Raw shape of a row in the `destinations` table. */
-interface DestinationRow {
-  id: string;
-  name: string;
-}
-
 const centavosToPesos = (centavos: number) => centavos / 100;
-
-/**
- * Real product names carry business-copy framing our mock names don't (e.g. "The Nomad Kit" vs.
- * "Nomad Kit") — strip the leading article and surrounding whitespace before comparing, or every
- * name-matched lookup below silently misses on live data.
- */
-function normalizeName(name: string): string {
-  return name.toLowerCase().replace(/^the\s+/, '').trim();
-}
-
-/** Kit editions/name-matched extras are the two mock-only concepts the real schema has no room for. */
-const EXTRAS_BY_KIT_NAME = new Map(mockPackages.map((kit) => [normalizeName(kit.name), kit.extras ?? []]));
-
-/**
- * Real `packages`/`rentable_gears` rows carry no image column yet, so every row fetched from
- * Supabase would otherwise render with a blank imageUrl (falling back to the gray placeholder
- * icon in the UI). Until the RMS schema stores real image URLs, match rows to our known product
- * photos by name — the same stopgap already used for extras above. Any row whose name doesn't
- * match a known product still falls back to the placeholder icon, it just won't show a photo.
- */
-const KIT_BY_NAME = new Map(mockPackages.map((kit) => [normalizeName(kit.name), kit]));
-const ITEM_IMAGE_BY_NAME = new Map(mockIndividualItems.map((item) => [normalizeName(item.name), item.imageUrl]));
 
 /**
  * Real `packages.description` rows have carried raw internal notes straight through to
  * customers (e.g. "Note: the flyer's 6-person tent has no product photo yet..."). That text
  * has to be fixed at the source in the admin database — this is just a defensive filter so an
  * admin typo doesn't ship to the live site, stripping sentences that read as internal remarks.
+ * This sanitizes the row's own value; it never pulls in text from anywhere else.
  */
 const INTERNAL_NOTE_PATTERN = /^(note|internal|todo|fixme|dev note|staff note|admin note)\s*:/i;
 
@@ -68,28 +48,46 @@ function sanitizeDescription(description: string): string {
     .trim();
 }
 
-function stripEditionWord(label: string): string {
-  return label.toLowerCase().replace(/\s*edition\s*/g, '').trim();
+/**
+ * Client rule: the internal brand value "Generic" must never appear on the customer-facing site
+ * (e.g. real row name "Generic Big Cooking Set" → display "Big Cooking Set"). This strips it from
+ * the row's own name string — it does not look up or borrow a name from anywhere else. If the
+ * real schema actually stores brand as its own column separate from name, this regex is the
+ * wrong fix; see the audit notes handed back to the client for that open question.
+ */
+function stripGenericBrand(name: string): string {
+  return name.replace(/^generic\s+/i, '').trim();
 }
 
-function resolveEditionImage(mockKit: PackageKit | undefined, editionLabel: string | null): string {
-  if (!mockKit) return '';
-  if (!editionLabel) return mockKit.imageUrl;
-  const target = stripEditionWord(editionLabel);
-  const matched = mockKit.editions?.find((edition) => stripEditionWord(edition.label) === target);
-  return matched?.imageUrl ?? mockKit.imageUrl;
+/**
+ * Resolves a package's admin-uploaded image to a real, publicly-fetchable URL, using the same
+ * public "inventory-photos" bucket the RMS's own gear-image flow already uses (see
+ * fetchBookableGearCatalog's imageUrl, sourced server-side from the same bucket) — never a new
+ * bucket, and getPublicUrl needs no auth since the bucket is already public. Returns '' (not a
+ * fabricated placeholder path) when there's no path to resolve, matching the "empty string → the
+ * UI's own placeholder icon" convention every image-bearing component here already follows
+ * (Cart's Thumbnail, PackageCard, GearDetailsModal — all check `!displayImage` themselves).
+ */
+function resolvePackageImageUrl(imageStoragePath: string | null): string {
+  if (!imageStoragePath) return '';
+  return supabase.storage.from('inventory-photos').getPublicUrl(imageStoragePath).data.publicUrl;
 }
 
 /**
  * Splits a Package row's name into a shared base name and an optional edition label, so rows like
- * "Traveler Kit - Khaki" / "Traveler Kit - Black" group into one displayed kit with two editions.
- * This is a naming convention the admin side needs to follow — rows without a recognized
- * separator are treated as a single kit with no edition toggle.
+ * "Traveler Kit - Khaki" or "Traveler Kit (Khaki)" group into one displayed kit with two editions.
+ * Both separator conventions are accepted since the admin side's naming has used either at
+ * different times. This only ever reads the real row's own name — it never merges in a second
+ * data source. Rows without a recognized separator are treated as a single kit, no edition toggle.
  */
 function parseKitNameAndEdition(name: string): { baseName: string; editionLabel: string | null } {
-  const match = name.match(/^(.*?)\s+[-–—]\s+(.+)$/);
-  if (!match) return { baseName: name.trim(), editionLabel: null };
-  return { baseName: match[1].trim(), editionLabel: match[2].trim() };
+  const parenMatch = name.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
+  if (parenMatch) return { baseName: parenMatch[1].trim(), editionLabel: parenMatch[2].trim() };
+
+  const dashMatch = name.match(/^(.*?)\s+[-–—]\s+(.+)$/);
+  if (dashMatch) return { baseName: dashMatch[1].trim(), editionLabel: dashMatch[2].trim() };
+
+  return { baseName: name.trim(), editionLabel: null };
 }
 
 function groupPackageRows(rows: PackageRow[]): PackageKit[] {
@@ -106,34 +104,40 @@ function groupPackageRows(rows: PackageRow[]): PackageKit[] {
   return Array.from(groups.values()).map(({ baseName, entries }) => {
     const primary = entries[0].row;
     const hasEditions = entries.length > 1 || entries[0].editionLabel !== null;
-    const mockKit = KIT_BY_NAME.get(normalizeName(baseName));
     const editions: KitEdition[] | undefined = hasEditions
       ? entries.map(({ row, editionLabel }, index) => ({
           id: row.id,
           label: editionLabel ?? `Option ${index + 1}`,
-          imageUrl: resolveEditionImage(mockKit, editionLabel),
+          // Each edition is its own real Package row (see packageNumber's own comment above), so
+          // it's resolved from that specific row's own imageStoragePath — never borrowed from the
+          // primary/first entry, since a Black and a Khaki edition can have different photos.
+          imageUrl: resolvePackageImageUrl(row.imageStoragePath),
+          packageNumber: row.packageNumber,
         }))
       : undefined;
 
     return {
       id: primary.id,
-      name: baseName,
+      packageNumber: primary.packageNumber,
+      name: stripGenericBrand(baseName),
       description: sanitizeDescription(primary.description ?? ''),
       depositAmount: centavosToPesos(primary.depositCentavos),
       pricing: {
         '48h': centavosToPesos(primary.price48hCentavos ?? 0),
         '72h': centavosToPesos(primary.price72hCentavos ?? primary.price48hCentavos ?? 0),
       },
-      // Real Package rows don't carry a flat included-items list, pax range, or capacity yet
-      // (that's PackageComponent, a separate relation we don't fetch yet) — enrich from the
-      // name-matched mock kit, same stopgap as images/extras, so the group-size filter and
-      // "what's included" checklist aren't blank for known kits.
-      includedItems: mockKit?.includedItems ?? [],
-      paxRange: mockKit?.paxRange ?? '',
-      capacity: mockKit?.capacity ?? 0,
-      imageUrl: editions?.[0]?.imageUrl ?? resolveEditionImage(mockKit, entries[0].editionLabel),
+      extraPerDayPrice: centavosToPesos(primary.extraPerDayCentavos ?? 0),
+      // includedItems, paxRange, capacity, extras, and isOutOfStock have no columns/relations on
+      // the real `packages` table yet (see audit notes). Left as honest empty/neutral defaults —
+      // deliberately NOT backfilled from mock data by name-matching, since that would silently
+      // fabricate inventory truth (e.g. stock status) the admin database doesn't actually assert.
+      includedItems: [],
+      paxRange: '',
+      capacity: 0,
+      imageUrl: resolvePackageImageUrl(primary.imageStoragePath),
       editions,
-      extras: EXTRAS_BY_KIT_NAME.get(normalizeName(baseName)) ?? [],
+      extras: [],
+      isOutOfStock: false,
     } satisfies PackageKit;
   });
 }
@@ -141,21 +145,29 @@ function groupPackageRows(rows: PackageRow[]): PackageKit[] {
 function mapGearRow(row: RentableGearRow): IndividualItem {
   return {
     id: row.id,
-    name: row.name,
+    name: stripGenericBrand(row.name),
     category: row.category,
     pricing: {
       '48h': centavosToPesos(row.price48hCentavos),
       '72h': centavosToPesos(row.price72hCentavos),
     },
     depositAmount: centavosToPesos(row.depositCentavos),
-    imageUrl: ITEM_IMAGE_BY_NAME.get(normalizeName(row.name)) ?? '',
+    // imageUrl, isOutOfStock, includedAccessories, and paidAddOns have no columns/relations on
+    // the real `rentable_gears` table yet (see audit notes). Left as honest empty/neutral
+    // defaults, not backfilled from mock data by name-matching — same reasoning as packages above.
+    imageUrl: '',
+    isOutOfStock: false,
+    includedAccessories: [],
+    paidAddOns: [],
   };
 }
 
 export async function fetchCatalogPackages(): Promise<PackageKit[]> {
   const { data, error } = await supabase
     .from('packages')
-    .select('id,name,description,price48hCentavos,price72hCentavos,depositCentavos')
+    .select(
+      'id,packageNumber,name,description,price48hCentavos,price72hCentavos,extraPerDayCentavos,depositCentavos,imageStoragePath',
+    )
     .eq('isActive', true)
     .is('deletedAt', null);
 
@@ -180,15 +192,4 @@ export async function fetchCatalogItems(): Promise<IndividualItem[]> {
   }
   if (!data || data.length === 0) return mockIndividualItems;
   return (data as RentableGearRow[]).map(mapGearRow);
-}
-
-export async function fetchCatalogDestinations(): Promise<Destination[]> {
-  const { data, error } = await supabase.from('destinations').select('id,name').eq('isActive', true);
-
-  if (error) {
-    console.warn('[supabaseCatalog] destinations fetch failed, using mock fallback:', error.message);
-    return mockDestinations;
-  }
-  if (!data || data.length === 0) return mockDestinations;
-  return (data as DestinationRow[]).map((row) => ({ id: row.id, name: row.name }));
 }

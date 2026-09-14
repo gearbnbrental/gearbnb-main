@@ -27,22 +27,74 @@
   --font-serif: 'Playfair Display', ui-serif, Georgia, serif;
 }
 
+/*
+ * Dark mode previously based its whole surface palette on a warm BROWN-black (#1a1512 and
+ * friends), while brand-forest (a cool green) stays the same in both themes and is used
+ * everywhere — every CTA, badge, icon, selected pill. Green-on-warm-brown is what read as
+ * clashing. This shifts the surface base to a neutral, slightly green-leaning charcoal instead —
+ * still dark, still warm-adjacent (not a cold blue-black), but no longer fighting the
+ * ever-present forest green. brand-brown itself is unchanged (the footer's own accent band is
+ * intentionally brown in both themes) and brand-forest/brand-olive/brand-cream are untouched —
+ * this only retunes the neutral page/surface/line scale.
+ */
 .dark {
-  --color-page: #1a1512;
-  --color-page-band: #1a1512;
+  --color-page: #14201b;
+  --color-page-band: #14201b;
 
-  --color-surface: #241e19;
-  --color-surface-muted: #2a231d;
-  --color-surface-strong: #332b23;
-  --color-ink: #f3ede3;
-  --color-ink-muted: #c7bcae;
-  --color-ink-faint: #8f8377;
-  --color-line: #3d332a;
-  --color-line-soft: #2d2620;
+  --color-surface: #1c2a24;
+  --color-surface-muted: #20302a;
+  --color-surface-strong: #28392f;
+  /*
+   * Normal readable text in Dark Mode is PURE WHITE, per the client's explicit request — no
+   * cream, off-white or gray-white anywhere it's ordinary copy. `ink` (headings, body, nav, the
+   * GearBnB wordmark) and `ink-muted` (paragraphs, section descriptions, labels) are both #ffffff
+   * so equivalent text never renders as two different whites; the hierarchy between them is
+   * carried by size and weight instead of by washing the colour out. Light Mode is untouched.
+   *
+   * Most of the site's icons are stroke/fill="currentColor" (see components/icons.tsx), so they
+   * inherit these same tokens — which is what makes normal UI icons pure white in Dark Mode too,
+   * without needing per-icon overrides.
+   *
+   * `ink-faint` deliberately stays dim: it is not normal text but genuinely de-emphasised
+   * furniture (upload hints like "JPEG, PNG — up to 10MB", disabled placeholder art, tiny
+   * uppercase table column headers). At #8a9186 it reads as intentionally secondary rather than
+   * as a washed-out near-white, so it isn't part of the "dirty white" problem being fixed here.
+   * Status colours (success/warning/error/damaged) keep their own meaningful hues everywhere.
+   */
+  --color-ink: #ffffff;
+  --color-ink-muted: #ffffff;
+  --color-ink-faint: #8a9186;
+  --color-line: #33453c;
+  --color-line-soft: #263630;
   --color-accent: #7fcaa2;
 }
 
 body {
   background-color: var(--color-page);
   transition: background-color 0.2s ease;
+}
+
+/* The camp-setup lightbox's open transition: the photo scales up from slightly smaller as it
+ * fades in, so tapping a gallery photo reads as "zooming into it" rather than as a new screen
+ * appearing. Short and single-shot on purpose — this is a photo viewer, not an animation. */
+@keyframes campZoomIn {
+  from {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.camp-zoom-in {
+  animation: campZoomIn 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Anyone who has asked their OS for less motion gets the photo with no zoom at all. */
+@media (prefers-reduced-motion: reduce) {
+  .camp-zoom-in {
+    animation: none;
+  }
 }

@@ -1,12 +1,15 @@
-import { useMemo, useState, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+﻿import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import CampSetupsGallery from '../components/CampSetupsGallery';
+import { CAMP_SETUP_PHOTOS } from '../config/campSetups';
+import FaqAccordion, { type FaqItem } from '../components/FaqAccordion';
 import PathSelectionCards from '../components/PathSelectionCards';
-import SocialLinks from '../components/SocialLinks';
-import { CheckIcon, ChevronIcon, GearPlaceholderIcon } from '../components/icons';
+import SocialIconLink from '../components/SocialIconLink';
+import { ChatBubbleIcon, ChevronIcon, GearPlaceholderIcon } from '../components/icons';
 import { useCatalog } from '../context/CatalogContext';
-import { mockPackages } from '../data/mockData';
-import type { IndividualItem } from '../types/gearbnb';
+import type { IndividualItem, PackageKit } from '../types/gearbnb';
 import { formatCurrency } from '../utils/format';
+import { parsePackageContentsFromText, summarizeIncludedCategories } from '../utils/packageContents';
 
 function PathsIcon({ className }: { className?: string }) {
   return (
@@ -116,7 +119,178 @@ function CatalogPreviewCard({ item }: { item: IndividualItem }) {
         <h3 className="text-sm font-semibold text-ink">{item.name}</h3>
         <p className="text-xs text-ink-faint">{item.category}</p>
       </div>
-      <p className="text-sm font-semibold text-brand-forest">From {formatCurrency(item.pricing['48h'])}</p>
+      <p className="text-sm font-semibold text-accent">From {formatCurrency(item.pricing['48h'])}</p>
+    </div>
+  );
+}
+
+/** One card in the homepage "Adventure Bundles" catalog — redesigned to match the client's
+ * reference "Our Packages" card: image, name, short description, a compact real-inclusions
+ * summary, and an understated "View details →" affordance, rather than the previous
+ * image-and-price-only slide. The whole card stays the single click target (same navigation
+ * behavior as before — every prior click landed here too), so "View details" is styled text
+ * inside it rather than a second nested interactive element. */
+function BundleSlide({ kit, onSelect }: { kit: PackageKit; onSelect: () => void }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const categories = useMemo(() => summarizeIncludedCategories(kit), [kit]);
+  const hasUpgradeOptions = Boolean(kit.extras && kit.extras.length > 0);
+  // On live data, `description` sometimes IS the inclusions list typed as one run-on string
+  // (e.g. "1x 4 Person Blackdog Vinyl Tent 1x Groundsheet 1x Camping Fan ...") rather than actual
+  // marketing copy — same detection PackageContents.tsx already uses. Showing that raw string as
+  // a "short description" would just repeat the categories line below it, badly. Only genuine
+  // prose (or the absence of any parseable item list) gets shown here.
+  const hasStructuredItems = kit.includedItems.length > 0;
+  const descriptionIsInclusionsDump = !hasStructuredItems && parsePackageContentsFromText(kit.description).length > 0;
+  const showDescription = Boolean(kit.description) && !descriptionIsInclusionsDump;
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="group flex w-[78%] shrink-0 snap-center flex-col overflow-hidden rounded-2xl border border-line bg-surface text-left shadow-sm transition-all hover:border-brand-forest/40 hover:shadow-md sm:w-[46%] lg:w-[31%]"
+    >
+      {/* Image shown in full, unobstructed — no dark scrim or overlaid text on top of it, since
+       * the packages' own promotional artwork already carries plenty of detail worth seeing. */}
+      <div className="aspect-[4/3] w-full overflow-hidden bg-surface-strong">
+        {imageFailed || !kit.imageUrl ? (
+          <div className="flex h-full w-full items-center justify-center">
+            <GearPlaceholderIcon className="h-12 w-12 text-ink-faint" />
+          </div>
+        ) : (
+          <img
+            src={kit.imageUrl}
+            alt={kit.name}
+            onError={() => setImageFailed(true)}
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+          />
+        )}
+      </div>
+      <div className="flex flex-1 flex-col gap-1.5 p-4">
+        <h3 className="font-serif text-base font-semibold text-ink">{kit.name}</h3>
+        {showDescription && <p className="line-clamp-2 text-xs text-ink-muted">{kit.description}</p>}
+
+        {/* Real inclusions, summarized to coarse categories rather than the full item list —
+         * that level of detail lives on the actual catalog page this card links to. */}
+        {categories.length > 0 && (
+          <p className="text-xs text-ink-faint">
+            {categories.join(' | ')}
+            {hasUpgradeOptions && <span className="text-accent"> + Upgrade Options</span>}
+          </p>
+        )}
+
+        <span className="mt-auto pt-2 text-sm font-semibold text-accent transition-colors group-hover:text-brand-forest-dark">
+          View details &rarr;
+        </span>
+      </div>
+    </button>
+  );
+}
+
+/** Horizontal scroll-snap slider of package images — a lighter-weight showcase than a full card
+ * grid, native touch/drag scrolling on mobile plus arrow buttons and dot pagination on larger
+ * screens. No carousel library: just CSS scroll-snap and Element.scrollBy/scrollTo, consistent
+ * with this app's existing no-extra-dependency approach. */
+function BundleSlider({ kits, onSelect }: { kits: PackageKit[]; onSelect: () => void }) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  /** One slide's full stride (its own width plus the gap after it) — every slide in this track
+   * is the same width, so this is a reliable unit for both scrollBy and index math. */
+  function getSlideStride(track: HTMLDivElement): number {
+    const first = track.firstElementChild as HTMLElement | null;
+    if (!first) return track.clientWidth;
+    const second = track.children[1] as HTMLElement | undefined;
+    const gap = second ? second.offsetLeft - first.offsetLeft - first.offsetWidth : 20;
+    return first.offsetWidth + gap;
+  }
+
+  function scrollByDirection(direction: 'left' | 'right') {
+    const track = trackRef.current;
+    if (!track) return;
+    const stride = getSlideStride(track);
+    track.scrollBy({ left: direction === 'left' ? -stride : stride, behavior: 'smooth' });
+  }
+
+  function scrollToIndex(index: number) {
+    const track = trackRef.current;
+    if (!track) return;
+    track.scrollTo({ left: getSlideStride(track) * index, behavior: 'smooth' });
+  }
+
+  function handleScroll() {
+    const track = trackRef.current;
+    if (!track) return;
+    // The last slide can become fully visible before scrollLeft reaches a full extra stride
+    // (the track simply runs out of room to scroll further), so scrollLeft/stride alone can
+    // under-report the index once you're at the end — checking against the actual scroll max
+    // first avoids the last dot/arrow state ever looking stuck one slide behind.
+    const maxScrollLeft = track.scrollWidth - track.clientWidth;
+    if (track.scrollLeft >= maxScrollLeft - 2) {
+      setActiveIndex(kits.length - 1);
+      return;
+    }
+    const stride = getSlideStride(track);
+    const index = stride > 0 ? Math.round(track.scrollLeft / stride) : 0;
+    setActiveIndex(Math.max(0, Math.min(kits.length - 1, index)));
+  }
+
+  const atStart = activeIndex <= 0;
+  const atEnd = activeIndex >= kits.length - 1;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="relative">
+        <div
+          ref={trackRef}
+          onScroll={handleScroll}
+          className="-mx-5 flex snap-x snap-mandatory gap-5 overflow-x-auto scroll-smooth px-5 pb-2 sm:-mx-6 sm:px-6 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]"
+        >
+          {kits.map((kit) => (
+            <BundleSlide key={kit.id} kit={kit} onSelect={onSelect} />
+          ))}
+        </div>
+
+        {/* Arrow controls — hidden on touch-first small screens where dragging the track directly
+         * is the natural interaction; shown from sm: up as a desktop/tablet convenience. Disabled
+         * (not hidden) at either end, so their position never shifts as you page through. */}
+        <button
+          type="button"
+          onClick={() => scrollByDirection('left')}
+          disabled={atStart}
+          aria-label="Previous package"
+          className="absolute -left-4 top-[38%] hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-line bg-surface text-ink shadow-md transition-all hover:bg-surface-strong disabled:pointer-events-none disabled:opacity-0 sm:flex"
+        >
+          <ChevronIcon direction="left" className="h-5 w-5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => scrollByDirection('right')}
+          disabled={atEnd}
+          aria-label="Next package"
+          className="absolute -right-4 top-[38%] hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-line bg-surface text-ink shadow-md transition-all hover:bg-surface-strong disabled:pointer-events-none disabled:opacity-0 sm:flex"
+        >
+          <ChevronIcon direction="right" className="h-5 w-5" />
+        </button>
+      </div>
+
+      {/* Dot pagination — shows how many packages there are and which one is in view; also a
+       * direct jump-to-slide control, not purely decorative. */}
+      {kits.length > 1 && (
+        <div className="flex items-center justify-center gap-2">
+          {kits.map((kit, index) => (
+            <button
+              key={kit.id}
+              type="button"
+              onClick={() => scrollToIndex(index)}
+              aria-label={`Go to ${kit.name}`}
+              aria-current={index === activeIndex}
+              className={`h-2 rounded-full transition-all ${
+                index === activeIndex ? 'w-6 bg-brand-forest' : 'w-2 bg-line hover:bg-ink-faint'
+              }`}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -130,7 +304,9 @@ interface FeatureCardProps {
 function FeatureCard({ icon, title, description }: FeatureCardProps) {
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-line bg-surface p-4">
-      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-forest/10 text-brand-forest">
+      {/* Solid fill + white icon, not a tinted badge — per the client's "section icons should be
+          white" request; the solid brand-forest background is what keeps a white glyph visible. */}
+      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-forest text-white">
         {icon}
       </div>
       <h3 className="text-sm font-semibold text-ink">{title}</h3>
@@ -141,31 +317,65 @@ function FeatureCard({ icon, title, description }: FeatureCardProps) {
 
 const FEATURES: FeatureCardProps[] = [
   {
-    icon: <PathsIcon className="h-5 w-5" />,
-    title: 'Two Ways to Gear Up',
-    description: "Pick a ready-made package, or build your own from individual gear — whatever fits your trip.",
+    icon: <ShieldIcon className="h-5 w-5" />,
+    title: 'Quality Gear',
+    description: 'Rent carefully selected gear from trusted outdoor brands without the cost of buying everything yourself.',
   },
   {
-    icon: <ShieldIcon className="h-5 w-5" />,
-    title: 'Verified Community',
-    description: 'Every renter is ID-verified and every item is deposit-protected before it leaves our hands.',
+    icon: <PathsIcon className="h-5 w-5" />,
+    title: 'Easy and Convenient',
+    description: 'Choose what you need, book your rental, and enjoy camping without the hassle of storing or maintaining gear.',
+  },
+  {
+    icon: <CalendarCheckIcon className="h-5 w-5" />,
+    title: 'Beginner-Friendly',
+    description: 'Get practical recommendations to help you choose the right gear and feel confident on your first trip.',
   },
   {
     icon: <TruckIcon className="h-5 w-5" />,
-    title: 'Pickup or Delivery',
-    description: "Grab your gear yourself, or have it delivered straight to your campsite.",
-  },
-  {
-    icon: <ReceiptIcon className="h-5 w-5" />,
-    title: 'Transparent Split Payment',
-    description: 'See your refundable deposit and rental fee broken down clearly before you book.',
+    title: 'Made for Memorable Trips',
+    description: 'Spend less time worrying about your setup and more time enjoying the outdoors with the people who matter.',
   },
 ];
 
-const PLACEHOLDER_BRANDS = ['TRAILWORKS', 'SUMMIT & CO.', 'PEAKLINE', 'NORTHBOUND', 'WILDPATH'];
+const FAQ_ITEMS: FaqItem[] = [
+  {
+    question: 'Where are you located?',
+    answer: "We're based in Las Piñas City, Philippines.",
+  },
+  {
+    question: 'Can I customize my own package?',
+    answer:
+      'Yes — Build Your Own lets you mix and match individual gear by category to fit your trip exactly, instead of booking a fixed kit.',
+  },
+  {
+    question: 'What if I go beyond my rental duration?',
+    answer:
+      "Let us know and we'll do our best to accommodate an extended rental where available, charged at our per-day rate on top of your original booking.",
+  },
+  {
+    question: 'Do you sell camping gear?',
+    answer: "No, we're a rental service — we don't sell camping gear.",
+  },
+  {
+    question: 'Can you help me find a campsite?',
+    answer:
+      'We can point you toward popular spots based on your trip, but booking the campsite itself is up to you.',
+  },
+  {
+    question: 'How do I get started?',
+    answer: "Browse our packages or build your own kit, pick your dates, and book — we'll guide you through verification and payment from there.",
+  },
+];
+
+/** The real camping brands GearBnB actually stocks — display-only marketing copy for the brand
+ *  strip below. Deliberately not sourced from inventory: this is a curated marketing list, and
+ *  reading it from live gear rows would make the strip silently change as stock comes and goes. */
+const TRUSTED_BRANDS = ['Black Dog', 'Naturehike', 'Mountainhiker', 'Mobi Garden', 'Vidalido'];
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { kits, items } = useCatalog();
   const categories = useMemo(() => {
     const unique = Array.from(new Set(items.map((item) => item.category)));
@@ -188,25 +398,43 @@ export default function LandingPage() {
     setCatalogPage(1);
   }
 
+  // The footer's "How renting works"/"Adventure Bundles" links navigate here with a `#section-id`
+  // hash when clicked from another page (see Footer's goToHomeSection) — react-router does not
+  // auto-scroll to a hash on navigation, so this is what actually finishes that jump once the
+  // section exists in the DOM.
+  useEffect(() => {
+    if (!location.hash) return;
+    const id = location.hash.slice(1);
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [location.hash]);
+
   return (
     <div className="flex flex-col">
-      {/* Hero */}
-      <section className="relative overflow-hidden px-4 py-24 text-center sm:px-6 sm:py-32">
+      {/* Hero — the outer <section> itself carries NO horizontal padding, so the image/gradient
+       * (`inset-0` against the section) span the full viewport width edge-to-edge; the text
+       * content and the floating card each carry their own `px-5 sm:px-6` instead, so only THEY
+       * (never the photo) stay clear of the screen edges. Vertical spacing is plain, predictable
+       * padding on the content block — no `min-h`/`justify-center` — so the gap above the card
+       * (button row → card) and the section below (card → next heading) are each controlled by
+       * one number, not by how far actual content happens to sit from an arbitrary min-height.
+       * Static: no scroll-driven show/hide, no fixed/sticky positioning. */}
+      <section className="relative">
         <img
-          src="/images/hero.jpg"
+          src="/images/background_landpage.png"
           alt=""
           className="absolute inset-0 h-full w-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-brand-forest/80" />
 
-        <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center gap-6">
-          <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-brand-cream">
+        {/* MAIN HERO CONTENT — ends after the button row. */}
+        <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center gap-6 px-5 pb-36 pt-24 text-center sm:px-6 sm:pb-24 sm:pt-32">
+          <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white">
             Located in Las Piñas City
           </span>
           <h1 className="font-serif text-4xl font-bold tracking-tight text-white sm:text-5xl">
             Camping Gears Rental in the Philippines Made Easy
           </h1>
-          <p className="max-w-xl text-base text-white/80">
+          <p className="max-w-xl text-base text-white">
             Great camping trips start with the right gear, and we&rsquo;ve got it ready for you.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
@@ -226,10 +454,42 @@ export default function LandingPage() {
             </button>
           </div>
         </div>
+
+        {/* FLOATING SUPPORT CARD — anchored to the Hero section's own bottom edge (`bottom-0`)
+         * then shifted down by exactly half its own rendered height (`translate-y-1/2`), so it
+         * straddles that edge regardless of how tall the card actually renders at any given
+         * breakpoint. `inset-x-0` + an inner `mx-auto max-w-3xl` centers it horizontally without
+         * a separate translate-x (avoids compounding two transforms on one element). */}
+        <div className="absolute inset-x-0 bottom-0 z-20 translate-y-1/2 px-5 sm:px-6">
+          <div className="mx-auto w-full max-w-3xl">
+            <div className="w-full rounded-2xl border border-line bg-surface p-4 text-left shadow-lg sm:p-5">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-forest text-white">
+                    <ChatBubbleIcon className="h-4.5 w-4.5" />
+                  </span>
+                  <div className="flex flex-col gap-0.5">
+                    <h2 className="text-sm font-bold text-ink sm:text-base">Not sure what to rent?</h2>
+                    <p className="text-xs text-ink-muted sm:text-sm">
+                      Send us a message and we&rsquo;ll help you find the right setup for your trip.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-center gap-4 sm:justify-end sm:border-l sm:border-line-soft sm:pl-5">
+                  <SocialIconLink platform="messenger" showLabel size="sm" />
+                  <SocialIconLink platform="facebook" showLabel size="sm" />
+                  <SocialIconLink platform="tiktok" showLabel size="sm" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
-      {/* Path selection */}
-      <section className="px-4 py-16 sm:px-6">
+      {/* Path selection — extra top padding (beyond the section's own py-16 bottom) clears the
+       * floating support card above, which straddles down into this section's own top edge. */}
+      <section className="px-5 pb-16 pt-40 sm:px-6 sm:pt-32">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
           <div className="flex flex-col items-center gap-2 text-center">
             <h2 className="font-serif text-2xl font-bold text-ink sm:text-3xl">How Do You Want to Gear Up?</h2>
@@ -241,11 +501,15 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* How does the process work */}
-      <section className="bg-page-band px-4 py-16 sm:px-6">
+      {/* How to rent — id targeted by the footer's "How renting works" link; this step-by-step
+       * process is the actual "how to rent" content, so the link and id moved here from the path-
+       * selection section above (which is about choosing a path, not the rental process itself). */}
+      <section id="how-renting-works" className="bg-page-band px-5 py-16 sm:px-6">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-10">
           <div className="flex flex-col items-center gap-2 text-center">
-            <h2 className="font-serif text-2xl font-bold text-ink sm:text-3xl">How Does the Process Work?</h2>
+            <h2 className="font-serif text-2xl font-bold text-ink sm:text-3xl">
+              How To Rent Camping Gear from GearBnB?
+            </h2>
             <p className="max-w-xl text-sm text-ink-muted">
               From picking your gear to pickup day, here&rsquo;s exactly what to expect.
             </p>
@@ -258,7 +522,7 @@ export default function LandingPage() {
                   <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-forest text-sm font-bold text-white">
                     {index + 1}
                   </span>
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-forest/10 text-brand-forest">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-forest text-white">
                     {step.icon}
                   </div>
                 </div>
@@ -270,15 +534,17 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Placeholder brand strip */}
-      <section className="border-b border-line-soft px-4 py-8 sm:px-6">
-        <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
+      {/* Brand strip */}
+      <section className="border-b border-line-soft px-5 py-10 sm:px-6">
+        <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-5">
+          {/* text-ink (not the previous, low-contrast text-ink-faint) plus bold weight — client
+              feedback was that this line didn't stand out enough against the section background. */}
+          <p className="text-xs font-bold uppercase tracking-wide text-ink">
             Gear from names campers trust
           </p>
-          <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-3">
-            {PLACEHOLDER_BRANDS.map((brand) => (
-              <span key={brand} className="text-sm font-bold tracking-wide text-ink-faint">
+          <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
+            {TRUSTED_BRANDS.map((brand) => (
+              <span key={brand} className="text-sm font-bold tracking-wide text-accent">
                 {brand}
               </span>
             ))}
@@ -287,7 +553,7 @@ export default function LandingPage() {
       </section>
 
       {/* Catalog preview */}
-      <section className="px-4 py-16 sm:px-6">
+      <section className="px-5 py-16 sm:px-6">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
           <div className="flex flex-col items-center gap-2 text-center">
             <h2 className="font-serif text-2xl font-bold text-ink sm:text-3xl">
@@ -370,38 +636,34 @@ export default function LandingPage() {
       </section>
 
       {/* Why rent with us */}
-      <section className="bg-page-band px-4 py-16 sm:px-6">
+      <section className="bg-page-band px-5 py-16 sm:px-6">
         <div className="mx-auto grid w-full max-w-5xl gap-10 lg:grid-cols-2 lg:items-center">
-          <div className="relative overflow-hidden rounded-2xl border border-line bg-surface p-10 sm:p-14">
-            <svg viewBox="0 0 200 140" className="mx-auto h-40 w-40 text-brand-forest/70 sm:h-48 sm:w-48">
-              <path
-                d="M20 120 L100 30 L180 120 Z"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={4}
-                strokeLinejoin="round"
+          <div className="relative flex items-center justify-center py-10 lg:py-0">
+            {/* Soft brand-colored glow instead of a hard-edged card — keeps the logo feeling
+             * intentional and grounded without boxing it in. */}
+            <div
+              className="pointer-events-none absolute inset-0 -z-10 opacity-70 [background:radial-gradient(42%_42%_at_50%_50%,color-mix(in_srgb,var(--color-brand-forest)_30%,transparent),transparent_70%)]"
+              aria-hidden="true"
+            />
+            {/* The source file is a circular badge with a visible margin of solid white around it
+             * inside a square image — a plain rounded-full crop still leaves a white ring behind
+             * the badge, so the image is also scaled up until the badge itself fills the circular
+             * frame, cropping the white margin away entirely (no separate transparent asset). */}
+            <div className="h-64 w-64 overflow-hidden rounded-full drop-shadow-2xl sm:h-80 sm:w-80">
+              <img
+                src="/brand_assets/GEARBNB_logo.png"
+                alt="GearBnB"
+                className="h-full w-full scale-150 object-cover"
               />
-              <path d="M100 30 L100 120" stroke="currentColor" strokeWidth={3} />
-              <circle cx="70" cy="15" r="3" fill="currentColor" />
-              <circle cx="100" cy="5" r="3" fill="currentColor" />
-              <circle cx="130" cy="15" r="3" fill="currentColor" />
-            </svg>
-            <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between rounded-xl border border-line bg-white px-4 py-3 shadow-lg sm:left-6 sm:right-auto sm:w-56">
-              <div>
-                <p className="text-xs font-medium text-gray-500">Nomad Kit</p>
-                <p className="text-sm font-semibold text-gray-900">
-                  {/* Static illustrative example — not live catalog data. */}
-                  From {formatCurrency(mockPackages[0].pricing['48h'])}
-                </p>
-              </div>
             </div>
           </div>
 
           <div className="flex flex-col gap-6">
             <div>
-              <h2 className="font-serif text-2xl font-bold text-ink sm:text-3xl">Why Rent with GearBNB?</h2>
+              <h2 className="font-serif text-2xl font-bold text-ink sm:text-3xl">Why Rent with GearBnB?</h2>
               <p className="mt-2 text-sm text-ink-muted">
-                Our booking flow is built around trust and clarity, so every trip starts stress-free.
+                Get quality camping gear, helpful guidance, and a hassle-free rental experience designed to make
+                every trip easier and more memorable.
               </p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -409,12 +671,19 @@ export default function LandingPage() {
                 <FeatureCard key={feature.title} {...feature} />
               ))}
             </div>
+            <button
+              type="button"
+              onClick={() => navigate('/catalog')}
+              className="w-fit rounded-lg bg-brand-forest px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-forest-dark"
+            >
+              Start Your Rental Today
+            </button>
           </div>
         </div>
       </section>
 
-      {/* Bundles */}
-      <section className="px-4 py-16 sm:px-6">
+      {/* Bundles — id targeted by the footer's "Adventure Bundles" link. */}
+      <section id="adventure-bundles" className="px-5 py-16 sm:px-6">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
           <div className="flex flex-col items-center gap-2 text-center">
             <h2 className="font-serif text-2xl font-bold text-ink sm:text-3xl">
@@ -425,107 +694,106 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {kits.map((kit) => (
-              <button
-                key={kit.id}
-                type="button"
-                onClick={() => navigate('/catalog/path-a')}
-                className="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-5 text-left shadow-sm transition-shadow hover:shadow-md"
-              >
-                <div>
-                  <h3 className="text-base font-semibold text-ink">{kit.name}</h3>
-                  <p className="mt-1 text-sm text-ink-muted">{kit.description}</p>
-                </div>
-                <ul className="flex flex-col gap-1.5 text-sm text-ink-muted">
-                  {kit.includedItems.map((item) => (
-                    <li key={item} className="flex items-center gap-2">
-                      <CheckIcon className="h-4 w-4 shrink-0 text-brand-forest" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-auto pt-2 text-sm font-semibold text-brand-forest">
-                  From {formatCurrency(kit.pricing['48h'])} &middot; {formatCurrency(kit.depositAmount)} deposit
-                </p>
-              </button>
-            ))}
-          </div>
+          <BundleSlider kits={kits} onSelect={() => navigate('/catalog/path-a')} />
+
+          <button
+            type="button"
+            onClick={() => navigate('/catalog/path-a')}
+            className="mx-auto rounded-lg border border-line bg-surface px-6 py-3 text-sm font-semibold text-ink shadow-sm transition-colors hover:bg-surface-strong"
+          >
+            View All Packages
+          </button>
         </div>
       </section>
 
-      {/* CTA band */}
-      <section className="bg-gradient-to-br from-brand-brown to-brand-navy px-4 py-16 text-center sm:px-6">
-        <div className="mx-auto flex w-full max-w-2xl flex-col items-center gap-5">
-          <h2 className="font-serif text-3xl font-bold text-white sm:text-4xl">Gear Up for Your Next Adventure</h2>
-          <p className="text-sm text-white/80">
-            From mountain peaks to forest trails &mdash; get the gear you need, when you need it.
-          </p>
-          <div className="flex flex-wrap items-center justify-center gap-3">
-            <button
-              type="button"
-              onClick={() => navigate('/catalog')}
-              className="rounded-lg border border-white/50 bg-transparent px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/10"
-            >
-              Explore All Gear
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('/catalog')}
-              className="rounded-lg bg-white px-6 py-3 text-sm font-semibold text-brand-forest shadow-sm transition-colors hover:bg-brand-cream"
-            >
-              Reserve Now &rarr;
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="bg-brand-brown px-4 py-12 sm:px-6">
+      {/* View Our Camp Setups — the client's actual setup photos (see campSetups.ts). Renders a
+       * "Photos coming soon" placeholder instead whenever that list is empty, rather than any
+       * invented/stock image. */}
+      <section className="bg-page-band px-5 py-16 sm:px-6">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
-          <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center gap-2">
-                <img src="/brand_assets/GEARBNB_logo.png" alt="" className="h-8 w-8 rounded-full" />
-                <span className="font-serif text-base font-bold text-brand-cream">GearBNB</span>
-              </div>
-              <p className="text-sm text-white/70">
-                Your gateway to the outdoors. Rent tents, sleeping bags, and full camp kits &mdash; no buying required.
+          <div className="flex flex-col items-center gap-2 text-center">
+            <h2 className="font-serif text-2xl font-bold text-ink sm:text-3xl">View Our Camp Setups</h2>
+            <p className="max-w-xl text-sm text-ink-muted">
+              Take a look at our camping setups and real photos shared by our renters. Explore the gallery and get
+              inspired for your next trip.
+            </p>
+          </div>
+
+          <CampSetupsGallery photos={CAMP_SETUP_PHOTOS} />
+
+          {/* Subtle closing nudge — only shown once there are real photos to be inspired by; the
+              empty-state placeholder already has nothing to lead into yet. Soft tinted card
+              (brand-forest at low opacity, not a literal glass/blur effect) rather than a plain
+              text line, so the CTA reads as its own small moment instead of trailing off the
+              gallery. Built from this site's own brand-forest token (not a raw emerald/stone
+              utility) so it already matches the rest of the page and adapts correctly in dark
+              mode along with everything else. */}
+          {CAMP_SETUP_PHOTOS.length > 0 && (
+            <div className="flex flex-col items-center gap-3 rounded-3xl border border-brand-forest/10 bg-brand-forest/5 p-8 text-center">
+              <h3 className="font-serif text-lg font-semibold text-ink sm:text-xl">Ready to build your setup?</h3>
+              <p className="max-w-sm text-sm text-ink-muted">
+                Browse ready-made packages or build your own kit from individual gear.
               </p>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <h3 className="text-sm font-semibold text-white">Quick Links</h3>
-              <button type="button" onClick={() => navigate('/catalog')} className="w-fit text-left text-sm text-white/70 hover:text-brand-cream">
-                Rent Gear
+              <button
+                type="button"
+                onClick={() => navigate('/catalog')}
+                className="mt-1 rounded-lg bg-brand-forest px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-forest-dark"
+              >
+                Start Renting
               </button>
-              <span className="text-sm text-white/70">Adventure Bundles</span>
-              <span className="text-sm text-white/70">Event Plan</span>
             </div>
+          )}
+        </div>
+      </section>
 
-            <div className="flex flex-col gap-2">
-              <h3 className="text-sm font-semibold text-white">Rental Help</h3>
-              <span className="text-sm text-white/70">How Renting Works</span>
-              <span className="text-sm text-white/70">Pricing &amp; Fees</span>
-              <span className="text-sm text-white/70">Gear Care Tips</span>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <h3 className="text-sm font-semibold text-white">Policies</h3>
-              <span className="text-sm text-white/70">Rental Terms</span>
-              <span className="text-sm text-white/70">Privacy Policy</span>
-              <span className="text-sm text-white/70">Deposit &amp; Refunds</span>
+      {/* Conclusion + FAQ — the FAQ sits beside the closing CTA rather than as its own separate
+       * section, per the client's requested layout. The FAQ card is deliberately a light surface
+       * floating on the dark gradient (same pattern as the hero's own floating support card),
+       * rather than trying to restyle FaqAccordion's rows for a dark background. */}
+      <section className="relative overflow-hidden bg-gradient-to-br from-brand-forest via-brand-forest-dark to-brand-navy px-5 py-16 sm:px-6">
+        {/* Soft radial glow behind the headline for depth — purely decorative, non-interactive. */}
+        <div
+          className="pointer-events-none absolute inset-0 opacity-70 [background:radial-gradient(60%_80%_at_50%_0%,color-mix(in_srgb,var(--color-brand-olive)_35%,transparent),transparent_70%)]"
+          aria-hidden="true"
+        />
+        <div className="relative mx-auto grid w-full max-w-5xl gap-10 lg:grid-cols-2 lg:items-center">
+          <div className="flex flex-col items-center gap-5 text-center lg:items-start lg:text-left">
+            <h2 className="font-serif text-3xl font-bold text-white drop-shadow-sm sm:text-4xl">
+              Gear Up for Your Next Adventure
+            </h2>
+            <p className="text-sm text-white">
+              Make your next camping trip easier with GearBnB. Get the gear you need and enjoy more time outdoors,
+              making memories that last.
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-3 lg:justify-start">
+              <button
+                type="button"
+                onClick={() => navigate('/catalog')}
+                className="rounded-lg border border-white/50 bg-transparent px-6 py-3 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:border-white hover:bg-white/10"
+              >
+                Explore All Gear
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/catalog')}
+                // Deliberately text-brand-forest, not text-accent — this button's background is a
+                // literal bg-white in every theme, and accent's dark-mode value (a light mint) would
+                // be low-contrast against that constant white, unlike every other text-accent usage
+                // on this site, which sits on a theme-aware dark surface instead.
+                className="rounded-lg bg-white px-6 py-3 text-sm font-semibold text-brand-forest shadow-md transition-all hover:-translate-y-0.5 hover:bg-brand-cream hover:shadow-lg"
+              >
+                Reserve Now &rarr;
+              </button>
             </div>
           </div>
 
-          <div className="flex flex-col items-center justify-between gap-3 border-t border-white/10 pt-6 text-xs text-white/60 sm:flex-row">
-            <span>&copy; 2026 GearBNB. All rights reserved.</span>
-            <div className="flex items-center gap-2">
-              <SocialLinks className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-brand-cream transition-opacity hover:opacity-80" />
-            </div>
+          <div className="flex flex-col gap-3">
+            <h3 className="text-center text-lg font-semibold text-white lg:text-left">Frequently Asked Questions</h3>
+            <FaqAccordion items={FAQ_ITEMS} />
           </div>
         </div>
-      </footer>
+      </section>
+
     </div>
   );
 }

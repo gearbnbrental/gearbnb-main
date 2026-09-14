@@ -5,4 +5,9 @@ import tailwindcss from '@tailwindcss/vite'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+server: {
+  port: 5177,
+  strictPort: true,
+  allowedHosts: ['latinas-bond-elections-fighting.trycloudflare.com'],
+}
 })

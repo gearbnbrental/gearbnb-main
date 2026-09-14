@@ -1,3 +1,6 @@
+﻿import { useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
+import { BYO_RENTAL_AGREEMENT_URL, TERMS_AND_CONDITIONS_URL } from '../config/legalDocuments';
 import { mockPackages } from '../data/mockData';
 import { formatCurrency } from '../utils/format';
 
@@ -98,37 +101,72 @@ const GENERAL_TERMS: TermsSection[] = [
 ];
 
 export default function Terms() {
+  const location = useLocation();
+
+  // React Router navigation (the footer's "Gear Care Tips"/"Deposit & Refunds" links, and any
+  // direct #hash visit) doesn't get the browser's native scroll-to-fragment behavior the way a
+  // full page load does — this reproduces it for the one section ids this page actually has.
+  useEffect(() => {
+    if (!location.hash) return;
+    const id = decodeURIComponent(location.hash.slice(1));
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [location.hash]);
+
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-4 py-16 sm:px-6">
-      <div className="flex flex-col gap-1">
-        <h1 className="font-serif text-2xl font-bold text-ink sm:text-3xl">Rental Agreement — Terms &amp; Conditions</h1>
-        <p className="text-sm text-ink-muted">
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-10 px-5 py-12 sm:px-6 sm:py-16">
+      <div className="flex flex-col gap-2.5 border-b border-line-soft pb-8">
+        <h1 className="font-serif text-2xl font-bold leading-tight tracking-tight text-ink sm:text-4xl">
+          Rental Agreement — Terms &amp; Conditions
+        </h1>
+        <p className="text-base leading-relaxed text-ink-muted">
           This is a summary of GearBnB's signed camping gear rental agreement. Your finalized copy with booking
           details completed will be provided once your reservation is confirmed.
         </p>
+        <p className="text-sm leading-relaxed text-ink-muted">
+          The general terms below apply to a Package (Kit) booking, signed as the{' '}
+          <a
+            href={TERMS_AND_CONDITIONS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-accent underline underline-offset-2"
+          >
+            GearBnB Kit T&amp;C Rental Agreement
+          </a>
+          . A Build Your Own booking signs its own separate{' '}
+          <a
+            href={BYO_RENTAL_AGREEMENT_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-accent underline underline-offset-2"
+          >
+            BYO Rental Agreement
+          </a>{' '}
+          instead — the same care, damage, cancellation, and liability terms, but with a security deposit set per
+          booking based on the items selected rather than a fixed package amount.
+        </p>
       </div>
 
-      <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-muted">
+      <section id="deposit" className="flex flex-col gap-4">
+        <h2 className="text-xs font-bold uppercase tracking-widest text-accent sm:text-sm">
           Section 3 — Fully Refundable Security Deposit
         </h2>
-        <p className="text-sm text-ink-muted">
+        <p className="text-base leading-relaxed text-ink-muted">
           A refundable security deposit is required upon confirmation of every booking, returned in full once all
           rented items come back complete and undamaged.
         </p>
-        <div className="overflow-hidden rounded-xl border border-line">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-surface-muted text-xs uppercase tracking-wide text-ink-muted">
+        <div className="overflow-x-auto rounded-xl border border-line">
+          <table className="w-full min-w-[360px] text-left text-sm sm:text-base">
+            <thead className="bg-surface-muted text-xs font-semibold uppercase tracking-wide text-ink-muted">
               <tr>
-                <th className="px-4 py-2 font-semibold">Package</th>
-                <th className="px-4 py-2 text-right font-semibold">Deposit Amount</th>
+                <th className="px-4 py-3 font-semibold">Package</th>
+                <th className="px-4 py-3 text-right font-semibold">Deposit Amount</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line-soft">
               {mockPackages.map((kit) => (
                 <tr key={kit.id}>
-                  <td className="px-4 py-2 text-ink">{kit.name}</td>
-                  <td className="px-4 py-2 text-right text-ink">{formatCurrency(kit.depositAmount)}</td>
+                  <td className="px-4 py-3 text-ink">{kit.name}</td>
+                  <td className="px-4 py-3 text-right font-medium text-ink">{formatCurrency(kit.depositAmount)}</td>
                 </tr>
               ))}
             </tbody>
@@ -136,17 +174,21 @@ export default function Terms() {
         </div>
       </section>
 
-      <section className="flex flex-col gap-6">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-muted">
+      <section className="flex flex-col gap-8">
+        <h2 className="text-xs font-bold uppercase tracking-widest text-accent sm:text-sm">
           Section 4 — General Terms and Conditions
         </h2>
         {GENERAL_TERMS.map((section) => (
-          <div key={section.id} className="flex flex-col gap-2">
-            <h3 className="text-sm font-semibold text-ink">{section.title}</h3>
-            <ul className="flex flex-col gap-1.5 text-sm text-ink-muted">
+          <div
+            key={section.id}
+            id={section.id}
+            className="flex flex-col gap-3 border-t border-line-soft pt-6 first:border-t-0 first:pt-0"
+          >
+            <h3 className="text-base font-semibold leading-snug text-ink sm:text-lg">{section.title}</h3>
+            <ul className="flex flex-col gap-3 text-base leading-relaxed text-ink-muted">
               {section.bullets.map((bullet) => (
-                <li key={bullet} className="flex gap-2">
-                  <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-brand-forest" />
+                <li key={bullet} className="flex gap-3">
+                  <span className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-forest" />
                   <span>{bullet}</span>
                 </li>
               ))}
@@ -155,7 +197,7 @@ export default function Terms() {
         ))}
       </section>
 
-      <p className="text-xs text-ink-faint">
+      <p className="text-sm leading-relaxed text-ink-faint">
         This page summarizes GearBnB's Camping Gear Rental Agreement for reference while browsing. It does not
         replace the finalized agreement you sign upon booking confirmation.
       </p>

@@ -14,6 +14,8 @@ dist-ssr
 
 # Environment variables
 .env
+.env.production
+.env.development
 
 # Editor directories and files
 .vscode/*
@@ -29,3 +31,14 @@ dist-ssr
 
 # Duplicate Google Drive zip extraction of IMAGES FOR WEBSITE (byte-identical, not referenced by app code)
 GEARBNB FILES-20260804T134429Z-1-001/
+
+camp-setups-originals/
+
+# Local/reference files - do not commit
+ABOUT US PAGE.docx
+ABOUTUS.png
+Reference UI/
+TERMS AND CONDITION/
+GCASH AND MARIBANK QR.png
+public/images/CTA.jpg
+camp-setups-originals/

@@ -1,4 +1,4 @@
-import {
+﻿import {
   useEffect,
   useRef,
   useState,
@@ -6,13 +6,17 @@ import {
   type DragEvent,
   type FormEvent,
 } from 'react';
-import { useRental } from '../../context/RentalContext';
-import type { VerificationDocs } from '../../types/gearbnb';
+import { useAuth } from '../../context/AuthContext';
+import { REQUIRED_VERIFICATION_DOCUMENTS, filterCartToSelection, useRental } from '../../context/RentalContext';
+import { supabase } from '../../supabase';
+import type { VerificationDocs, VerificationDocumentKey } from '../../types/gearbnb';
+import { BYO_RENTAL_AGREEMENT_URL, TERMS_AND_CONDITIONS_URL } from '../../config/legalDocuments';
+import { VERIFICATION_BUCKET, VERIFICATION_KIND_MAP, ensureFreshSession } from '../../utils/rmsApi';
 
-type DocumentKey = 'idType1' | 'idType2' | 'verificationVideo' | 'proofOfBilling';
-type ExpectedKind = 'image' | 'video' | 'document';
+type DocumentKey = VerificationDocumentKey;
+export type ExpectedKind = 'image' | 'video' | 'document';
 
-interface DocumentSlotConfig {
+export interface DocumentSlotConfig {
   key: DocumentKey;
   title: string;
   helperText: string;
@@ -20,7 +24,11 @@ interface DocumentSlotConfig {
   expectedKind: ExpectedKind;
 }
 
-const DOCUMENT_SLOTS: DocumentSlotConfig[] = [
+/** Exported so the post-submission resubmission flow (a document under
+ *  CORRECTION_REQUIRED, reviewed on the My Bookings page) shows the exact
+ *  same four slots/labels/accept-types as the original upload here, instead
+ *  of a second, potentially-drifting copy of this config. */
+export const DOCUMENT_SLOTS: DocumentSlotConfig[] = [
   {
     key: 'idType1',
     title: 'Government ID #1',
@@ -39,24 +47,25 @@ const DOCUMENT_SLOTS: DocumentSlotConfig[] = [
     key: 'verificationVideo',
     title: 'Video Verification',
     helperText:
-      "Upload a short video holding your valid ID next to your face, clearly speaking the phrase: \"I am [Your Full Name] and today is [Date Today].\"",
+      'Record a short video holding your valid government ID, give a thumbs-up, and clearly state your full name.',
     accept: 'video/mp4,video/webm,video/quicktime,.mov',
     expectedKind: 'video',
   },
   {
     key: 'proofOfBilling',
     title: 'Proof of Billing',
-    helperText: 'Utility bill or statement from the last 3 months',
+    helperText: 'Accepted: Electricity bill, Rent Agreement, Water bill, or Parcel.',
     accept: 'image/*,application/pdf',
     expectedKind: 'document',
   },
 ];
 
-const MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024;
+export const MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024;
 
 type DocumentFiles = Record<DocumentKey, File | null>;
 type DocumentPreviews = Record<DocumentKey, string | null>;
 type DocumentErrors = Record<DocumentKey, string | null>;
+type DocumentUploading = Record<DocumentKey, boolean>;
 
 const EMPTY_FILES: DocumentFiles = {
   idType1: null,
@@ -79,7 +88,18 @@ const EMPTY_ERRORS: DocumentErrors = {
   proofOfBilling: null,
 };
 
-function isAcceptedFileType(file: File, accept: string): boolean {
+const EMPTY_UPLOADING: DocumentUploading = {
+  idType1: false,
+  idType2: false,
+  verificationVideo: false,
+  proofOfBilling: false,
+};
+
+export function sanitizeFileName(name: string): string {
+  return name.replace(/[^\w.-]/g, '_');
+}
+
+export function isAcceptedFileType(file: File, accept: string): boolean {
   return accept
     .split(',')
     .map((pattern) => pattern.trim())
@@ -89,7 +109,7 @@ function isAcceptedFileType(file: File, accept: string): boolean {
     });
 }
 
-function wrongFileTypeMessage(expectedKind: ExpectedKind): string {
+export function wrongFileTypeMessage(expectedKind: ExpectedKind): string {
   switch (expectedKind) {
     case 'video':
       return 'Please upload a video file (MP4, WebM, or MOV) — a photo won\'t work here.';
@@ -100,7 +120,7 @@ function wrongFileTypeMessage(expectedKind: ExpectedKind): string {
   }
 }
 
-function formatFileSize(bytes: number): string {
+export function formatFileSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
@@ -170,10 +190,26 @@ interface TextFieldProps {
   onChange: (value: string) => void;
 }
 
+/** The red required marker. Every field it appears on is genuinely gated by this form's own
+ *  `canSubmit` check — it is never decorative. `aria-hidden` because the input already carries
+ *  `required`, which is what a screen reader announces; the asterisk is the visual half of that
+ *  same fact, and announcing "star" alongside it would just be noise. */
+function RequiredMark() {
+  return (
+    <span aria-hidden="true" className="text-red-600 dark:text-red-400">
+      {' '}
+      *
+    </span>
+  );
+}
+
 function TextField({ label, type = 'text', value, placeholder, autoComplete, onChange }: TextFieldProps) {
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="text-sm font-medium text-ink">{label}</span>
+      <span className="text-sm font-medium text-ink">
+        {label}
+        <RequiredMark />
+      </span>
       <input
         type={type}
         required
@@ -181,22 +217,32 @@ function TextField({ label, type = 'text', value, placeholder, autoComplete, onC
         placeholder={placeholder}
         autoComplete={autoComplete}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded-lg border border-line px-3 py-2 text-sm text-ink shadow-sm outline-none transition-colors focus:border-brand-forest focus:ring-2 focus:ring-brand-forest/20"
+        className="rounded-lg border border-line px-3 py-2.5 text-sm text-ink shadow-sm outline-none transition-colors focus:border-brand-forest focus:ring-2 focus:ring-brand-forest/20"
       />
     </label>
   );
 }
 
-interface DocumentDropzoneProps {
+export interface DocumentDropzoneProps {
   config: DocumentSlotConfig;
   file: File | null;
   previewUrl: string | null;
   error: string | null;
+  uploading: boolean;
+  uploaded: boolean;
   onSelect: (file: File) => void;
   onRemove: () => void;
+  /** True when the caller already renders config.title elsewhere (e.g. VerificationDocumentsReview's
+   * own row header, which needs the title next to a status badge regardless of whether this
+   * dropzone is shown) — omits this component's own title line so it doesn't appear twice. */
+  hideTitle?: boolean;
 }
 
-function DocumentDropzone({ config, file, previewUrl, error, onSelect, onRemove }: DocumentDropzoneProps) {
+/** Exported so the post-submission resubmission flow (see
+ *  VerificationDocumentsReview.tsx) renders the identical dropzone UI for
+ *  replacing a single CORRECTION_REQUIRED document, instead of a second,
+ *  visually-diverging copy of this control. */
+export function DocumentDropzone({ config, file, previewUrl, error, uploading, uploaded, onSelect, onRemove, hideTitle }: DocumentDropzoneProps) {
   const [isDragActive, setIsDragActive] = useState(false);
   const inputId = `doc-upload-${config.key}`;
   const hasFile = file !== null;
@@ -211,26 +257,36 @@ function DocumentDropzone({ config, file, previewUrl, error, onSelect, onRemove 
   function handleDrop(e: DragEvent<HTMLLabelElement>) {
     e.preventDefault();
     setIsDragActive(false);
+    if (uploading) return;
     handleFiles(e.dataTransfer.files);
   }
 
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-sm font-medium text-ink">{config.title}</span>
+      {!hideTitle && (
+        <span className="text-sm font-medium text-ink">
+          {config.title}
+          {/* Every slot rendered here comes from REQUIRED_VERIFICATION_DOCUMENTS, all of which
+              must be uploaded before this form can be submitted — so the marker is accurate for
+              each one, not blanket-applied. */}
+          <RequiredMark />
+        </span>
+      )}
 
       <label
         htmlFor={inputId}
         onDragOver={(e) => {
           e.preventDefault();
-          setIsDragActive(true);
+          if (!uploading) setIsDragActive(true);
         }}
         onDragLeave={() => setIsDragActive(false)}
         onDrop={handleDrop}
         className={[
-          'relative flex h-36 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed p-3 text-center transition-colors',
+          'relative flex h-36 flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed p-3 text-center transition-colors',
+          uploading ? 'cursor-wait' : 'cursor-pointer',
           error
             ? 'border-red-400 bg-red-50 dark:border-red-500 dark:bg-red-500/10'
-            : hasFile
+            : uploaded
               ? 'border-brand-forest bg-brand-forest/10'
               : isDragActive
                 ? 'border-brand-forest/70 bg-brand-forest/5'
@@ -241,11 +297,12 @@ function DocumentDropzone({ config, file, previewUrl, error, onSelect, onRemove 
           id={inputId}
           type="file"
           accept={config.accept}
+          disabled={uploading}
           className="hidden"
           onChange={(e: ChangeEvent<HTMLInputElement>) => handleFiles(e.target.files)}
         />
 
-        {hasFile && (
+        {hasFile && !uploading && (
           <button
             type="button"
             onClick={(e) => {
@@ -259,7 +316,12 @@ function DocumentDropzone({ config, file, previewUrl, error, onSelect, onRemove 
           </button>
         )}
 
-        {hasFile ? (
+        {uploading ? (
+          <>
+            <div className="h-7 w-7 animate-spin rounded-full border-2 border-brand-forest border-t-transparent" />
+            <p className="text-xs font-medium text-ink-muted">Uploading…</p>
+          </>
+        ) : hasFile ? (
           <>
             {isImagePreview && previewUrl ? (
               <img
@@ -270,12 +332,16 @@ function DocumentDropzone({ config, file, previewUrl, error, onSelect, onRemove 
             ) : isVideoPreview && previewUrl ? (
               <video src={previewUrl} muted className="h-16 w-16 rounded-lg object-cover ring-2 ring-brand-forest" />
             ) : (
-              <DocumentPreviewIcon className="h-10 w-10 text-brand-forest" />
+              <DocumentPreviewIcon className="h-10 w-10 text-accent" />
             )}
-            <div className="flex items-center gap-1 text-xs font-medium text-brand-forest">
-              <CheckCircleIcon className="h-4 w-4" />
-              <span>Uploaded</span>
-            </div>
+            {uploaded ? (
+              <div className="flex items-center gap-1 text-xs font-medium text-accent">
+                <CheckCircleIcon className="h-4 w-4" />
+                <span>Uploaded</span>
+              </div>
+            ) : (
+              <p className="text-xs font-medium text-red-600 dark:text-red-400">Upload failed — try again</p>
+            )}
             <p className="max-w-full truncate px-2 text-xs text-ink-muted">
               {file.name} · {formatFileSize(file.size)}
             </p>
@@ -299,20 +365,49 @@ interface VerificationUploadProps {
 }
 
 export default function VerificationUpload({ onSubmit }: VerificationUploadProps) {
+  const { user } = useAuth();
   const { cart, updateVerificationDocs } = useRental();
   const { verificationDocs } = cart;
+  // Scoped to only what's checked for checkout, same as PaymentBreakdown's own isByoOnly — an
+  // unchecked BYO selection saved for later in the cart must never require this checkbox for a
+  // checkout that's actually a package booking.
+  const selectedCart = filterCartToSelection(cart);
+  const isByoBooking = selectedCart.byoGears.length > 0 && selectedCart.selectedKits.length === 0;
 
   const [files, setFiles] = useState<DocumentFiles>(EMPTY_FILES);
   const [previews, setPreviews] = useState<DocumentPreviews>(EMPTY_PREVIEWS);
   const [fileErrors, setFileErrors] = useState<DocumentErrors>(EMPTY_ERRORS);
-  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [uploading, setUploading] = useState<DocumentUploading>(EMPTY_UPLOADING);
 
-  // Tracks every blob URL created for previews so they can all be released on unmount.
+  // Tracks every blob URL created for previews so they can all be released on unmount. Preview
+  // URLs stay local to this component — they are never written to shared checkout state.
   const objectUrlsRef = useRef<Set<string>>(new Set());
+  // Dispatch is stable, but the context helper is re-created each render; a ref keeps the unmount
+  // cleanup on a single subscription instead of re-running whenever the cart changes.
+  const updateVerificationDocsRef = useRef(updateVerificationDocs);
+  updateVerificationDocsRef.current = updateVerificationDocs;
+
+  // Bumped on every remove/replace so a slower upload that finishes after the customer already
+  // removed or swapped that slot's file can recognize it's stale and discard its own result
+  // instead of writing a storagePath for a file that's no longer selected.
+  const uploadGenerationRef = useRef<Record<DocumentKey, number>>({
+    idType1: 0,
+    idType2: 0,
+    verificationVideo: 0,
+    proofOfBilling: 0,
+  });
+
   useEffect(() => {
     const trackedUrls = objectUrlsRef.current;
     return () => {
       trackedUrls.forEach((url) => URL.revokeObjectURL(url));
+      // The selected File objects live only in this component's state, so once it unmounts the
+      // selection is genuinely gone. Clear the shared slots too, or the submission gate would
+      // pass on files the page can no longer produce.
+      updateVerificationDocsRef.current({
+        documents: { idType1: null, idType2: null, verificationVideo: null, proofOfBilling: null },
+        confirmed: false,
+      });
     };
   }, []);
 
@@ -320,10 +415,10 @@ export default function VerificationUpload({ onSubmit }: VerificationUploadProps
     field: keyof Pick<VerificationDocs, 'fullName' | 'phone' | 'email'>,
     value: string,
   ) {
-    updateVerificationDocs({ [field]: value });
+    updateVerificationDocs({ [field]: value, confirmed: false });
   }
 
-  function handleDocumentSelect(config: DocumentSlotConfig, file: File) {
+  async function handleDocumentSelect(config: DocumentSlotConfig, file: File) {
     const { key } = config;
 
     if (!isAcceptedFileType(file, config.accept)) {
@@ -332,6 +427,10 @@ export default function VerificationUpload({ onSubmit }: VerificationUploadProps
     }
     if (file.size > MAX_FILE_SIZE_BYTES) {
       setFileErrors((prev) => ({ ...prev, [key]: 'File must be smaller than 8MB.' }));
+      return;
+    }
+    if (!user) {
+      setFileErrors((prev) => ({ ...prev, [key]: 'Please log in before uploading verification documents.' }));
       return;
     }
 
@@ -347,10 +446,37 @@ export default function VerificationUpload({ onSubmit }: VerificationUploadProps
     setFiles((prev) => ({ ...prev, [key]: file }));
     setPreviews((prev) => ({ ...prev, [key]: nextUrl }));
     setFileErrors((prev) => ({ ...prev, [key]: null }));
-    updateVerificationDocs({ [key]: nextUrl });
+    setUploading((prev) => ({ ...prev, [key]: true }));
+    // Record what was selected, but with no storagePath yet — the submission gate requires a
+    // real storagePath, so this slot cannot pass until the upload below actually succeeds.
+    setDocumentSlot(key, { name: file.name, size: file.size, type: file.type, storagePath: null });
+
+    const generation = ++uploadGenerationRef.current[key];
+    const path = `${user.id}/${VERIFICATION_KIND_MAP[key]}-${Date.now()}-${sanitizeFileName(file.name)}`;
+
+    // A session that went stale while this page sat idle would otherwise fail this upload
+    // silently (a per-slot "Upload failed" the customer may not notice) and leave Save
+    // Verification Details permanently disabled — see ensureFreshSession's own comment.
+    await ensureFreshSession();
+    if (uploadGenerationRef.current[key] !== generation) return; // stale by the time refresh resolved
+
+    const { error: uploadError } = await supabase.storage.from(VERIFICATION_BUCKET).upload(path, file);
+
+    // A remove or a newer select happened while this upload was in flight — the result no longer
+    // corresponds to what's selected, so it must not be written back.
+    if (uploadGenerationRef.current[key] !== generation) return;
+
+    setUploading((prev) => ({ ...prev, [key]: false }));
+    if (uploadError) {
+      setFileErrors((prev) => ({ ...prev, [key]: `Upload failed — ${uploadError.message}` }));
+      return;
+    }
+    setDocumentSlot(key, { name: file.name, size: file.size, type: file.type, storagePath: path });
   }
 
   function handleDocumentRemove(key: DocumentKey) {
+    uploadGenerationRef.current[key] += 1; // invalidate any in-flight upload for this slot
+
     const previousUrl = previews[key];
     if (previousUrl) {
       URL.revokeObjectURL(previousUrl);
@@ -360,28 +486,59 @@ export default function VerificationUpload({ onSubmit }: VerificationUploadProps
     setFiles((prev) => ({ ...prev, [key]: null }));
     setPreviews((prev) => ({ ...prev, [key]: null }));
     setFileErrors((prev) => ({ ...prev, [key]: null }));
-    updateVerificationDocs({ [key]: '' });
+    setUploading((prev) => ({ ...prev, [key]: false }));
+    setDocumentSlot(key, null);
   }
 
-  const allDocumentsUploaded = DOCUMENT_SLOTS.every((slot) => files[slot.key] !== null);
+  /** Any change to the documents invalidates a previous confirmation. */
+  function setDocumentSlot(
+    key: DocumentKey,
+    meta: { name: string; size: number; type: string; storagePath: string | null } | null,
+  ) {
+    updateVerificationDocs({
+      documents: { ...verificationDocs.documents, [key]: meta },
+      confirmed: false,
+    });
+  }
+
+  function handleTermsChange(accepted: boolean) {
+    updateVerificationDocs({ termsAccepted: accepted, confirmed: false });
+  }
+
+  function handleByoAgreementChange(accepted: boolean) {
+    updateVerificationDocs({ byoAgreementAccepted: accepted, confirmed: false });
+  }
+
+  const allDocumentsUploaded = REQUIRED_VERIFICATION_DOCUMENTS.every(
+    (key) => verificationDocs.documents[key]?.storagePath,
+  );
+  const anyUploadInProgress = REQUIRED_VERIFICATION_DOCUMENTS.some((key) => uploading[key]);
   const contactInfoComplete = Boolean(
     verificationDocs.fullName.trim() && verificationDocs.phone.trim() && verificationDocs.email.trim(),
   );
-  const canSubmit = allDocumentsUploaded && contactInfoComplete && agreedToTerms;
+  const agreementsAccepted = isByoBooking ? verificationDocs.byoAgreementAccepted : verificationDocs.termsAccepted;
+  const canSubmit = allDocumentsUploaded && !anyUploadInProgress && contactInfoComplete && agreementsAccepted;
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!canSubmit) return;
+    updateVerificationDocs({ confirmed: true });
     onSubmit?.();
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mx-auto flex w-full max-w-2xl flex-col gap-8 p-4 sm:p-6">
+    <form onSubmit={handleSubmit} className="mx-auto flex w-full max-w-2xl flex-col gap-8 p-5 sm:p-6">
       <div className="flex flex-col gap-1">
         <h1 className="font-serif text-xl font-semibold text-ink">Identity Verification</h1>
         <p className="text-sm text-ink-muted">
-          We verify every renter before confirming a booking. This keeps gear safe for the whole GearBNB
+          We verify every renter before confirming a booking. This keeps gear safe for the whole GearBnB
           community.
+        </p>
+        {/* Explains the marker once, up front, rather than leaving a bare asterisk to be guessed
+            at. Not aria-hidden — unlike the individual marks, this legend is the explanation. */}
+        <p className="text-xs text-ink-faint">
+          <span className="font-semibold text-red-600 dark:text-red-400">*</span> Required — every field below must
+          be completed before you can submit.
         </p>
       </div>
 
@@ -431,6 +588,8 @@ export default function VerificationUpload({ onSubmit }: VerificationUploadProps
               file={files[slot.key]}
               previewUrl={previews[slot.key]}
               error={fileErrors[slot.key]}
+              uploading={uploading[slot.key]}
+              uploaded={Boolean(verificationDocs.documents[slot.key]?.storagePath)}
               onSelect={(file) => handleDocumentSelect(slot, file)}
               onRemove={() => handleDocumentRemove(slot.key)}
             />
@@ -438,29 +597,72 @@ export default function VerificationUpload({ onSubmit }: VerificationUploadProps
         </div>
       </section>
 
-      <label className="flex items-start gap-3 rounded-xl border border-line p-4">
-        <input
-          type="checkbox"
-          required
-          checked={agreedToTerms}
-          onChange={(e) => setAgreedToTerms(e.target.checked)}
-          className="mt-0.5 h-4 w-4 shrink-0 rounded border-line text-brand-forest focus:ring-brand-forest"
-        />
-        <span className="text-sm text-ink-muted">
-          I agree to GearBNB's{' '}
-          <a href="#" className="font-medium text-brand-forest underline underline-offset-2">
-            Terms and Conditions
-          </a>{' '}
-          and confirm that the information and documents provided above are accurate and belong to me.
-        </span>
-      </label>
+      <section className="flex flex-col gap-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-muted">Required Agreements</h2>
+
+        {/* GearBnB's Kit and Build Your Own rental agreements are two independent, standalone
+         * documents — the BYO agreement is not an addendum to the Kit one, it carries its own
+         * full general-terms section and its own signature block — so exactly one applies to any
+         * given booking, never both, never neither. Which one shows here is the same
+         * checked-for-checkout cart composition PaymentBreakdown/isVerificationComplete already
+         * use (isByoBooking), never something this component decides on its own. */}
+        {isByoBooking ? (
+          <label className="flex items-start gap-3 rounded-xl border border-line p-4">
+            <input
+              type="checkbox"
+              required
+              checked={verificationDocs.byoAgreementAccepted}
+              onChange={(e) => handleByoAgreementChange(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-line text-accent focus:ring-brand-forest"
+            />
+            <span className="text-sm text-ink-muted">
+              I have read and agree to GearBnB's{' '}
+              <a
+                href={BYO_RENTAL_AGREEMENT_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-accent underline underline-offset-2"
+              >
+                Build Your Own Rental Agreement
+              </a>{' '}
+              and confirm that the information and documents provided above are accurate and belong to me.
+            </span>
+          </label>
+        ) : (
+          <label className="flex items-start gap-3 rounded-xl border border-line p-4">
+            <input
+              type="checkbox"
+              required
+              checked={verificationDocs.termsAccepted}
+              onChange={(e) => handleTermsChange(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-line text-accent focus:ring-brand-forest"
+            />
+            <span className="text-sm text-ink-muted">
+              I have read and agree to GearBnB's{' '}
+              <a
+                href={TERMS_AND_CONDITIONS_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-accent underline underline-offset-2"
+              >
+                Terms &amp; Conditions
+              </a>{' '}
+              and confirm that the information and documents provided above are accurate and belong to me.
+            </span>
+          </label>
+        )}
+      </section>
 
       <button
         type="submit"
         disabled={!canSubmit}
         className="w-full rounded-lg bg-brand-forest px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-forest-dark disabled:cursor-not-allowed disabled:bg-surface-strong"
       >
-        Submit for Review
+        {anyUploadInProgress
+          ? 'Uploading documents…'
+          : verificationDocs.confirmed
+            ? 'Verification Details Saved ✓'
+            : 'Save Verification Details'}
       </button>
 
       <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300">

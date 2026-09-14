@@ -1,4 +1,4 @@
-import { useState, type ComponentType } from 'react';
+﻿import { useState, type ComponentType } from 'react';
 import { useRental } from '../../context/RentalContext';
 import type { FulfillmentType } from '../../types/gearbnb';
 import { CheckIcon, MapPinIcon, TruckIcon } from '../icons';
@@ -16,7 +16,7 @@ const FULFILLMENT_OPTIONS: FulfillmentOptionConfig[] = [
   {
     value: 'delivery',
     title: 'Grab Delivery',
-    description: 'Direct door-to-door delivery dispatched straight to your address via Grab.',
+    description: 'You book and pay for your own Grab to your address — GearBnB does not charge a delivery fee.',
     icon: TruckIcon,
   },
   {
@@ -44,7 +44,7 @@ function DateField({ label, value, min, onChange }: DateFieldProps) {
         value={value}
         min={min}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded-lg border border-line px-3 py-2 text-sm text-ink shadow-sm outline-none transition-colors focus:border-brand-forest focus:ring-2 focus:ring-brand-forest/20"
+        className="rounded-lg border border-line px-3 py-2.5 text-sm text-ink shadow-sm outline-none transition-colors focus:border-brand-forest focus:ring-2 focus:ring-brand-forest/20"
       />
     </label>
   );
@@ -63,7 +63,7 @@ export default function TripDetailsForm() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 p-4 sm:p-6">
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 p-5 sm:p-6">
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold text-ink">Trip Details</h2>
         <p className="text-sm text-ink-muted">Tell us when you need your gear and how you'd like to get it.</p>
@@ -84,6 +84,18 @@ export default function TripDetailsForm() {
         />
       </div>
 
+      <label className="flex flex-col gap-1.5">
+        <span className="text-sm font-medium text-ink">Destination / Venue</span>
+        <input
+          type="text"
+          required
+          value={tripDetails.destination}
+          onChange={(e) => updateTripDetails({ destination: e.target.value })}
+          placeholder="e.g. Sagada, or your campsite / event venue"
+          className="rounded-lg border border-line px-3 py-2.5 text-sm text-ink shadow-sm outline-none transition-colors focus:border-brand-forest focus:ring-2 focus:ring-brand-forest/20"
+        />
+      </label>
+
       <label className="flex max-w-xs flex-col gap-1.5">
         <span className="text-sm font-medium text-ink">Preferred Time</span>
         <input
@@ -91,7 +103,7 @@ export default function TripDetailsForm() {
           required
           value={tripDetails.preferredTime}
           onChange={(e) => updateTripDetails({ preferredTime: e.target.value })}
-          className="rounded-lg border border-line px-3 py-2 text-sm text-ink shadow-sm outline-none transition-colors focus:border-brand-forest focus:ring-2 focus:ring-brand-forest/20"
+          className="rounded-lg border border-line px-3 py-2.5 text-sm text-ink shadow-sm outline-none transition-colors focus:border-brand-forest focus:ring-2 focus:ring-brand-forest/20"
         />
       </label>
 
@@ -119,7 +131,7 @@ export default function TripDetailsForm() {
                     <CheckIcon className="h-3 w-3" />
                   </span>
                 )}
-                <Icon className={`h-6 w-6 ${isActive ? 'text-brand-forest' : 'text-ink-muted'}`} />
+                <Icon className={`h-6 w-6 ${isActive ? 'text-accent' : 'text-ink-muted'}`} />
                 <span className="text-sm font-semibold text-ink">{option.title}</span>
                 <span className="text-xs text-ink-muted">{option.description}</span>
               </button>
@@ -140,7 +152,7 @@ export default function TripDetailsForm() {
             onBlur={() => setAddressTouched(true)}
             onChange={(e) => updateTripDetails({ deliveryAddress: e.target.value })}
             placeholder="House No., Street, Barangay, City"
-            className={`resize-none rounded-lg border px-3 py-2 text-sm text-ink shadow-sm outline-none transition-colors focus:ring-2 ${
+            className={`resize-none rounded-lg border px-3 py-2.5 text-sm text-ink shadow-sm outline-none transition-colors focus:ring-2 ${
               showAddressError
                 ? 'border-red-400 focus:border-red-500 focus:ring-red-500/20 dark:border-red-500 dark:focus:border-red-400'
                 : 'border-line focus:border-brand-forest focus:ring-brand-forest/20'

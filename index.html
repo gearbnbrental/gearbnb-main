@@ -2,14 +2,25 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/brand_assets/GEARBNB_logo.png" />
+    <!-- Circular, transparent-background crop of the same logo (GEARBNB_logo.png), generated
+     specifically for the favicon — the source logo itself is an opaque square PNG (no alpha
+     channel), which renders as a white square around the circle in a browser tab (no CSS
+     rounding there, unlike its `rounded-full` usage elsewhere in the app). Never edit the source
+     logo to "fix" this — everywhere else it's used deliberately relies on it being a plain
+     rectangle clipped by CSS. -->
+    <link rel="icon" type="image/png" href="/brand_assets/gearbnb-favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>GearBNB</title>
+    <title>GearBnB</title>
     <script>
       (function () {
-        var stored = localStorage.getItem('gearbnb-theme');
-        var isDark = stored ? stored === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
-        if (isDark) document.documentElement.classList.add('dark');
+        // Default is light — only an explicit prior choice (the in-app toggle) turns this dark.
+        // Deliberately does NOT fall back to prefers-color-scheme: a first-time visitor whose OS/
+        // browser reports a dark preference must still see the site's intended light-mode default,
+        // not have that decision made for them by an unrelated system setting they never chose
+        // inside this app. Runs before <body> renders so there's no flash of the wrong theme.
+        if (localStorage.getItem('gearbnb-theme') === 'dark') {
+          document.documentElement.classList.add('dark');
+        }
       })();
     </script>
   </head>
