@@ -252,3 +252,48 @@ export function LegalContact({ rows }: { rows: { label: string; value: ReactNode
     </dl>
   );
 }
+
+/** In-page link to another section of the same document ("see section 5"), using the same smooth jump as the contents index. */
+export function SectionLink({ id, children }: { id: string; children: ReactNode }) {
+  return (
+    <a
+      className={legalLinkClass}
+      href={`#${id}`}
+      onClick={(event) => {
+        event.preventDefault();
+        scrollToSection(id);
+      }}
+    >
+      {children}
+    </a>
+  );
+}
+
+export function LegalTable({ headers, rows }: { headers: string[]; rows: ReactNode[][] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[34rem] border-collapse text-left text-[0.9375rem] leading-relaxed">
+        <thead>
+          <tr>
+            {headers.map((header) => (
+              <th key={header} scope="col" className="border-b-2 border-line py-2.5 pr-4 font-semibold text-ink">
+                {header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i}>
+              {row.map((cell, j) => (
+                <td key={j} className={`border-b border-line py-3 pr-4 align-top ${j === 0 ? 'font-medium text-ink' : ''}`}>
+                  {cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
