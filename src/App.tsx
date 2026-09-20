@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useLayoutEffect } from 'react';
 import { BrowserRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import BackToTop from './components/BackToTop';
 import FloatingHelp from './components/FloatingHelp';
@@ -18,8 +18,10 @@ import Login from './pages/Login';
 import MyBookings from './pages/MyBookings';
 import PathACatalog from './pages/PathACatalog';
 import PathBCatalog from './pages/PathBCatalog';
+import PrivacyPolicy from './pages/PrivacyPolicy';
 import Profile from './pages/Profile';
 import Terms from './pages/Terms';
+import TermsOfService from './pages/TermsOfService';
 
 /**
  * App-wide enforcement of "signed up but hasn't confirmed their email yet" — Login.tsx already
@@ -46,6 +48,24 @@ function VerificationGate() {
   return null;
 }
 
+/**
+ * A client-side route change swaps the page but keeps the window's scroll offset, so going from the
+ * bottom of the homepage to About Us would land the customer mid-page. Resets to the top on every
+ * pathname change. A URL with a #hash is left alone — those are deliberate "jump to this section"
+ * links (footer "How renting works", "Deposit & Refunds", policy contents) and each of those pages
+ * scrolls to its own target. Runs before paint so the old offset is never visible.
+ */
+function ScrollToTop() {
+  const { pathname, hash } = useLocation();
+
+  useLayoutEffect(() => {
+    if (hash) return;
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, [pathname, hash]);
+
+  return null;
+}
+
 function App() {
   return (
     <AuthProvider>
@@ -54,6 +74,7 @@ function App() {
           <BrowserRouter>
             <div className="min-h-screen">
               <VerificationGate />
+              <ScrollToTop />
               <Navbar />
 
               <Routes>
@@ -70,6 +91,8 @@ function App() {
                 <Route path="/my-bookings" element={<MyBookings />} />
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/terms" element={<Terms />} />
+                <Route path="/terms-of-service" element={<TermsOfService />} />
+                <Route path="/privacy-policy" element={<PrivacyPolicy />} />
               </Routes>
 
               {/* One shared footer for every route above, rather than each page carrying its own

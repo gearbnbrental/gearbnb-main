@@ -12,17 +12,17 @@ function XMarkIcon({ className }: { className?: string }) {
 }
 
 /** Routes whose own sticky bottom action bar (Cart's checkout footer, the catalog pages' cart
- * summary bar) would otherwise sit directly under this widget's default bottom-right position â€”
+ * summary bar) would otherwise sit directly under this widget's default bottom-right position —
  * on these, the widget is lifted clear of that bar instead of overlapping its buttons. Exported so
- * BackToTop.tsx â€” which stacks directly above this widget â€” lifts by the same amount on the same
+ * BackToTop.tsx — which stacks directly above this widget — lifts by the same amount on the same
  * routes, rather than maintaining a second, potentially-drifting copy of this list. */
 export const STICKY_FOOTER_ROUTES = new Set(['/cart', '/catalog/path-a', '/catalog/path-b']);
 
 /**
- * Sitewide floating "Need Help?" contact widget â€” the one general-purpose support CTA, available
+ * Sitewide floating "Need Help?" contact widget — the one general-purpose support CTA, available
  * identically before, during, and after a booking, and regardless of cart/login state (mounted
  * once in App.tsx with no dependency on any of that). A plain link-based popover, not a chat
- * widget â€” clicking Messenger/TikTok just opens that real destination in a new tab, nothing here
+ * widget — clicking Messenger/TikTok just opens that real destination in a new tab, nothing here
  * simulates or promises live chat.
  */
 export default function FloatingHelp() {
@@ -68,7 +68,7 @@ export default function FloatingHelp() {
       style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
     >
       {/* Trigger comes BEFORE the panel in DOM order (even though the panel renders visually
-       * above it via `absolute bottom-full`) â€” forward-Tab from this button must reach the
+       * above it via `absolute bottom-full`) — forward-Tab from this button must reach the
        * panel's own controls next, not skip past them to whatever follows this component in the
        * document. Source order here drives tab order; CSS positioning does not. */}
       <button
@@ -77,7 +77,7 @@ export default function FloatingHelp() {
         onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
         aria-controls="floating-help-panel"
-        // Distinct from the panel's own "Close help panel" button below â€” two controls sharing
+        // Distinct from the panel's own "Close help panel" button below — two controls sharing
         // one accessible name are indistinguishable to a screen reader user navigating by name.
         aria-label={open ? 'Collapse help panel' : 'Need Help? Contact us'}
         className="flex items-center gap-2 rounded-full bg-brand-forest px-4 py-3 text-sm font-semibold text-white shadow-lg transition-transform hover:-translate-y-0.5 hover:bg-brand-forest-dark motion-reduce:transition-none motion-reduce:hover:translate-y-0"
@@ -94,7 +94,7 @@ export default function FloatingHelp() {
           aria-label="Contact GearBnB"
           className="absolute bottom-full right-0 mb-3 w-[calc(100vw-2rem)] max-w-sm overflow-hidden rounded-2xl border border-line bg-surface shadow-xl"
         >
-          {/* Branded header â€” dark-green fill matching the client's reference, GearBnB mark, and
+          {/* Branded header — dark-green fill matching the client's reference, GearBnB mark, and
            * the panel's only close control (never duplicated below). */}
           <div className="flex items-center justify-between gap-2 bg-brand-forest px-4 py-3">
             <div className="flex items-center gap-2">

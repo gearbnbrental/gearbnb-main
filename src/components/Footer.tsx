@@ -6,19 +6,19 @@ import SocialLinks from './SocialLinks';
 /**
  * The single site-wide footer, mounted once in App.tsx below every route. Previously this markup
  * lived only inside LandingPage.tsx, so every other page (About, catalogs, Cart, Checkout, My
- * Bookings, Profile, Terms, etc.) had no footer at all â€” moved here so it renders consistently
+ * Bookings, Profile, Terms, etc.) had no footer at all — moved here so it renders consistently
  * everywhere without duplicating the markup per page.
  *
  * Every link either navigates to a real route or scrolls to a same-page section id, matching the
  * one navigation mechanism this footer has always used (never a second pattern like a raw <a> for
  * an internal link). "How renting works" and "Adventure Bundles" only make sense as scroll targets
- * on the home page itself â€” clicking either from another page navigates home first, then scrolls,
+ * on the home page itself — clicking either from another page navigates home first, then scrolls,
  * so the link always does something sensible regardless of which page it's clicked from.
  */
 export default function Footer() {
   const navigate = useNavigate();
 
-  /** Navigates home first (if not already there) then scrolls to a section id â€” scrollIntoView
+  /** Navigates home first (if not already there) then scrolls to a section id — scrollIntoView
    *  only works once that section actually exists in the DOM, which requires being on "/" already. */
   function goToHomeSection(sectionId: string) {
     if (window.location.pathname !== '/') {
@@ -53,14 +53,14 @@ export default function Footer() {
               Adventure Bundles
             </button>
             <button type="button" onClick={() => navigate('/event-plan')} className="w-fit text-left text-sm text-white hover:opacity-80">
-              Event Plan
+              Plan an Event
             </button>
           </div>
 
           <div className="flex flex-col gap-2">
             <h3 className="text-sm font-semibold text-white">Rental Help</h3>
             {/* Scrolls to the "How To Rent Camping Gear from GearBnB?" section (the process-steps
-                section on the home page) â€” id retained as "how-renting-works" even though the
+                section on the home page) — id retained as "how-renting-works" even though the
                 section's own heading text changed, so this is the only place the id string lives. */}
             <button
               type="button"
@@ -69,13 +69,13 @@ export default function Footer() {
             >
               How renting works
             </button>
-            {/* No standalone pricing page exists â€” /catalog is where real, current per-package/
+            {/* No standalone pricing page exists — /catalog is where real, current per-package/
              * per-item prices actually live, so it's the genuine equivalent rather than a page
              * invented just to hold this link. */}
             <button type="button" onClick={() => navigate('/catalog')} className="w-fit text-left text-sm text-white hover:opacity-80">
               Pricing &amp; Fees
             </button>
-            {/* "Gear Care Tips" removed per client request, with no replacement item â€” the client
+            {/* "Gear Care Tips" removed per client request, with no replacement item — the client
                 does not want that link treated as a gear-care section, and this site has no
                 gear-care/blog content to point it at instead. */}
           </div>
@@ -88,16 +88,22 @@ export default function Footer() {
             <button type="button" onClick={() => navigate('/terms#deposit')} className="w-fit text-left text-sm text-white hover:opacity-80">
               Deposit &amp; Refunds
             </button>
+            <button type="button" onClick={() => navigate('/terms-of-service')} className="w-fit text-left text-sm text-white hover:opacity-80">
+              Terms of Service
+            </button>
+            <button type="button" onClick={() => navigate('/privacy-policy')} className="w-fit text-left text-sm text-white hover:opacity-80">
+              Privacy Policy
+            </button>
           </div>
 
-          {/* Get in Touch â€” its own clearly-defined column (client's reference), focused on
+          {/* Get in Touch — its own clearly-defined column (client's reference), focused on
               actual contact/support actions only. Deliberately does NOT repeat a Facebook/TikTok
-              icon row here â€” those already have one clear home in this footer, the copyright
+              icon row here — those already have one clear home in this footer, the copyright
               row's SocialLinks icons below. Messenger is the one platform that row doesn't cover,
               so it gets its own single "Send us a message" link here instead of a duplicated row. */}
           <div className="flex min-w-0 flex-col gap-3">
             <h3 className="text-sm font-semibold text-white">Get in Touch</h3>
-            {/* Renders only while CONTACT_EMAIL is actually set (see config/social.ts) â€” this
+            {/* Renders only while CONTACT_EMAIL is actually set (see config/social.ts) — this
                 is the customer-support address only, never the RMS's automated booking sender
                 (admin@gearbnbrental.com), which this site never reads or displays. */}
             {CONTACT_EMAIL && (
