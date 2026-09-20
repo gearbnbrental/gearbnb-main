@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  byoGearKey,
   calculateDueBeforeStart,
   calculateDueToday,
   calculateItemExtrasFee,
@@ -7,11 +8,14 @@ import {
   calculateRentalDurationDays,
   checkItemAvailability,
   checkKitAvailability,
+  filterCartToSelection,
   getItemPrice,
   getKitPrice,
   isVerificationComplete,
+  sanitizeCheckoutSelection,
 } from './RentalContext';
 import type {
+  BookableGearSelection,
   CartState,
   IndividualItem,
   PackageKit,
@@ -88,17 +92,99 @@ function makeCart(overrides: Partial<CartState> = {}): CartState {
   return {
     selectedKits: [],
     kitExtras: {},
+    packageAddOns: {},
     selectedItems: [],
     itemExtras: {},
     byoGears: [],
     byoAddOns: {},
     tripDetails: makeTripDetails(),
     verificationDocs: makeVerificationDocs(),
-    checkoutSelection: { kitIds: [], itemIds: [], byoGearKeys: [] },
+    checkoutSelection: { kitIds: [], itemIds: [], byoGearKeys: [], packageAddOnKeys: {}, byoAddOnKeys: {} },
     removedItemNames: [],
     ...overrides,
   };
 }
+
+describe('sanitizeCheckoutSelection', () => {
+  const kit = makeKit({ id: 'kit-1', packageNumber: 'PKG-1', name: 'Test Package' });
+  // A normal, top-level Build Your Own gear selection — distinct from a package add-on, and not
+  // affected by this fix: kits/items/byoGears must keep restoring as selected for a legacy cart.
+  const normalGear: BookableGearSelection = {
+    category: 'Tent',
+    brand: 'Coleman',
+    model: 'Dome',
+    name: 'Coleman Dome Tent',
+    pricing: { '48h': 300, '72h': 400 },
+    extraPerDayPrice: 50,
+    quantity: 1,
+    availableCount: 3,
+    canSelect: true,
+    imageUrl: null,
+    freeAccessories: [],
+    compatibleAddOns: [],
+  };
+  const tripPodFan: BookableGearSelection = {
+    category: 'Fan',
+    brand: 'Tri-Pod',
+    model: 'Camping',
+    name: 'Tri-Pod Camping Fan',
+    pricing: { '48h': 150, '72h': 200 },
+    extraPerDayPrice: 30,
+    quantity: 2,
+    availableCount: 1,
+    canSelect: true,
+    imageUrl: null,
+    freeAccessories: [],
+    compatibleAddOns: [],
+  };
+  const restored = {
+    selectedKits: [kit],
+    selectedItems: [],
+    packageAddOns: { [kit.id]: [tripPodFan] },
+    byoGears: [normalGear],
+    byoAddOns: {},
+  };
+
+  it('a legacy cart (no persisted checkoutSelection) keeps the package and normal gear selected but does not auto-select the Tri-Pod package add-on', () => {
+    const result = sanitizeCheckoutSelection(undefined, restored);
+
+    expect(result.kitIds).toContain(kit.id);
+    expect(result.byoGearKeys).toContain(byoGearKey(normalGear));
+    expect(result.packageAddOnKeys[kit.id] ?? []).toEqual([]);
+
+    // filterCartToSelection must therefore keep the package/normal gear but exclude Tri-Pod from
+    // a legacy cart until the customer explicitly checks it — the actual customer-facing behavior
+    // this fallback change is meant to guarantee.
+    const cart = makeCart({
+      selectedKits: [kit],
+      packageAddOns: { [kit.id]: [tripPodFan] },
+      byoGears: [normalGear],
+      checkoutSelection: result,
+    });
+    const filtered = filterCartToSelection(cart);
+    expect(filtered.selectedKits.map((k) => k.id)).toContain(kit.id);
+    expect(filtered.byoGears.map((g) => byoGearKey(g))).toContain(byoGearKey(normalGear));
+    expect(filtered.packageAddOns[kit.id] ?? []).toEqual([]);
+  });
+
+  it('an existing persisted checkoutSelection is still restored and sanitized normally, unaffected by the legacy fallback', () => {
+    const persisted = {
+      kitIds: [kit.id],
+      itemIds: [],
+      byoGearKeys: [byoGearKey(normalGear)],
+      // The customer had already explicitly checked Tri-Pod in a real, previously-saved
+      // selection — this must be preserved exactly, not reset by the legacy fallback change.
+      packageAddOnKeys: { [kit.id]: [byoGearKey(tripPodFan)] },
+      byoAddOnKeys: {},
+    };
+
+    const result = sanitizeCheckoutSelection(persisted, restored);
+
+    expect(result.kitIds).toEqual([kit.id]);
+    expect(result.byoGearKeys).toEqual([byoGearKey(normalGear)]);
+    expect(result.packageAddOnKeys[kit.id]).toEqual([byoGearKey(tripPodFan)]);
+  });
+});
 
 describe('calculateRentalDurationDays', () => {
   it('counts whole days between start and return', () => {
@@ -265,6 +351,18 @@ describe('availability', () => {
     expect(
       checkKitAvailability(makeKit({ isOutOfStock: true }), { start: '2026-01-01', end: '2026-01-02' }),
     ).toBe(false);
+  });
+
+  // addKit's own enforcement is `if (!checkKitAvailability(kit, null)) return false;` — a package
+  // RMS reports as unselectable (surfaced as isOutOfStock: true, from its own canSelect; see
+  // applyPackageSelectability in supabaseCatalog.ts) is rejected at the actual cart-mutation
+  // boundary, not just hidden/disabled in the UI. This pins the exact boolean addKit relies on.
+  it('rejects a package RMS reports as not currently selectable (canSelect: false → isOutOfStock: true) — the same check addKit performs before adding to the cart', () => {
+    expect(checkKitAvailability(makeKit({ isOutOfStock: true }), null)).toBe(false);
+  });
+
+  it('accepts a package RMS reports as currently selectable (canSelect: true → isOutOfStock: false)', () => {
+    expect(checkKitAvailability(makeKit({ isOutOfStock: false }), null)).toBe(true);
   });
 
   it('blocks an out-of-stock item regardless of dates', () => {

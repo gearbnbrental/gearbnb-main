@@ -1,0 +1,3 @@
+# SPA fallback for react-router's BrowserRouter (Netlify / Cloudflare Pages format).
+# Real files (assets, images, index.html itself) are served as-is; only unknown paths fall back.
+/*    /index.html   200

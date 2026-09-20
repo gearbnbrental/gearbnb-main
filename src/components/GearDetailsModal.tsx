@@ -11,6 +11,7 @@ import type { DateRange, IndividualItem } from '../types/gearbnb';
 import { getSeventyTwoHourUpsellDelta } from '../utils/duration';
 import { formatCurrency } from '../utils/format';
 import { GearPlaceholderIcon } from './icons';
+import ImageLightbox from './ImageLightbox';
 
 interface GearDetailsModalProps {
   item: IndividualItem;
@@ -23,6 +24,7 @@ export default function GearDetailsModal({ item, onClose }: GearDetailsModalProp
   const { user } = useAuth();
   const { cart, addItem, removeItem, addItemExtra, removeItemExtra, updateTripDetails } = useRental();
   const [imageFailed, setImageFailed] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   const isSelected = cart.selectedItems.some((selected) => selected.id === item.id);
   const selectedExtraIds = cart.itemExtras[item.id] ?? [];
@@ -88,14 +90,29 @@ export default function GearDetailsModal({ item, onClose }: GearDetailsModalProp
           {imageFailed || !item.imageUrl ? (
             <GearPlaceholderIcon className="h-12 w-12 text-ink-faint" />
           ) : (
-            <img
-              src={item.imageUrl}
-              alt={item.name}
-              onError={() => setImageFailed(true)}
-              className="h-full w-full object-cover"
-            />
+            <button
+              type="button"
+              onClick={() => setLightboxOpen(true)}
+              aria-label={`View larger image of ${item.name}`}
+              className="h-full w-full"
+            >
+              <img
+                src={item.imageUrl}
+                alt={item.name}
+                onError={() => setImageFailed(true)}
+                className="h-full w-full object-cover"
+              />
+            </button>
           )}
         </div>
+        {lightboxOpen && item.imageUrl && (
+          <ImageLightbox
+            images={[{ src: item.imageUrl, alt: item.name }]}
+            index={0}
+            onClose={() => setLightboxOpen(false)}
+            onNavigate={() => {}}
+          />
+        )}
 
         {item.includedAccessories && item.includedAccessories.length > 0 && (
           <p className="text-sm font-medium text-accent">

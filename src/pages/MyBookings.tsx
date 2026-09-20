@@ -1,6 +1,8 @@
 ﻿import { useCallback, useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import AuthRequiredMessage from '../components/AuthRequiredMessage';
+import FilterPill from '../components/FilterPill';
+import AdditionalChargeProofDialog from '../components/checkout/AdditionalChargeProofDialog';
 import DepositProofUpload from '../components/checkout/DepositProofUpload';
 import RentalFeeProofUpload from '../components/checkout/RentalFeeProofUpload';
 import VerificationDocumentsReview from '../components/checkout/VerificationDocumentsReview';
@@ -20,14 +22,17 @@ import {
 } from '../components/icons';
 import {
   fetchMyBookingsFromRms,
+  RMS_NOT_CONFIGURED_CODE,
   RmsApiError,
   type RmsAdditionalCharge,
   type RmsDamageReport,
   type RmsMyBooking,
   type RmsRentalFee,
+  type RmsReturnSettlement,
   type RmsVerificationDocumentKind,
 } from '../utils/rmsApi';
 import { formatCurrency } from '../utils/format';
+import { BUSINESS_TIME_ZONE } from '../utils/duration';
 import { MESSENGER_URL } from '../config/social';
 
 const RENTAL_FEE_STATUS_LABELS: Record<string, string> = {
@@ -66,6 +71,36 @@ const STATUS_STYLES: Record<string, string> = {
  * "Booking History" section so an active booking never has to be scrolled past to reach them. */
 const PAST_STATUSES = new Set(['COMPLETED', 'RETURNED', 'CANCELLED']);
 
+/**
+ * Genuinely final RMS booking statuses (confirmed against the RMS's own `BookingStatus` enum in
+ * prisma/schema.prisma) — once a booking reaches one of these two, RMS has no further transition
+ * for it and no customer action is ever applicable again. Deliberately NOT the same set as
+ * PAST_STATUSES above: that one is purely a display grouping for "Booking History" and also
+ * includes RETURNED, but RETURNED sits between the rental period and COMPLETED — a booking can
+ * still have a legitimately payable rental fee or additional charge awaiting review while
+ * RETURNED, so it must stay actionable and is deliberately excluded here. Used to gate every
+ * customer-facing action (payment-proof submission, verification-document resubmission, action
+ * banners, outstanding-payment counts) — never to hide historical information, which must remain
+ * visible regardless of status; see isTerminalBooking's own call sites.
+ */
+export const TERMINAL_BOOKING_STATUSES = new Set(['COMPLETED', 'CANCELLED']);
+
+/** How a failed initial bookings load is presented. Only rmsFetch's own client-side missing-URL error
+ *  is "not_configured" — a genuine RMS HTTP 500 (or 502/503/504, 429, etc.) is an ordinary,
+ *  retryable "error". A 401 here has already been ruled out as "no Customer row yet" by
+ *  fetchMyBookingsFromRms, so it means the session itself is no longer valid. */
+export function classifyMyBookingsLoadError(err: unknown): 'not_configured' | 'session_expired' | 'error' {
+  if (err instanceof RmsApiError) {
+    if (err.code === RMS_NOT_CONFIGURED_CODE) return 'not_configured';
+    if (err.status === 401) return 'session_expired';
+  }
+  return 'error';
+}
+
+export function isTerminalBooking(booking: RmsMyBooking): boolean {
+  return TERMINAL_BOOKING_STATUSES.has(booking.status);
+}
+
 /** Bookings whose rental is physically underway right now — the gear is either out with the
  *  customer (RENTED, or RENTED-and-late via OVERDUE_FOR_RETURN) or back with us but not yet signed
  *  off (PENDING_FOR_INSPECTION). Split out from the merely upcoming ones so "what's happening now"
@@ -84,20 +119,75 @@ const CURRENT_STATUSES = new Set(['RENTED', 'OVERDUE_FOR_RETURN', 'PENDING_FOR_I
  *  distinction. */
 const PENDING_REVIEW_STATUSES = new Set(['PENDING_REVIEW', 'AWAITING_CUSTOMER_RESPONSE']);
 
-/** Override for the one status whose auto-generated label ("Pending For Inspection") is correct
- *  but easy to misread — spelling it out as "Gear Inspection" makes clear this is about the
- *  RETURNED EQUIPMENT being inspected, not about the customer's identity/verification documents
- *  (a completely separate workflow — see VerificationDocumentsReview). Every other status keeps
- *  formatStatusLabel's plain auto-generated label. */
+/** Overrides for the RMS status values whose auto-generated label reads as internal/technical
+ *  rather than a plain customer instruction — never a new status, just friendlier wording for an
+ *  existing one. AWAITING_PAYMENT's auto label ("Awaiting Payment") is accurate but passive —
+ *  "Payment Required" states the actual next step the customer needs to take. PENDING_FOR_INSPECTION
+ *  is deliberately NOT listed here — its badge needs one of two different labels depending on
+ *  whether RMS recorded a return issue, which a plain per-status lookup can't express; see
+ *  getBookingStatusLabel below, which handles that one status specially and falls back to this map
+ *  (then formatStatusLabel's plain auto-generated label) for every other status. */
 const BOOKING_STATUS_LABELS: Record<string, string> = {
-  PENDING_FOR_INSPECTION: 'Gear Inspection',
+  AWAITING_PAYMENT: 'Payment Required',
 };
+
+/**
+ * Whether this booking currently has money the customer still needs to pay — the security deposit
+ * (not yet verified, and genuinely owed rather than "To Be Determined" — see the isByoBooking-style
+ * reasoning already used elsewhere on this page for that distinction) or an outstanding rental-fee
+ * balance. Every field read here is the RMS's own already-returned figure; nothing is computed or
+ * estimated. Powers the "Payment" tab below — a filtered VIEW over the same booking list already
+ * fetched, never a second data source or a second payment system.
+ */
+export function hasOutstandingPayment(booking: RmsMyBooking): boolean {
+  // A terminal booking (COMPLETED/CANCELLED) never counts here, even if its own figures would
+  // otherwise math out to "owed" — see isTerminalBooking's own doc comment. This tab/badge means
+  // "you can act on this," and no payment action is ever offered for a terminal booking anymore
+  // (the actual historical figures still show inside the booking card itself, unaffected by this).
+  if (isTerminalBooking(booking)) return false;
+  // An APPROVED proof whose net verified amount is now 0 (or any recorded retained/refunded amount)
+  // means the deposit WAS collected and has since been refunded or applied to a return issue (RMS's
+  // net paidDeposit = collected − returned − forfeited) — never "still owed". A deposit that is
+  // merely short because an add-on raised the requirement still has verifiedCentavos > 0 and stays owed.
+  const depositSettled =
+    (booking.securityDeposit.proofStatus === 'APPROVED' && booking.securityDeposit.verifiedCentavos <= 0) ||
+    (booking.securityDeposit.retainedCentavos ?? 0) > 0 ||
+    (booking.securityDeposit.refundedCentavos ?? 0) > 0;
+  const depositOwed =
+    !booking.securityDeposit.verified && booking.securityDeposit.requiredCentavos > 0 && !depositSettled;
+  const rentalFeeOwed = booking.rentalFee ? booking.rentalFee.outstandingCentavos > 0 : false;
+  return depositOwed || rentalFeeOwed;
+}
 
 /** How many past bookings are rendered at once. The RMS's GET /api/customer/bookings returns the
  *  customer's full list in one response (it exposes no paging parameters), so this pages through
  *  what was already fetched rather than issuing extra requests — it keeps a long history from
  *  rendering hundreds of cards at once, which is the cost that actually shows up for the customer. */
 const HISTORY_PAGE_SIZE = 5;
+
+/** Booking-history status filter value meaning "don't filter". Every other selectable value is a
+ *  real RMS status taken from PAST_STATUSES — no booking state is invented here, and the options
+ *  are derived at render time from the statuses this customer actually has, so a chip that would
+ *  match nothing never appears (and a future PAST_STATUSES entry shows up on its own). */
+const HISTORY_FILTER_ALL = 'ALL';
+
+/** Below this many past bookings, a search box is more clutter than help — the whole list is
+ *  already on screen in one or two glances, and the status chips alone cover narrowing it. */
+const HISTORY_SEARCH_MIN = 4;
+
+/** Client-side only, over the bookings this page already fetched: the RMS's
+ *  GET /api/customer/bookings returns the customer's full list in one response and exposes no
+ *  search parameters, so adding a backend endpoint for what is at most a few dozen already-loaded
+ *  rows would be a far larger change than the problem warrants. Matches the booking reference or
+ *  any line item's name (package, Build Your Own gear, or add-on). */
+function matchesHistoryQuery(booking: RmsMyBooking, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  if (booking.bookingNumber.toLowerCase().includes(needle)) return true;
+  return [...booking.packages, ...booking.gears, ...booking.addOns].some((item) =>
+    item.name.toLowerCase().includes(needle),
+  );
+}
 
 function formatStatusLabel(status: string): string {
   return status
@@ -110,7 +200,7 @@ function formatStatusLabel(status: string): string {
 function formatDateTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return date.toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: BUSINESS_TIME_ZONE });
 }
 
 /** Date without the time-of-day — used in the collapsed card summary, where the exact pickup hour
@@ -119,7 +209,7 @@ function formatDateTime(value: string): string {
 function formatDateOnly(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+  return date.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', timeZone: BUSINESS_TIME_ZONE });
 }
 
 function formatTime(value: Date): string {
@@ -179,34 +269,43 @@ interface NextStep {
   cta?: { label: string; targetId: string };
 }
 
-function getNextStep(booking: RmsMyBooking): NextStep {
+export function getNextStep(booking: RmsMyBooking): NextStep {
   const detailsTargetId = `booking-details-${booking.bookingId}`;
-  const correctionCount = booking.verificationDocuments.filter((doc) => doc.status === 'CORRECTION_REQUIRED').length;
-  if (correctionCount > 0) {
-    return {
-      tone: 'danger',
-      message:
-        correctionCount === 1
-          ? 'Action needed — one of your verification documents needs to be replaced.'
-          : `Action needed — ${correctionCount} verification documents need to be replaced.`,
-      cta: { label: 'Upload replacement documents', targetId: detailsTargetId },
-    };
-  }
-  if (booking.securityDeposit.proofStatus === 'REJECTED') {
-    const { requiredCentavos, amountClaimedCentavos } = booking.securityDeposit;
-    const shortfallCentavos = amountClaimedCentavos !== null ? requiredCentavos - amountClaimedCentavos : 0;
-    const message =
-      shortfallCentavos > 0
-        ? `Your deposit payment was ${formatCurrency(shortfallCentavos / 100)} short — pay the remaining amount, then upload updated proof showing the FULL ${formatCurrency(requiredCentavos / 100)} deposit paid (not just the additional payment).`
-        : 'Your deposit payment proof was rejected — please review and resubmit.';
-    return { tone: 'danger', message, cta: { label: 'Resubmit deposit proof', targetId: detailsTargetId } };
-  }
-  if (booking.rentalFee?.proofStatus === 'REJECTED') {
-    return {
-      tone: 'danger',
-      message: 'Your rental fee payment proof was rejected — please submit a new proof of payment.',
-      cta: { label: 'Resubmit payment proof', targetId: detailsTargetId },
-    };
+
+  // These three checks each imply an action the customer can still take (replace a document,
+  // resubmit a rejected proof) — never applicable once the booking is terminal (COMPLETED/
+  // CANCELLED; see isTerminalBooking's own doc comment), even if the underlying document/proof
+  // genuinely IS in a REJECTED/CORRECTION_REQUIRED state (e.g. a booking that was cancelled while
+  // a proof was still under dispute). Skipping straight to the switch below for a terminal booking
+  // is what lets its own neutral COMPLETED/CANCELLED case (which already existed) actually apply.
+  if (!isTerminalBooking(booking)) {
+    const correctionCount = booking.verificationDocuments.filter((doc) => doc.status === 'CORRECTION_REQUIRED').length;
+    if (correctionCount > 0) {
+      return {
+        tone: 'danger',
+        message:
+          correctionCount === 1
+            ? 'Action needed — one of your verification documents needs to be replaced.'
+            : `Action needed — ${correctionCount} verification documents need to be replaced.`,
+        cta: { label: 'Upload replacement documents', targetId: detailsTargetId },
+      };
+    }
+    if (booking.securityDeposit.proofStatus === 'REJECTED') {
+      const { requiredCentavos, amountClaimedCentavos } = booking.securityDeposit;
+      const shortfallCentavos = amountClaimedCentavos !== null ? requiredCentavos - amountClaimedCentavos : 0;
+      const message =
+        shortfallCentavos > 0
+          ? `Your deposit payment was ${formatCurrency(shortfallCentavos / 100)} short — pay the remaining amount, then upload updated proof showing the FULL ${formatCurrency(requiredCentavos / 100)} deposit paid (not just the additional payment).`
+          : 'Your deposit payment proof was rejected — please review and resubmit.';
+      return { tone: 'danger', message, cta: { label: 'Resubmit deposit proof', targetId: detailsTargetId } };
+    }
+    if (booking.rentalFee?.proofStatus === 'REJECTED') {
+      return {
+        tone: 'danger',
+        message: 'Your rental fee payment proof was rejected — please submit a new proof of payment.',
+        cta: { label: 'Resubmit payment proof', targetId: detailsTargetId },
+      };
+    }
   }
 
   switch (booking.status) {
@@ -214,17 +313,30 @@ function getNextStep(booking: RmsMyBooking): NextStep {
     case 'AWAITING_CUSTOMER_RESPONSE':
       return { tone: 'info', message: "We're reviewing your verification documents — we'll notify you once they're approved." };
     case 'PENDING_FOR_INSPECTION': {
-      const hasIssue = (booking.damageReports?.length ?? 0) > 0;
-      return hasIssue
-        ? {
-            tone: 'warning',
-            message: 'Your gear has been returned and an issue was recorded during inspection.',
-            cta: { label: 'View inspection details', targetId: `gear-inspection-${booking.bookingId}` },
-          }
-        : {
-            tone: 'info',
-            message: "Your gear has been returned and is being inspected — we'll notify you once the inspection is complete.",
-          };
+      // Driven by RMS's own returnCondition (see getReturnOutcome) — matches getBookingStatusLabel.
+      const outcome = getReturnOutcome(booking);
+      if (outcome === 'issue' || outcome === 'issue_resolved') {
+        // The inspection panel only exists when a DamageReport was recorded — a missing/lost-only
+        // issue has none, so the CTA is only offered when its target actually renders.
+        const hasInspectionPanel = (booking.damageReports?.length ?? 0) > 0;
+        return {
+          tone: 'warning',
+          message:
+            outcome === 'issue'
+              ? 'An issue was found during the return inspection. Please check your booking for updates.'
+              : 'An issue was found during the return inspection and has been resolved.',
+          ...(hasInspectionPanel
+            ? { cta: { label: 'View inspection details', targetId: `gear-inspection-${booking.bookingId}` } }
+            : {}),
+        };
+      }
+      if (outcome === 'cleared') {
+        return { tone: 'info', message: 'Your returned gear passed inspection. GearBnB will complete your booking shortly.' };
+      }
+      return {
+        tone: 'info',
+        message: "Your returned gear is currently being inspected by GearBnB. We'll notify you once the inspection is complete.",
+      };
     }
     case 'AWAITING_PAYMENT': {
       if (booking.securityDeposit.proofStatus === 'PENDING_REVIEW') {
@@ -249,13 +361,75 @@ function getNextStep(booking: RmsMyBooking): NextStep {
     case 'OVERDUE_FOR_RETURN':
       return { tone: 'danger', message: 'This rental is overdue for return — please return your gear as soon as possible.' };
     case 'COMPLETED':
-    case 'RETURNED':
+    case 'RETURNED': {
+      // The final recorded return condition stays visible on a finished booking.
+      const outcome = getReturnOutcome(booking);
+      if (outcome === 'issue') {
+        return { tone: 'neutral', message: 'Trip completed — an issue was recorded during the return inspection.' };
+      }
+      if (outcome === 'issue_resolved') {
+        return { tone: 'neutral', message: 'Trip completed — an issue was recorded during the return inspection and has been resolved.' };
+      }
       return { tone: 'neutral', message: 'Trip completed — thanks for booking with GearBnB!' };
+    }
     case 'CANCELLED':
       return { tone: 'neutral', message: 'This booking was cancelled.' };
     default:
       return { tone: 'neutral', message: '' };
   }
+}
+
+export type ReturnOutcome = 'none' | 'inspecting' | 'cleared' | 'issue' | 'issue_resolved';
+
+/**
+ * Customer-facing reading of the RMS's own `returnCondition` (derived server-side by
+ * deriveReturnCondition in domain/returnCondition.ts — NOT_RETURNED / UNDER_INSPECTION / CLEAN /
+ * ISSUE_UNRESOLVED / ISSUE_RESOLVED). Unlike `damageReports`, it also covers Missing/Lost items,
+ * which have no DamageReport row. A cancelled booking never has a return, so it is always 'none'.
+ * When the field is absent (older RMS response) it falls back to the previous damageReports-based
+ * reading for a booking that is under inspection, and otherwise 'none' — never invented.
+ */
+export function getReturnOutcome(booking: RmsMyBooking): ReturnOutcome {
+  if (booking.status === 'CANCELLED') return 'none';
+  switch (booking.returnCondition) {
+    case 'UNDER_INSPECTION':
+      return 'inspecting';
+    case 'CLEAN':
+      return 'cleared';
+    case 'ISSUE_UNRESOLVED':
+      return 'issue';
+    case 'ISSUE_RESOLVED':
+      return 'issue_resolved';
+    case 'NOT_RETURNED':
+      return 'none';
+    default:
+      if (booking.status === 'PENDING_FOR_INSPECTION') {
+        return (booking.damageReports?.length ?? 0) > 0 ? 'issue' : 'inspecting';
+      }
+      return 'none';
+  }
+}
+
+/**
+ * The booking card's own status pill — plain BOOKING_STATUS_LABELS lookup for every status except
+ * PENDING_FOR_INSPECTION, whose label follows the RMS's own returnCondition (see getReturnOutcome,
+ * kept in sync with getNextStep). Once RMS marks the booking Completed/Returned,
+ * BOOKING_STATUS_LABELS's own fallback (formatStatusLabel) renders "Completed" / "Returned".
+ */
+export function getBookingStatusLabel(booking: RmsMyBooking): string {
+  if (booking.status === 'PENDING_FOR_INSPECTION') {
+    switch (getReturnOutcome(booking)) {
+      case 'issue':
+        return 'Return Issue Found';
+      case 'issue_resolved':
+        return 'Return Issue Resolved';
+      case 'cleared':
+        return 'Return Cleared';
+      default:
+        return 'Return Under Inspection';
+    }
+  }
+  return BOOKING_STATUS_LABELS[booking.status] ?? formatStatusLabel(booking.status);
 }
 
 /**
@@ -395,27 +569,30 @@ function needsAttention(booking: RmsMyBooking): boolean {
  * Toggle wrapper for everything in a booking card beyond its headline summary — dates, line items,
  * payment, verification, deposit, rental fee and gear inspection.
  *
- * Open by default (the client's requirement: a customer must never have to click just to see their
- * own booking's details), with the toggle there purely so a card can be shrunk back down when
- * several bookings are on screen at once. Collapsing swaps the detail for `collapsedSummary` — the
- * short "booking reference / dates / kit / balance" line — so a collapsed card genuinely becomes
- * short instead of merely dropping its last few panels.
+ * Controlled by the parent BookingCard (rather than owning its own state) so a "jump to details"
+ * CTA elsewhere on the card can force this open before scrolling to something inside it — see
+ * BookingCard's own jumpTo. Current/upcoming bookings still start open (the client's requirement:
+ * a customer must never have to click just to see their own booking's details); past bookings
+ * start closed so Booking History reads as a compact list rather than a second copy of the active
+ * section — see BookingCard's `defaultOpen`. Collapsing swaps the detail for `collapsedSummary` —
+ * the short "booking reference / dates / kit / balance" line — so a collapsed card genuinely
+ * becomes short instead of merely dropping its last few panels.
  */
 function DetailsToggle({
-  defaultOpen,
+  open,
+  onToggle,
   collapsedSummary,
   panelId,
   children,
 }: {
-  defaultOpen: boolean;
+  open: boolean;
+  onToggle: () => void;
   collapsedSummary: ReactNode;
   /** Ties the button to the region it controls via aria-controls, and gives the expanded content a
    *  real anchor other parts of the page (e.g. the Gear Inspection alert) can scroll straight to. */
   panelId: string;
   children: ReactNode;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
-
   return (
     <div className="flex flex-col gap-3">
       {!open && collapsedSummary}
@@ -429,7 +606,7 @@ function DetailsToggle({
           rather than leaving it to be inferred from the arrow. */}
       <button
         type="button"
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={onToggle}
         aria-expanded={open}
         aria-controls={panelId}
         className="flex items-center gap-1.5 self-start rounded-md border border-line px-3 py-1.5 text-xs font-semibold text-accent transition-colors hover:bg-surface-strong"
@@ -441,24 +618,39 @@ function DetailsToggle({
   );
 }
 
-/** The short form of a booking's DEEPER detail once its card is collapsed — just the one figure
- *  customers come back to check (the outstanding balance) and a gear-inspection flag when there is
- *  one. Rental dates, booking type and fulfillment are deliberately NOT repeated here — they live
- *  in the always-visible TripSummaryStrip above this, in both the collapsed and expanded state, so
- *  collapsing a card never hides them. Every value is read straight off the RMS response
- *  (`rentalFee` is the server's own computed object); nothing here is recalculated in the browser. */
+/** The short form of a booking's DEEPER detail once its card is collapsed — just the two figures
+ *  customers come back to check (the outstanding balance and payment status) and a
+ *  gear-inspection flag when there is one. Rental dates, booking type and fulfillment are
+ *  deliberately NOT repeated here — they live in the always-visible TripSummaryStrip above this,
+ *  in both the collapsed and expanded state, so collapsing a card never hides them. Every value is
+ *  read straight off the RMS response (`rentalFee` is the server's own computed object); nothing
+ *  here is recalculated in the browser. This is what Booking History now shows by default for each
+ *  past booking (see BookingCard's `defaultOpen`), so a payment status here — not just a balance
+ *  that's usually already ₱0 for a finished booking — is what actually tells a customer how that
+ *  booking was settled without expanding it. */
 function CollapsedSummary({ booking }: { booking: RmsMyBooking }) {
-  if (!booking.rentalFee && !(booking.damageReports && booking.damageReports.length > 0)) return null;
+  const { rentalFee } = booking;
+  if (!rentalFee && !(booking.damageReports && booking.damageReports.length > 0)) return null;
+
+  const paymentStatusLabel = rentalFee
+    ? (RENTAL_FEE_STATUS_LABELS[rentalFee.status] ?? formatStatusLabel(rentalFee.status))
+    : null;
 
   return (
     // min-w-0 + break-words on every value: a long note or a narrow 375px phone must wrap inside
     // the card rather than force the whole page to scroll sideways.
     <dl className="flex flex-col gap-1.5 border-t border-line-soft pt-3 text-sm">
-      {booking.rentalFee && (
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <dt className="text-ink-muted">Balance:</dt>
-          <dd className="font-semibold text-ink">{formatCurrency(booking.rentalFee.outstandingCentavos / 100)}</dd>
-        </div>
+      {rentalFee && (
+        <>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <dt className="text-ink-muted">Balance:</dt>
+            <dd className="font-semibold text-ink">{formatCurrency(rentalFee.outstandingCentavos / 100)}</dd>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <dt className="text-ink-muted">Payment Status:</dt>
+            <dd className="font-medium text-ink">{paymentStatusLabel}</dd>
+          </div>
+        </>
       )}
       {booking.damageReports && booking.damageReports.length > 0 && (
         <div className="flex items-start gap-2 text-amber-700 dark:text-amber-300">
@@ -468,6 +660,80 @@ function CollapsedSummary({ booking }: { booking: RmsMyBooking }) {
         </div>
       )}
     </dl>
+  );
+}
+
+/**
+ * What the booking actually contains, grouped by what each line genuinely IS rather than flattened
+ * into a single list. A package is a predefined bundle; Build Your Own gear is individually chosen;
+ * add-ons are separate optional extras rented on top of either. Merging all three (as this card
+ * previously did) makes an add-on read as though it were part of the package's own contents —
+ * exactly the relationship the customer needs to be able to tell apart when checking what they
+ * paid for. Groups with nothing in them are omitted rather than rendered as empty headings.
+ */
+/**
+ * True for a package booking that also has extra rentable inventory attached beyond the package
+ * itself. The RMS returns a package's own optional add-ons as `gears` (BookingGear rows) — see
+ * RentalLineItems' own comment just below on why `gears` means "this package's optional add-ons"
+ * once a package is present, never "Build Your Own gear" — because PaymentBreakdown's package
+ * submission branch only ever sends them as `bookingGears`, never through the separate `addOns`
+ * field (that one is reserved for add-ons attached to BYO gear). Checking `addOns` alone here
+ * previously meant this was always false for a real package + add-ons booking — e.g. #GB-2026-0916-04
+ * (The Stargazer Kit + Blackpongo Bed/Generic Camping Chair/Multi-Brand Cooking/Gazlite Cooking),
+ * whose extras all arrive via `gears`, not `addOns` — so the pending-add-on-deposit notice never
+ * appeared for it. `addOns` is still checked too, defensively, so this can never miss a real add-on
+ * regardless of which of the RMS's two fields it happens to land in. Always false for a BYO-only
+ * booking (no packages at all), which already has its own separate "To Be Determined" story.
+ */
+function hasPackageAddOns(booking: RmsMyBooking): boolean {
+  return booking.packages.length > 0 && (booking.gears.length > 0 || booking.addOns.length > 0);
+}
+
+function RentalLineItems({ booking }: { booking: RmsMyBooking }) {
+  // The RMS returns extra rentable inventory as BookingGear rows either way, so `gears` means two
+  // different things depending on the booking: the whole rental on a Build Your Own booking, or
+  // the optional extras added on top of a package. Labelled accordingly rather than always calling
+  // them "Build Your Own Gear", which would misdescribe a package booking's add-ons.
+  const isPackageBooking = booking.packages.length > 0;
+  const groups: { label: string; items: { name: string; quantity: number }[]; additional: boolean }[] = [
+    { label: 'Package', items: booking.packages, additional: false },
+    {
+      label: isPackageBooking ? 'Optional Add-ons' : 'Build Your Own Gear',
+      items: booking.gears,
+      additional: isPackageBooking,
+    },
+    // Labelled the same way as the group above: a package booking's real "Add-ons" (compatible
+    // extras attached to the package itself) stays "Add-ons", but a BYO booking's own extras
+    // (attached to a specific piece of BYO gear — see byoAddOns) previously showed the literal
+    // "Add-ons" heading too, sitting right under "Build Your Own Gear" as if this booking somehow
+    // had two separate add-on concepts. "Additional Gear" keeps the same "these are extra, not the
+    // base selection" meaning (still gets the "+" prefix via `additional: true`) without repeating
+    // a heading that reads as package-specific terminology on a booking that has no package at all.
+    { label: isPackageBooking ? 'Add-ons' : 'Additional Gear', items: booking.addOns, additional: true },
+  ].filter((group) => group.items.length > 0);
+
+  if (groups.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-3 border-t border-line-soft pt-3">
+      {groups.map((group) => (
+        <div key={group.label} className="flex flex-col gap-1">
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">{group.label}</p>
+          <ul className="flex flex-col gap-1 text-sm text-ink-muted">
+            {group.items.map((item, index) => (
+              <li key={`${item.name}-${index}`} className="break-words">
+                {/* Marks these as additional rentals rather than package contents. Decorative only:
+                    the group's own heading above already carries the same meaning for screen
+                    readers, so this would otherwise just be read out as stray punctuation. */}
+                {group.additional && <span aria-hidden="true">+ </span>}
+                {item.quantity > 1 ? `${item.quantity}× ` : ''}
+                {item.name}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -484,7 +750,7 @@ function TripSummaryStrip({ booking }: { booking: RmsMyBooking }) {
   const duration = formatRentalDuration(booking.pickupAt, booking.returnAt);
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl bg-surface-muted p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+    <div className="flex flex-col gap-2 rounded-xl bg-surface-muted p-2.5 sm:flex-row sm:items-center sm:justify-between sm:p-4">
       <div className="flex items-start gap-2.5">
         <ClockIcon className="mt-0.5 h-4 w-4 shrink-0 text-ink-faint" />
         <div className="min-w-0">
@@ -515,10 +781,14 @@ function RentalFeeSummary({
   bookingId,
   rentalFee,
   onRentalFeeProofSubmitted,
+  readOnly,
 }: {
   bookingId: string;
   rentalFee: RmsRentalFee;
   onRentalFeeProofSubmitted: () => void;
+  /** True once the parent booking has reached a terminal status (COMPLETED/CANCELLED) — forwarded
+   *  straight to RentalFeeProofUpload; see that component's own doc comment on its `readOnly` prop. */
+  readOnly: boolean;
 }) {
   const statusLabel = RENTAL_FEE_STATUS_LABELS[rentalFee.status] ?? formatStatusLabel(rentalFee.status);
   const isPaid = rentalFee.status === 'PAID';
@@ -555,6 +825,7 @@ function RentalFeeSummary({
         reviewNote={rentalFee.reviewNote ?? null}
         amountClaimedCentavos={rentalFee.amountClaimedCentavos ?? null}
         onProofSubmitted={onRentalFeeProofSubmitted}
+        readOnly={readOnly}
       />
     </div>
   );
@@ -583,68 +854,183 @@ const CHARGE_TYPE_LABELS: Record<RmsAdditionalCharge['type'], string> = {
 };
 
 /**
+ * Which of the charge's own RMS-reported fields (status + paymentProof.status) currently governs
+ * what's shown for it — never a new status invented here, just a plain read of the fields already
+ * on RmsAdditionalCharge. PAID/WAIVED/REVERSED are all terminal, non-payable outcomes; PENDING is
+ * the only status a payment action ever applies to, and even then only while paymentProof.status
+ * isn't already PENDING_REVIEW/APPROVED (which would mean a submission is already in flight or
+ * already accepted). paymentProof is its own nested object on the real RMS response (NOT a flat
+ * proofStatus field — see RmsAdditionalCharge's own doc comment), so it's read as
+ * `charge.paymentProof?.status`, never `charge.proofStatus`.
+ */
+export type ChargeProofState = 'paid' | 'waived' | 'reversed' | 'payable' | 'pending_review' | 'approved' | 'rejected';
+
+export function getChargeProofState(charge: RmsAdditionalCharge): ChargeProofState {
+  if (charge.status === 'PAID') return 'paid';
+  if (charge.status === 'WAIVED') return 'waived';
+  if (charge.status === 'REVERSED') return 'reversed';
+  if (charge.paymentProof?.status === 'PENDING_REVIEW') return 'pending_review';
+  if (charge.paymentProof?.status === 'APPROVED') return 'approved';
+  if (charge.paymentProof?.status === 'REJECTED') return 'rejected';
+  return 'payable';
+}
+
+/**
  * The customer's itemised additional-charge statement — one line per charge, exactly as staff
  * recorded it during the gear inspection, so a rental that had a damaged item, a missing item, a
- * late return and an extension shows four separate lines rather than one lump sum.
+ * late return and an extension shows four separate lines rather than one lump sum. Each PENDING
+ * charge with no proof already under review/approved gets its own "Pay Additional Charge" action —
+ * a charge is its own independent payment-proof workflow (see AdditionalChargeProofDialog), since
+ * a booking can have more than one outstanding charge at once.
  *
  * Every figure comes from the RMS response: the per-line amounts and the outstanding total are both
- * server-derived, and nothing is added up in the browser. This is read-only — there is no control
- * here that submits anything, and the customer cannot alter a charge.
+ * server-derived, and nothing is added up in the browser. The charge's own `amountCentavos` is
+ * already RMS's final "what remains payable" figure (see ReturnSettlementPanel's own doc comment
+ * on why a covered damage's excess, not its raw issue amount, is what shows up here) — this panel
+ * never recomputes it against a deposit or any other figure.
  */
 function AdditionalChargesPanel({
+  bookingId,
   charges,
   totalCentavos,
   outstandingCentavos,
+  onChargeProofSubmitted,
+  readOnly,
 }: {
+  bookingId: string;
   charges: RmsAdditionalCharge[];
-  /** Sum of every line actually shown above (PENDING + PAID — the only statuses the RMS ever sends
-   *  to the customer) — matches "Total Additional Charges" literally, so it always reconciles with
-   *  the individual lines a customer can see and add up themselves. */
+  /** Sum of every line actually shown above — matches "Total Additional Charges" literally, so it
+   *  always reconciles with the individual lines a customer can see and add up themselves. */
   totalCentavos: number;
   /** What's still unpaid — only shown as its own line when it differs from the total, i.e. when at
    *  least one charge is already marked Paid; otherwise it would just repeat the total. */
   outstandingCentavos: number;
+  /** Called with the specific charge's id once RMS has accepted a proof for it — lets the parent
+   *  optimistically flip that one charge's local proofStatus to "pending" without a full refetch. */
+  onChargeProofSubmitted: (chargeId: string) => void;
+  /** True once the parent booking has reached a terminal status (COMPLETED/CANCELLED) — suppresses
+   *  the "Pay Additional Charge"/"Submit New Proof" action for every charge while leaving every
+   *  status line (Paid/Waived/Reversed/Pending Payment/Under Review/Approved/Rejected + reviewNote)
+   *  exactly as it already renders, since that's historical information, not an action. */
+  readOnly: boolean;
 }) {
+  // Collapsed by default UNLESS at least one charge actually needs the customer's attention
+  // (payable, or a rejected proof that needs replacing) — a customer with something to pay
+  // shouldn't have to know to click "View charges" first to find the action. Never auto-expands
+  // for this reason once the booking is read-only: there is no action left to surface.
+  const [showItemized, setShowItemized] = useState(
+    () => !readOnly && charges.some((c) => ['payable', 'rejected'].includes(getChargeProofState(c))),
+  );
+  // Which charge the payment-proof dialog is currently open for, if any — owned right here
+  // (rather than drilled further up through BookingCard/MyBookings) since it's purely this
+  // panel's own transient UI state; only the eventual "proof submitted" outcome needs to bubble
+  // up, for the same optimistic-update pattern onDepositProofSubmitted/onRentalFeeProofSubmitted
+  // already use one level up.
+  const [payingCharge, setPayingCharge] = useState<RmsAdditionalCharge | null>(null);
+
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface-muted p-4 sm:p-5">
-      <h3 className="text-sm font-semibold uppercase tracking-wide text-ink-muted">Additional Charges</h3>
-
-      <ol className="flex flex-col gap-2.5">
-        {charges.map((c, index) => (
-          <li key={c.chargeNumber} className="flex flex-col gap-0.5 border-b border-line-soft pb-2.5 last:border-b-0 last:pb-0">
-            <div className="flex items-start justify-between gap-3">
-              <p className="min-w-0 text-sm font-medium text-ink">
-                {index + 1}. {CHARGE_TYPE_LABELS[c.type]}
-              </p>
-              <p className="shrink-0 text-sm font-semibold text-ink">{formatCurrency(c.amountCentavos / 100)}</p>
-            </div>
-            <p className="text-sm text-ink-muted">
-              {c.itemName ?? 'Entire rental'}
-              {c.quantity > 1 ? ` · Qty ${c.quantity}` : ''}
-              {c.extraDays ? ` · ${c.extraDays} extra day${c.extraDays === 1 ? '' : 's'}` : ''}
-            </p>
-            <p className="text-sm text-ink-muted">{c.reason}</p>
-            {c.status === 'PAID' && <p className="text-xs font-medium text-accent">Paid</p>}
-          </li>
-        ))}
-      </ol>
-
-      <div className="flex items-center justify-between border-t border-line pt-2.5">
-        <p className="text-sm font-semibold text-ink">Total Additional Charges</p>
-        <p className="text-base font-bold text-ink">{formatCurrency(totalCentavos / 100)}</p>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-ink-muted">Additional Charges</h3>
+        <span className="text-sm font-bold text-ink">
+          {formatCurrency((outstandingCentavos > 0 ? outstandingCentavos : totalCentavos) / 100)}
+          {outstandingCentavos > 0 && <span className="ml-1 text-xs font-medium text-ink-muted">outstanding</span>}
+        </span>
       </div>
 
-      {outstandingCentavos > 0 && outstandingCentavos !== totalCentavos && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-ink-muted">Outstanding</p>
-          <p className="text-sm font-semibold text-ink">{formatCurrency(outstandingCentavos / 100)}</p>
-        </div>
+      <button
+        type="button"
+        onClick={() => setShowItemized((prev) => !prev)}
+        aria-expanded={showItemized}
+        className="flex items-center gap-1 self-start text-xs font-semibold text-accent underline-offset-2 hover:underline"
+      >
+        {showItemized ? 'Hide charges' : 'View charges'}
+        <ChevronDownIcon className={`h-3.5 w-3.5 shrink-0 transition-transform ${showItemized ? 'rotate-180' : ''}`} />
+      </button>
+
+      {showItemized && (
+        <>
+          <ol className="flex flex-col gap-2 border-t border-line-soft pt-3">
+            {charges.map((c, index) => {
+              const state = getChargeProofState(c);
+              return (
+                <li key={c.chargeNumber} className="flex flex-col gap-1.5 border-b border-line-soft pb-3 last:border-b-0 last:pb-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="min-w-0 text-sm font-medium text-ink">
+                      {index + 1}. {CHARGE_TYPE_LABELS[c.type]}
+                    </p>
+                    <p className="shrink-0 text-sm font-semibold text-ink">{formatCurrency(c.amountCentavos / 100)}</p>
+                  </div>
+                  <p className="text-sm text-ink-muted">
+                    {c.itemName ?? 'Entire rental'}
+                    {c.quantity > 1 ? ` · Qty ${c.quantity}` : ''}
+                    {c.extraDays ? ` · ${c.extraDays} extra day${c.extraDays === 1 ? '' : 's'}` : ''}
+                  </p>
+                  <p className="text-sm text-ink-muted">{c.reason}</p>
+
+                  {state === 'paid' && <p className="text-xs font-medium text-accent">Paid</p>}
+                  {state === 'waived' && <p className="text-xs font-medium text-ink-muted">Waived</p>}
+                  {state === 'reversed' && <p className="text-xs font-medium text-ink-muted">Reversed</p>}
+                  {state === 'payable' && (
+                    <p className="text-xs font-medium text-amber-700 dark:text-amber-300">Pending Payment</p>
+                  )}
+                  {state === 'pending_review' && (
+                    <p className="text-xs font-medium text-amber-700 dark:text-amber-300">Payment Proof Under Review</p>
+                  )}
+                  {state === 'approved' && <p className="text-xs font-medium text-accent">Payment Approved</p>}
+                  {state === 'rejected' && (
+                    <div className="flex flex-col gap-1">
+                      <p className="text-xs font-medium text-red-600 dark:text-red-400">Payment Proof Rejected</p>
+                      {c.paymentProof?.reviewNote && <p className="text-xs text-ink-muted">{c.paymentProof.reviewNote}</p>}
+                    </div>
+                  )}
+
+                  {/* Gated on the RMS-reported canSubmitPaymentProof hint (falling back to the same
+                      payable/rejected derivation above for an older RMS response that predates the
+                      field) rather than only the locally-derived state, so Main defers to RMS's own
+                      "is a submission currently allowed" answer wherever it's actually provided.
+                      Also gated on !readOnly — once the booking itself is terminal (COMPLETED/
+                      CANCELLED), no new charge proof is ever submittable regardless of the charge's
+                      own state. */}
+                  {!readOnly && (state === 'payable' || state === 'rejected') && (c.canSubmitPaymentProof ?? true) && (
+                    <button
+                      type="button"
+                      onClick={() => setPayingCharge(c)}
+                      className="mt-0.5 self-start rounded-lg bg-brand-forest px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-brand-forest-dark"
+                    >
+                      {state === 'rejected' ? 'Submit New Proof' : 'Pay Additional Charge'}
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+
+          <div className="flex items-center justify-between border-t border-line pt-2.5">
+            <p className="text-sm font-semibold text-ink">Total Additional Charges</p>
+            <p className="text-base font-bold text-ink">{formatCurrency(totalCentavos / 100)}</p>
+          </div>
+
+          {outstandingCentavos > 0 && outstandingCentavos !== totalCentavos && (
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-ink-muted">Outstanding</p>
+              <p className="text-sm font-semibold text-ink">{formatCurrency(outstandingCentavos / 100)}</p>
+            </div>
+          )}
+        </>
       )}
 
       {outstandingCentavos > 0 && (
-        <p className="text-sm text-ink-muted">
-          Please settle these charges with our team. They are separate from your rental fee and security deposit.
-        </p>
+        <p className="text-sm text-ink-muted">These charges are separate from your rental fee and security deposit.</p>
+      )}
+
+      {payingCharge && (
+        <AdditionalChargeProofDialog
+          bookingId={bookingId}
+          charge={payingCharge}
+          onClose={() => setPayingCharge(null)}
+          onProofSubmitted={() => onChargeProofSubmitted(payingCharge.id)}
+        />
       )}
     </div>
   );
@@ -678,6 +1064,85 @@ function GearInspectionPanel({ bookingId, reports }: { bookingId: string; report
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/**
+ * The financial OUTCOME of a return-inspection issue — GearInspectionPanel above (when present)
+ * says WHAT was found; this says what happened to the security deposit as a result, and whether
+ * anything is still owed. Every figure here is the RMS's own already-settled `returnSettlement`
+ * object (see RmsReturnSettlement's own doc comment) — nothing is computed, reconstructed, or
+ * cross-checked here from DamageReport/AdditionalCharge/Payment records. Rendered only when RMS
+ * has actually run a settlement; a clean return (`returnSettlement === null`) never reaches this
+ * component at all (see its call site), so there is no risk of a false return-issue section.
+ *
+ * `excessChargeCentavos`/`balanceDueCentavos` are described here as context for what the security
+ * deposit did and didn't cover — never as a second, independent "amount owed" alongside whatever
+ * AdditionalChargesPanel already lists. When this booking also has real `additionalCharges`
+ * entries, a short note below the figures makes explicit that it's the same amount, not a second
+ * one, so a customer reading both sections never adds them together.
+ */
+function ReturnSettlementPanel({
+  settlement,
+  hasAdditionalCharges,
+}: {
+  settlement: RmsReturnSettlement;
+  hasAdditionalCharges: boolean;
+}) {
+  const isFullyCovered = settlement.excessChargeCentavos <= 0 && settlement.balanceDueCentavos <= 0;
+
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border-2 border-amber-300 bg-amber-50 p-4 dark:border-amber-400/50 dark:bg-amber-400/10 sm:p-5">
+      <div className="flex items-center gap-2">
+        <ShieldCheckIcon className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300" />
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
+          Return Settlement
+        </h3>
+      </div>
+
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+        <dt className="text-amber-800/80 dark:text-amber-300/80">Return Issue</dt>
+        <dd className="text-right font-medium text-amber-900 dark:text-amber-200">
+          {formatCurrency(settlement.issueAmountCentavos / 100)}
+        </dd>
+
+        <dt className="text-amber-800/80 dark:text-amber-300/80">Covered by Security Deposit</dt>
+        <dd className="text-right font-medium text-amber-900 dark:text-amber-200">
+          {formatCurrency(settlement.depositAppliedCentavos / 100)}
+        </dd>
+
+        <dt className="text-amber-800/80 dark:text-amber-300/80">Security Deposit Retained</dt>
+        <dd className="text-right font-medium text-amber-900 dark:text-amber-200">
+          {formatCurrency(settlement.depositAppliedCentavos / 100)}
+        </dd>
+
+        <dt className="text-amber-800/80 dark:text-amber-300/80">Security Deposit Refunded</dt>
+        <dd className="text-right font-medium text-amber-900 dark:text-amber-200">
+          {formatCurrency(settlement.refundCentavos / 100)}
+        </dd>
+      </dl>
+
+      <div className="flex items-center justify-between border-t border-amber-300/60 pt-2.5 dark:border-amber-400/30">
+        <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+          {isFullyCovered ? 'No Additional Balance Due' : 'Additional Amount Due — Return Issue'}
+        </p>
+        {!isFullyCovered && (
+          <p className="text-base font-bold text-amber-900 dark:text-amber-200">
+            {formatCurrency(settlement.balanceDueCentavos / 100)}
+          </p>
+        )}
+      </div>
+
+      {/* Only shown when there's a real excess AND a real Additional Charges entry to point to —
+          never asserts a relationship that isn't actually there. Reworded, never duplicated: the
+          amount itself is only ever shown once, in AdditionalChargesPanel further down this card. */}
+      {!isFullyCovered && hasAdditionalCharges && (
+        <p className="text-xs text-amber-800/80 dark:text-amber-300/80">
+          This is the same amount shown in Additional Charges below — the remaining return-issue
+          amount after your security deposit was applied, not a second, separate charge.
+        </p>
+      )}
     </div>
   );
 }
@@ -754,46 +1219,6 @@ function InspectionShortcut({ bookingId, onJumpTo }: { bookingId: string; onJump
   );
 }
 
-/** Compact, at-a-glance restatement of the two real charges a booking can carry — rental fee and
- *  security deposit — never summed together (the deposit is refundable and isn't rental income;
- *  see PaymentSummary's own comment on the same rule). "Total Amount" is the rental fee alone,
- *  matching what PaymentSummary already shows as "Rental Fee" a few sections over; this card exists
- *  purely so that figure is visible from the right-hand column too, without having to scroll to the
- *  main Payment Summary card. */
-function PaymentBreakdown({ booking, onJumpTo }: { booking: RmsMyBooking; onJumpTo: (targetId: string) => void }) {
-  const { rentalFee, securityDeposit } = booking;
-  const rentalFeeCentavos = rentalFee ? rentalFee.dueCentavos : booking.rentalFeeCentavos;
-
-  return (
-    <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4">
-      <div className="flex items-center justify-between gap-2">
-        <SectionHeader icon={CreditCardIcon} title="Payment Breakdown" subtitle="Rental fee and deposit" />
-        <button
-          type="button"
-          onClick={() => onJumpTo(`booking-details-${booking.bookingId}`)}
-          className="shrink-0 text-xs font-semibold text-accent hover:underline"
-        >
-          See details
-        </button>
-      </div>
-      <dl className="flex flex-col gap-2 text-sm">
-        <div className="flex items-center justify-between">
-          <dt className="text-ink-muted">Rental Fee</dt>
-          <dd className="font-medium text-ink">{formatCurrency(rentalFeeCentavos / 100)}</dd>
-        </div>
-        <div className="flex items-center justify-between">
-          <dt className="text-ink-muted">Security Deposit (refundable)</dt>
-          <dd className="font-medium text-ink">{formatCurrency(securityDeposit.requiredCentavos / 100)}</dd>
-        </div>
-      </dl>
-      <div className="flex items-center justify-between border-t border-line-soft pt-2.5">
-        <p className="text-sm font-semibold text-ink">Total Amount</p>
-        <p className="text-base font-bold text-ink">{formatCurrency(rentalFeeCentavos / 100)}</p>
-      </div>
-    </div>
-  );
-}
-
 /** Quiet reassurance card, distinct in purpose from the Quick Actions button above it — that one
  *  is for a specific task, this is a general "you're not on your own" note. Links to the same real
  *  Messenger destination rather than inventing a separate contact channel. */
@@ -822,8 +1247,10 @@ function BookingCard({
   booking,
   onDepositProofSubmitted,
   onRentalFeeProofSubmitted,
+  onAdditionalChargeProofSubmitted,
   onVerificationResubmitted,
   highlighted,
+  defaultOpen,
 }: {
   booking: RmsMyBooking;
   onDepositProofSubmitted: () => void;
@@ -831,16 +1258,26 @@ function BookingCard({
    *  securityDeposit.proofStatus, so submitting one proof can never optimistically flip the
    *  other's displayed status. */
   onRentalFeeProofSubmitted: () => void;
+  /** Separate again — updates only the one specific charge (by id) whose proof was just
+   *  submitted, never the deposit's or rental fee's own proofStatus. */
+  onAdditionalChargeProofSubmitted: (chargeId: string) => void;
   onVerificationResubmitted: (kind: RmsVerificationDocumentKind) => void;
   /** True when this is the booking named by the "Make Your Payment" email CTA's ?booking= query
    * param (see MyBookings' top-level component) — forces the details section open on first render
    * and scrolls this card into view, so the customer lands directly on their payment area instead
    * of a collapsed card they'd have to find and expand themselves. */
   highlighted?: boolean;
+  /** Whether the details panel starts open — true for current/upcoming bookings (the client's
+   *  requirement below), false for past/completed ones so Booking History reads as a compact list
+   *  rather than a second copy of the active section. The top-level component always passes true
+   *  here when `highlighted`, regardless of past/current, so the email CTA still lands the
+   *  customer on an open card. */
+  defaultOpen: boolean;
 }) {
   const statusStyle = STATUS_STYLES[booking.status] ?? 'bg-surface-strong text-ink-muted';
-  const lineItems = [...booking.packages, ...booking.gears, ...booking.addOns];
   const nextStep = getNextStep(booking);
+  const [detailsOpen, setDetailsOpen] = useState(defaultOpen);
+  const panelId = `booking-details-${booking.bookingId}`;
 
   const cardRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -852,18 +1289,25 @@ function BookingCard({
   }, []);
 
   // Shared by the next-step banner's CTA and the Quick Actions row below — both only ever target an
-  // id inside THIS same card, falling back to the card's own top if that id isn't currently mounted
-  // (e.g. the customer manually collapsed the details panel the target lives in).
+  // id inside the details panel (or the panel itself). Those ids don't exist in the DOM while the
+  // panel is collapsed (see DetailsToggle), which past bookings now start as by default — so this
+  // opens the panel first, then waits a couple of frames for it to actually mount before scrolling.
+  // Harmless when the panel was already open: the target is already there, just found a frame late.
   function jumpTo(targetId: string) {
-    const target = document.getElementById(targetId) ?? cardRef.current;
-    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setDetailsOpen(true);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const target = document.getElementById(targetId) ?? cardRef.current;
+        target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
   }
 
   return (
     <div
       ref={cardRef}
       id={`booking-${booking.bookingNumber}`}
-      className={`flex flex-col gap-3 rounded-2xl border bg-surface p-5 shadow-sm ${highlighted ? 'border-brand-forest ring-2 ring-brand-forest/30' : 'border-line'}`}
+      className={`flex flex-col gap-2.5 rounded-2xl border bg-surface p-3.5 shadow-sm sm:gap-3 sm:p-5 ${highlighted ? 'border-brand-forest ring-2 ring-brand-forest/30' : 'border-line'}`}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
@@ -871,14 +1315,14 @@ function BookingCard({
           <p className="break-all font-semibold text-ink">#{booking.bookingNumber}</p>
         </div>
         <span className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${statusStyle}`}>
-          {BOOKING_STATUS_LABELS[booking.status] ?? formatStatusLabel(booking.status)}
+          {getBookingStatusLabel(booking)}
         </span>
       </div>
 
       <TripSummaryStrip booking={booking} />
 
       {nextStep.message && (
-        <div className={`flex items-start gap-2 rounded-lg border px-3 py-2.5 ${TONE_STYLES[nextStep.tone]}`}>
+        <div className={`flex items-start gap-2 rounded-lg border px-3 py-2 sm:py-2.5 ${TONE_STYLES[nextStep.tone]}`}>
           <ToneIcon tone={nextStep.tone} className="h-4 w-4 shrink-0 translate-y-0.5" />
           <div className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
             <p className="text-sm">{nextStep.message}</p>
@@ -895,15 +1339,17 @@ function BookingCard({
         </div>
       )}
 
-      {/* Open by default — the client's requirement is that a customer sees their booking's detail
-          without clicking anything. Everything below the headline (dates, items, payment,
-          verification, gear inspection) lives inside the toggle, so "Hide Details" produces a
-          genuinely short card rather than one that merely drops its last panel. The status badge
-          and the Next Action banner above stay visible in both states: they are the two things a
-          customer must not have to expand a card to discover. */}
+      {/* Current/upcoming bookings start open — the client's requirement is that a customer sees
+          their booking's detail without clicking anything. Past bookings start closed (see
+          `defaultOpen`) so Booking History reads as a compact list. Everything below the headline
+          (dates, items, payment, verification, gear inspection) lives inside the toggle, so "Hide
+          Details" produces a genuinely short card rather than one that merely drops its last panel.
+          The status badge and the Next Action banner above stay visible in both states: they are
+          the two things a customer must not have to expand a card to discover. */}
       <DetailsToggle
-        defaultOpen
-        panelId={`booking-details-${booking.bookingId}`}
+        open={detailsOpen}
+        onToggle={() => setDetailsOpen((prev) => !prev)}
+        panelId={panelId}
         collapsedSummary={<CollapsedSummary booking={booking} />}
       >
         {/* Main column (booking/payment/progress/verification detail) + a right-hand column of
@@ -912,14 +1358,14 @@ function BookingCard({
             sidebar this project tried and removed earlier) the right column can never end up
             referring to a different booking than the one on screen next to it. Single column on
             anything narrower than lg, right column stacking below the main content. */}
-        <div className="grid gap-4 border-t border-line-soft pt-3 lg:grid-cols-[1fr_17rem] lg:items-start lg:gap-5">
-          <div className="flex min-w-0 flex-col gap-4">
+        <div className="grid gap-3.5 border-t border-line-soft pt-3 sm:gap-4 lg:grid-cols-[1fr_17rem] lg:items-start lg:gap-5">
+          <div className="flex min-w-0 flex-col gap-3.5 sm:gap-4">
             {/* Exact pickup/return time-of-day — the headline date range already lives in the
                 always-visible TripSummaryStrip above; this is the finer detail a customer has just
                 chosen to hide when the card is collapsed. */}
-            <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4">
+            <div className="flex flex-col gap-2.5 rounded-xl border border-line bg-surface p-3.5 sm:gap-3 sm:p-4">
               <SectionHeader icon={GearPlaceholderIcon} title="Rental Details" subtitle="Your gear rental information" />
-              <div className="grid grid-cols-1 gap-3 rounded-lg bg-surface-muted p-3 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-2.5 rounded-lg bg-surface-muted p-2.5 sm:grid-cols-3 sm:gap-3 sm:p-3">
                 <div className="min-w-0">
                   <p className="text-xs text-ink-faint">Pickup</p>
                   <p className="break-words text-sm font-medium text-ink">{formatDateTime(booking.pickupAt)}</p>
@@ -946,16 +1392,7 @@ function BookingCard({
                 </div>
               )}
 
-              {lineItems.length > 0 && (
-                <ul className="flex flex-col gap-1 border-t border-line-soft pt-3 text-sm text-ink-muted">
-                  {lineItems.map((item, index) => (
-                    <li key={`${item.name}-${index}`}>
-                      {item.quantity > 1 ? `${item.quantity}x ` : ''}
-                      {item.name}
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <RentalLineItems booking={booking} />
             </div>
 
             <PaymentSummary booking={booking} />
@@ -970,14 +1407,27 @@ function BookingCard({
             {/* Identity verification is reviewed before the security deposit in the actual admin
                 workflow, so it's shown first here too. Omitted entirely (not an empty bordered box)
                 when the booking never went through document verification (e.g. staff-created) — same
-                "omit rather than show empty" convention the Rental Fee card below already uses. */}
-            {booking.verificationDocuments.length > 0 && (
-              <VerificationDocumentsReview
-                bookingId={booking.bookingId}
-                documents={booking.verificationDocuments}
-                onResubmitted={(kind) => onVerificationResubmitted(kind)}
-              />
-            )}
+                "omit rather than show empty" convention the Rental Fee card below already uses.
+                Also omitted once the booking has moved into/past the return-inspection stage
+                (PENDING_FOR_INSPECTION/COMPLETED/RETURNED/CANCELLED) — that stage is genuinely over
+                by then, and its own "Verification Documents" heading sitting on the card right next
+                to the return/inspection status was reading as if verification were still an active,
+                current-stage concern. Still shown regardless of stage if a document genuinely needs
+                a correction, so the historical detail stays visible — but never with an active
+                replace form once the booking is terminal (COMPLETED/CANCELLED; see the `readOnly`
+                prop below and isTerminalBooking's own doc comment): a booking that was cancelled or
+                completed while a document was still under dispute must keep showing that history
+                without offering a resubmission that can no longer lead anywhere. */}
+            {booking.verificationDocuments.length > 0 &&
+              (!['PENDING_FOR_INSPECTION', 'COMPLETED', 'RETURNED', 'CANCELLED'].includes(booking.status) ||
+                booking.verificationDocuments.some((doc) => doc.status === 'CORRECTION_REQUIRED')) && (
+                <VerificationDocumentsReview
+                  bookingId={booking.bookingId}
+                  documents={booking.verificationDocuments}
+                  onResubmitted={(kind) => onVerificationResubmitted(kind)}
+                  readOnly={isTerminalBooking(booking)}
+                />
+              )}
 
             <DepositProofUpload
               bookingId={booking.bookingId}
@@ -987,8 +1437,11 @@ function BookingCard({
               proofStatus={booking.securityDeposit.proofStatus}
               reviewNote={booking.securityDeposit.reviewNote}
               amountClaimedCentavos={booking.securityDeposit.amountClaimedCentavos}
+              addOnDepositCentavos={booking.securityDeposit.addOnDepositCentavos}
               isByoBooking={booking.packages.length === 0}
+              hasPackageAddOns={hasPackageAddOns(booking)}
               onProofSubmitted={onDepositProofSubmitted}
+              readOnly={isTerminalBooking(booking)}
             />
 
             {/* Deliberately a separate card, never merged with Security Deposit above — the rental
@@ -1000,6 +1453,7 @@ function BookingCard({
                 bookingId={booking.bookingId}
                 rentalFee={booking.rentalFee}
                 onRentalFeeProofSubmitted={onRentalFeeProofSubmitted}
+                readOnly={isTerminalBooking(booking)}
               />
             )}
 
@@ -1010,14 +1464,27 @@ function BookingCard({
               <GearInspectionPanel bookingId={booking.bookingId} reports={booking.damageReports} />
             )}
 
+            {/* What happened to the deposit as a result of the issue above — a clean return
+                (`returnSettlement` null/undefined, e.g. an older RMS response predating this
+                field) never renders this section; see ReturnSettlementPanel's own doc comment. */}
+            {booking.returnSettlement && (
+              <ReturnSettlementPanel
+                settlement={booking.returnSettlement}
+                hasAdditionalCharges={Boolean(booking.additionalCharges && booking.additionalCharges.length > 0)}
+              />
+            )}
+
             {/* The money side of that inspection, kept as its own section: the panel above says what
                 was found, this one says what is owed for it. Omitted entirely when nothing was
                 charged, which is the common case. */}
             {booking.additionalCharges && booking.additionalCharges.length > 0 && (
               <AdditionalChargesPanel
+                bookingId={booking.bookingId}
                 charges={booking.additionalCharges}
                 totalCentavos={booking.additionalChargesTotalCentavos ?? 0}
                 outstandingCentavos={booking.additionalChargesOutstandingCentavos ?? 0}
+                onChargeProofSubmitted={onAdditionalChargeProofSubmitted}
+                readOnly={isTerminalBooking(booking)}
               />
             )}
           </div>
@@ -1027,7 +1494,6 @@ function BookingCard({
               <InspectionShortcut bookingId={booking.bookingId} onJumpTo={jumpTo} />
             )}
             <QuickActions booking={booking} onJumpTo={jumpTo} />
-            <PaymentBreakdown booking={booking} onJumpTo={jumpTo} />
             <NeedAssistanceCard />
           </aside>
         </div>
@@ -1048,7 +1514,7 @@ function SummaryTile({ label, value, tone }: { label: string; value: number; ton
 
   return (
     <div
-      className={`flex flex-col gap-0.5 rounded-xl border p-3 ${
+      className={`flex flex-col gap-0.5 rounded-xl border p-2.5 sm:p-3 ${
         isAttention
           ? 'border-red-300 bg-red-50 ring-1 ring-red-300 dark:border-red-500/40 dark:bg-red-500/10 dark:ring-red-500/40'
           : 'border-line bg-surface'
@@ -1062,6 +1528,67 @@ function SummaryTile({ label, value, tone }: { label: string; value: number; ton
         {value}
       </span>
       <span className={`text-xs ${isEmpty && !isAttention ? 'text-ink-faint' : 'text-ink-muted'}`}>{label}</span>
+    </div>
+  );
+}
+
+/**
+ * Page-level rollup of every booking that currently needs the customer's attention — never a
+ * second source of truth: each row is just this same booking's own getNextStep result (the exact
+ * tone/message already shown inline on that booking's own card), surfaced once above the booking
+ * list so a customer with several bookings doesn't have to open each card to find out what's
+ * actionable (danger and warning tones only — an info/success/neutral next-step is "in progress,"
+ * not something the customer needs to do anything about). "View" scrolls to that booking's own
+ * card, where the same message and its own CTA (if any) are already rendered — this panel never
+ * duplicates the action itself, only where to find it. Renders a quiet all-clear state instead of
+ * an empty section when nothing needs action.
+ */
+function ActionRequiredPanel({
+  bookings,
+  onJumpToBooking,
+}: {
+  bookings: RmsMyBooking[];
+  onJumpToBooking: (bookingNumber: string) => void;
+}) {
+  const items = bookings
+    .map((booking) => ({ booking, nextStep: getNextStep(booking) }))
+    .filter(({ nextStep }) => nextStep.tone === 'danger' || nextStep.tone === 'warning');
+
+  if (items.length === 0) {
+    return (
+      <div className="flex items-center gap-2.5 rounded-xl border border-brand-forest/30 bg-brand-forest/10 px-4 py-3 text-sm font-medium text-accent">
+        <CheckCircleIcon className="h-4 w-4 shrink-0" />
+        You're all caught up.
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2.5 rounded-xl border-2 border-red-300 bg-red-50 p-3.5 dark:border-red-500/40 dark:bg-red-500/10 sm:gap-3 sm:p-5">
+      <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-red-800 dark:text-red-300">
+        <AlertTriangleIcon className="h-4 w-4 shrink-0" />
+        Action Required ({items.length})
+      </h2>
+      <ul className="flex flex-col gap-2">
+        {items.map(({ booking, nextStep }) => (
+          <li
+            key={booking.bookingId}
+            className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-lg bg-surface px-3 py-2 shadow-sm sm:gap-y-2 sm:py-2.5"
+          >
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-ink-faint">#{booking.bookingNumber}</p>
+              <p className="text-sm text-ink">{nextStep.message}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onJumpToBooking(booking.bookingNumber)}
+              className="shrink-0 rounded-md border border-line px-3 py-1.5 text-xs font-semibold text-accent transition-colors hover:bg-surface-strong"
+            >
+              View →
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -1089,12 +1616,51 @@ function PaymentSummary({ booking }: { booking: RmsMyBooking }) {
   const { rentalFee, securityDeposit } = booking;
   const isByoBooking = booking.packages.length === 0;
   const depositPending = isByoBooking && securityDeposit.requiredCentavos <= 0 && securityDeposit.proofStatus === null;
+  // See the shared hasPackageAddOns' own doc comment (above RentalLineItems) for why this checks
+  // `gears` as well as `addOns` — the customer website never computes an add-on's own deposit;
+  // `securityDeposit.requiredCentavos` is always the RMS's own authoritative figure exactly as
+  // returned, whether that's still just the package's own configured deposit or one an admin
+  // already increased after reviewing the add-ons. This flag only controls whether the wording
+  // clarifies that possibility — it never changes the number itself.
+  const bookingHasPackageAddOns = hasPackageAddOns(booking);
+  // The add-on portion of `requiredCentavos`, decided by staff after reviewing the specific
+  // add-ons — see RmsSecurityDeposit.addOnDepositCentavos' own doc comment. `null`/`undefined`
+  // (an older RMS response, or staff simply haven't decided yet) keeps the existing "To Be
+  // Determined" row; `0` means staff decided no additional deposit is needed, so the row is
+  // omitted entirely rather than showing a pointless "₱0" line; a positive amount is when the
+  // full Base/Add-on/Total breakdown below actually applies.
+  const addOnDepositCentavos = securityDeposit.addOnDepositCentavos;
+  const hasDeterminedAddOnDeposit =
+    bookingHasPackageAddOns && typeof addOnDepositCentavos === 'number' && addOnDepositCentavos > 0;
+  const addOnDepositStillPending = bookingHasPackageAddOns && (addOnDepositCentavos === null || addOnDepositCentavos === undefined);
+  // Never a second, independently-computed figure — the RMS's own `requiredCentavos` is always
+  // the authoritative total; this is just that same total minus the add-on portion it already
+  // includes, purely so the breakdown below can show what the package's own deposit was before
+  // add-ons. Only meaningful (and only rendered) when hasDeterminedAddOnDeposit is true.
+  const baseDepositCentavos = hasDeterminedAddOnDeposit
+    ? securityDeposit.requiredCentavos - addOnDepositCentavos
+    : securityDeposit.requiredCentavos;
+  // Shown through this same compact deposit summary regardless of returnSettlement — a clean
+  // return can still carry a real refund via these fields alone (see RmsSecurityDeposit's own
+  // doc comment), and ReturnSettlementPanel further down this card only ever renders when RMS
+  // has an actual settlement object, so this is the one place a clean-return refund is visible.
+  // Omitted when both are absent/zero — an older RMS response, or a booking that hasn't reached
+  // a return outcome yet, never shows a false "₱0 retained" line.
+  const depositRetainedCentavos = securityDeposit.retainedCentavos ?? 0;
+  const depositRefundedCentavos = securityDeposit.refundedCentavos ?? 0;
+  const hasDepositSettlementInfo = depositRetainedCentavos > 0 || depositRefundedCentavos > 0;
   const hasBalanceDue = rentalFee && rentalFee.outstandingCentavos > 0;
+  // Collapsed by default: the full breakdown (amount paid, payment/deposit status text) is
+  // secondary once the headline Balance figure and the two summary lines below are visible —
+  // showing all of it immediately, inside a card that's already behind its own "Details" toggle,
+  // was a second full data dump on top of the first tap. This is a plain local expand, not a
+  // second navigation level: everything here was already part of the same open Details panel.
+  const [showFullBreakdown, setShowFullBreakdown] = useState(false);
 
   const paymentStatusLabel = rentalFee ? (RENTAL_FEE_STATUS_LABELS[rentalFee.status] ?? formatStatusLabel(rentalFee.status)) : null;
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4">
+    <div className="flex flex-col gap-2.5 rounded-xl border border-line bg-surface p-3.5 sm:gap-3 sm:p-4">
       <SectionHeader
         icon={CreditCardIcon}
         title="Payment Summary"
@@ -1135,47 +1701,127 @@ function PaymentSummary({ booking }: { booking: RmsMyBooking }) {
         </div>
       )}
 
+      {/* Always-visible compact summary — the two figures a customer needs at a glance, without
+          the fuller breakdown below. */}
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
         <dt className="text-ink-muted">Rental Fee</dt>
         <dd className="text-right font-medium text-ink">
           {rentalFee ? formatCurrency(rentalFee.dueCentavos / 100) : formatCurrency(booking.rentalFeeCentavos / 100)}
         </dd>
 
-        {rentalFee && (
+        {hasDeterminedAddOnDeposit ? (
+          // Base/Add-on/Total breakdown — only once staff have actually set a positive add-on
+          // deposit (see hasDeterminedAddOnDeposit above). Base and Add-on are never independent
+          // charges; they're the same one refundable security deposit split into its two parts,
+          // which is why Total is the figure carried everywhere else on this card (Balance,
+          // DepositProofUpload's own headline, etc.) — never Base alone.
           <>
-            <dt className="text-ink-muted">Amount Paid</dt>
-            <dd className="text-right font-medium text-ink">{formatCurrency(rentalFee.paidCentavos / 100)}</dd>
+            <dt className="text-ink-muted">Base Security Deposit</dt>
+            <dd className="text-right font-medium text-ink">{formatCurrency(baseDepositCentavos / 100)}</dd>
 
-            <dt className="text-ink-muted">Payment Status</dt>
-            <dd className="text-right font-medium text-ink">
-              {RENTAL_FEE_STATUS_LABELS[rentalFee.status] ?? formatStatusLabel(rentalFee.status)}
+            <dt className="text-ink-muted">Additional Add-on Deposit</dt>
+            <dd className="text-right font-medium text-ink">{formatCurrency(addOnDepositCentavos / 100)}</dd>
+
+            <dt className="font-semibold text-ink">
+              Total Security Deposit
+              {!depositPending && <span className="font-normal text-ink-faint"> (refundable)</span>}
+            </dt>
+            <dd className="text-right font-semibold text-ink">
+              {formatCurrency(securityDeposit.requiredCentavos / 100)}
             </dd>
+          </>
+        ) : (
+          <>
+            <dt className="text-ink-muted">
+              {bookingHasPackageAddOns ? 'Package Security Deposit' : 'Security Deposit'}
+              {!depositPending && <span className="text-ink-faint"> (refundable)</span>}
+            </dt>
+            <dd className="text-right font-medium text-ink">
+              {depositPending ? 'To Be Determined' : formatCurrency(securityDeposit.requiredCentavos / 100)}
+            </dd>
+
+            {/* Its own row, not folded into the package deposit above — never a second real figure
+                (there's nothing to add up yet: "To Be Determined" is a status, not an amount), just
+                making explicit that GearBnB staff may still add to the Package Security Deposit
+                shown above once they've reviewed these specific add-ons. Omitted entirely once
+                staff decide either way (see hasDeterminedAddOnDeposit's own branch above, and
+                addOnDepositStillPending's own comment). See DepositProofUpload's matching notice,
+                shown further down this same card, for the fuller explanation. */}
+            {addOnDepositStillPending && (
+              <>
+                <dt className="text-ink-muted">Additional Add-on Deposit</dt>
+                <dd className="text-right font-medium text-ink">To Be Determined</dd>
+              </>
+            )}
           </>
         )}
 
-        <dt className="text-ink-muted">Security Deposit{!depositPending && <span className="text-ink-faint"> (refundable)</span>}</dt>
-        <dd className="text-right font-medium text-ink">
-          {depositPending ? 'To Be Determined' : formatCurrency(securityDeposit.requiredCentavos / 100)}
-        </dd>
-
-        <dt className="text-ink-muted">Deposit Status</dt>
-        <dd className="text-right font-medium text-ink">
-          {depositPending
-            ? 'Pending'
-            : securityDeposit.verified
-              ? 'Verified'
-              : securityDeposit.proofStatus
-                ? formatStatusLabel(securityDeposit.proofStatus)
-                : 'Not Yet Paid'}
-        </dd>
+        {/* Post-return outcome for the deposit itself — see hasDepositSettlementInfo's own
+            comment above for why this reads straight off securityDeposit rather than
+            returnSettlement. Retained is only shown when positive (a fully-refunded deposit has
+            nothing to retain); Refunded is shown whenever present so a ₱0 refund after a total
+            loss is still stated plainly rather than silently omitted. */}
+        {hasDepositSettlementInfo && (
+          <>
+            {depositRetainedCentavos > 0 && (
+              <>
+                <dt className="text-ink-muted">Security Deposit Retained</dt>
+                <dd className="text-right font-medium text-ink">{formatCurrency(depositRetainedCentavos / 100)}</dd>
+              </>
+            )}
+            <dt className="text-ink-muted">Security Deposit Refunded</dt>
+            <dd className="text-right font-medium text-ink">{formatCurrency(depositRefundedCentavos / 100)}</dd>
+          </>
+        )}
       </dl>
+
+      {/* The breakdown/"To Be Determined" row above already makes the add-on deposit's status
+          explicit; the fuller explanation lives once, in DepositProofUpload's matching notice
+          further down this same card's Booking Details, rather than being repeated here too. */}
+
+      <button
+        type="button"
+        onClick={() => setShowFullBreakdown((prev) => !prev)}
+        aria-expanded={showFullBreakdown}
+        className="flex items-center gap-1 self-start text-xs font-semibold text-accent underline-offset-2 hover:underline"
+      >
+        {showFullBreakdown ? 'Hide payment details' : 'Show payment details'}
+        <ChevronDownIcon className={`h-3.5 w-3.5 shrink-0 transition-transform ${showFullBreakdown ? 'rotate-180' : ''}`} />
+      </button>
+
+      {showFullBreakdown && (
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 border-t border-line-soft pt-3 text-sm">
+          {rentalFee && (
+            <>
+              <dt className="text-ink-muted">Amount Paid</dt>
+              <dd className="text-right font-medium text-ink">{formatCurrency(rentalFee.paidCentavos / 100)}</dd>
+
+              <dt className="text-ink-muted">Payment Status</dt>
+              <dd className="text-right font-medium text-ink">
+                {RENTAL_FEE_STATUS_LABELS[rentalFee.status] ?? formatStatusLabel(rentalFee.status)}
+              </dd>
+            </>
+          )}
+
+          <dt className="text-ink-muted">Deposit Status</dt>
+          <dd className="text-right font-medium text-ink">
+            {depositPending
+              ? 'Pending'
+              : securityDeposit.verified
+                ? 'Verified'
+                : securityDeposit.proofStatus
+                  ? formatStatusLabel(securityDeposit.proofStatus)
+                  : 'Not Yet Paid'}
+          </dd>
+        </dl>
+      )}
     </div>
   );
 }
 
 function BookingCardSkeleton() {
   return (
-    <div className="flex animate-pulse flex-col gap-3 rounded-2xl border border-line bg-surface p-5 shadow-sm">
+    <div className="flex animate-pulse flex-col gap-3 rounded-2xl border border-line bg-surface p-4 shadow-sm sm:p-5">
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-col gap-2">
           <div className="h-3 w-14 rounded bg-surface-strong" />
@@ -1199,8 +1845,16 @@ export default function MyBookings() {
   const [state, setState] = useState<FetchState>({ kind: 'loading' });
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
-  const [showPast, setShowPast] = useState(false);
+  // The top-level category tabs (Part 4) — "Current" is the default landing view. `showPast`
+  // below is kept as a derived alias (not its own state) so every existing `{showPast && ...}`
+  // gate further down in this file (the search/filter/pagination controls, the card list itself)
+  // keeps working completely unchanged; only what CONTROLS it moved from a standalone toggle
+  // button to this tab bar.
+  const [activeTab, setActiveTab] = useState<'current' | 'payment' | 'history'>('current');
+  const showPast = activeTab === 'history';
   const [historyPageSize, setHistoryPageSize] = useState(HISTORY_PAGE_SIZE);
+  const [historyStatusFilter, setHistoryStatusFilter] = useState<string>(HISTORY_FILTER_ALL);
+  const [historyQuery, setHistoryQuery] = useState('');
 
   // Named by the "Make Your Payment" email CTA's ?booking=<bookingNumber> query param (see
   // sendBookingApprovalEmails on the RMS side) — never trusted for anything but which card to
@@ -1222,26 +1876,24 @@ export default function MyBookings() {
       .catch((err: unknown) => {
         if (cancelled) return;
 
-        if (err instanceof RmsApiError) {
-          if (err.status === 500) {
-            // The RMS API URL isn't configured yet (see VITE_RMS_API_URL) — same graceful
-            // degradation the old get_my_bookings RPC had while it didn't exist server-side.
-            setState({ kind: 'not_configured' });
-            return;
-          }
-          if (err.status === 401) {
-            // The session that was valid when this page loaded has since expired/been revoked —
-            // an active event mid-use, not "never logged in," so this one still redirects
-            // immediately rather than swapping in the inline gate below.
-            navigate('/login', {
-              state: {
-                from: location.pathname,
-                mode: 'login',
-                reason: 'Your session has expired — please log in again to view your bookings.',
-              },
-            });
-            return;
-          }
+        const failure = classifyMyBookingsLoadError(err);
+        if (failure === 'not_configured') {
+          // VITE_RMS_API_URL is missing — never a genuine RMS 500.
+          setState({ kind: 'not_configured' });
+          return;
+        }
+        if (failure === 'session_expired') {
+          // The session that was valid when this page loaded has since expired/been revoked —
+          // an active event mid-use, not "never logged in," so this one still redirects
+          // immediately rather than swapping in the inline gate below.
+          navigate('/login', {
+            state: {
+              from: location.pathname,
+              mode: 'login',
+              reason: 'Your session has expired — please log in again to view your bookings.',
+            },
+          });
+          return;
         }
         console.error('[MyBookings] fetch failed:', err);
         setState({ kind: 'error', message: "We couldn't load your bookings right now. Please try again shortly." });
@@ -1279,6 +1931,45 @@ export default function MyBookings() {
         bookings: prev.bookings.map((booking) =>
           booking.bookingId === bookingId && booking.rentalFee
             ? { ...booking, rentalFee: { ...booking.rentalFee, proofStatus: 'PENDING_REVIEW' } }
+            : booking,
+        ),
+      };
+    });
+  }
+
+  // Same optimistic pattern as handleProofSubmitted/handleRentalFeeProofSubmitted, but scoped to
+  // one specific charge (by id) within the booking's additionalCharges array — a booking can have
+  // more than one outstanding charge, each with its own independent proof, so only the charge the
+  // customer just submitted a proof for flips to PENDING_REVIEW; every other charge on this same
+  // booking is left completely untouched.
+  function handleAdditionalChargeProofSubmitted(bookingId: string, chargeId: string) {
+    setState((prev) => {
+      if (prev.kind !== 'ready') return prev;
+      return {
+        kind: 'ready',
+        bookings: prev.bookings.map((booking) =>
+          booking.bookingId === bookingId && booking.additionalCharges
+            ? {
+                ...booking,
+                additionalCharges: booking.additionalCharges.map((charge) =>
+                  charge.id === chargeId
+                    ? {
+                        ...charge,
+                        // Optimistic only — the real amount/method/reviewNote come back on the next
+                        // actual refetch. uploadedAt is a placeholder ("now"); nothing here reads it
+                        // while status is PENDING_REVIEW (only `rejected`'s reviewNote is displayed).
+                        paymentProof: {
+                          status: 'PENDING_REVIEW',
+                          method: charge.paymentProof?.method ?? 'OTHER',
+                          amountClaimedCentavos: charge.paymentProof?.amountClaimedCentavos ?? null,
+                          uploadedAt: new Date().toISOString(),
+                          reviewNote: null,
+                        },
+                        canSubmitPaymentProof: false,
+                      }
+                    : charge,
+                ),
+              }
             : booking,
         ),
       };
@@ -1374,7 +2065,12 @@ export default function MyBookings() {
     const isPast = state.bookings.some(
       (b) => b.bookingNumber === highlightedBookingNumber && PAST_STATUSES.has(b.status),
     );
-    if (isPast) setShowPast(true);
+    if (!isPast) return;
+    setActiveTab('history');
+    // Any active filter/search is cleared too, or the card the email CTA is pointing at could be
+    // filtered straight back out of the list it was just expanded to reveal.
+    setHistoryStatusFilter(HISTORY_FILTER_ALL);
+    setHistoryQuery('');
   }, [highlightedBookingNumber, state]);
 
   if (authLoading) return null;
@@ -1395,7 +2091,65 @@ export default function MyBookings() {
   const attentionCount = bookings.filter(needsAttention).length;
   const pendingReviewCount = bookings.filter((booking) => PENDING_REVIEW_STATUSES.has(booking.status)).length;
   const completedCount = bookings.filter((booking) => booking.status === 'COMPLETED' || booking.status === 'RETURNED').length;
-  const visiblePastBookings = pastBookings.slice(0, historyPageSize);
+  // The "Payment" tab's own filtered view — see hasOutstandingPayment's own doc comment. Computed
+  // over every booking (not just activeBookings): a customer must never lose sight of a genuinely
+  // outstanding balance just because the booking itself happens to already be in a past status.
+  const paymentBookings = bookings.filter(hasOutstandingPayment);
+  // Only the statuses this customer actually has among their past bookings become chips, derived
+  // from PAST_STATUSES itself (the single source of truth for what counts as history) rather than
+  // a second hardcoded list that could drift from it.
+  const historyStatusOptions = [...PAST_STATUSES].filter((status) =>
+    pastBookings.some((booking) => booking.status === status),
+  );
+  const filteredPastBookings = pastBookings.filter(
+    (booking) =>
+      (historyStatusFilter === HISTORY_FILTER_ALL || booking.status === historyStatusFilter) &&
+      matchesHistoryQuery(booking, historyQuery),
+  );
+  const visiblePastBookings = filteredPastBookings.slice(0, historyPageSize);
+  const showHistoryControls = historyStatusOptions.length > 1 || pastBookings.length >= HISTORY_SEARCH_MIN;
+
+  // Both reset paging: after narrowing the list, a "Show more" the customer expanded for a
+  // different filter would otherwise silently carry over and reveal more rows than this one has.
+  function handleHistoryFilterChange(next: string) {
+    setHistoryStatusFilter(next);
+    setHistoryPageSize(HISTORY_PAGE_SIZE);
+  }
+
+  function handleHistoryQueryChange(next: string) {
+    setHistoryQuery(next);
+    setHistoryPageSize(HISTORY_PAGE_SIZE);
+  }
+
+  function clearHistoryFilters() {
+    handleHistoryFilterChange(HISTORY_FILTER_ALL);
+    setHistoryQuery('');
+  }
+
+  // Scrolls to a booking's card from the page-level Action Required panel. Expands the Booking
+  // History section first when the target booking lives there — it's collapsed by default (see
+  // showPast's initial state) — so the card actually exists on the page before scrolling to it.
+  // The card's own detailsOpen state is a separate concern handled entirely inside BookingCard
+  // (see its jumpTo): this only needs to get the CARD itself on screen, since the next-step
+  // message and its own CTA are already visible on a card regardless of whether it's expanded.
+  function handleJumpToBooking(bookingNumber: string) {
+    const isPast = pastBookings.some((booking) => booking.bookingNumber === bookingNumber);
+    // The Action Required panel stays visible regardless of which tab is active (see its own
+    // render call below), so its "View" target might currently be on a hidden tab — every
+    // non-past booking always renders under "Current" (Payment is an additional filtered view
+    // layered on top of it, never the only place a booking appears), so that split alone is
+    // enough to always land on the right tab. Same reasoning as the highlighted-booking effect
+    // above for clearing any active History filter/search that could keep the target out of view.
+    setActiveTab(isPast ? 'history' : 'current');
+    if (isPast) {
+      clearHistoryFilters();
+    }
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        document.getElementById(`booking-${bookingNumber}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+  }
 
   return (
     // max-w-6xl (72rem/1152px) — enough room for the sidebar + booking-list layout below to feel
@@ -1403,9 +2157,9 @@ export default function MyBookings() {
     // unreadably long line length; the old max-w-2xl (42rem/672px) was the "too narrow for desktop"
     // the client originally flagged, and a single centered column that wide would have looked just
     // as awkward as too-narrow once a real two-column layout was in play.
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-5 py-10 sm:px-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-1.5">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-5 pb-36 pt-6 sm:gap-6 sm:px-6 sm:pb-10 sm:pt-10">
+      <div className="flex flex-wrap items-start justify-between gap-2 sm:gap-3">
+        <div className="flex flex-col gap-1 sm:gap-1.5">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="font-serif text-xl font-semibold text-ink">My Bookings</h1>
             {attentionCount > 0 && (
@@ -1426,7 +2180,7 @@ export default function MyBookings() {
             onClick={handleRefresh}
             disabled={refreshing}
             aria-busy={refreshing}
-            className="flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-medium text-ink-muted shadow-sm transition-colors hover:bg-surface-strong hover:text-ink disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1 text-xs font-medium text-ink-muted shadow-sm transition-colors hover:bg-surface-strong hover:text-ink disabled:cursor-not-allowed disabled:opacity-60 sm:px-3 sm:py-1.5"
           >
             <ClockIcon className={`h-3.5 w-3.5 shrink-0 ${refreshing ? 'animate-spin' : ''}`} />
             {refreshing ? 'Refreshing…' : lastUpdatedAt ? `Updated ${formatTime(lastUpdatedAt)}` : 'Refresh'}
@@ -1442,6 +2196,31 @@ export default function MyBookings() {
           <SummaryTile label="Pending Review" value={pendingReviewCount} />
           <SummaryTile label="Needs Action" value={attentionCount} tone="attention" />
           <SummaryTile label="Completed" value={completedCount} />
+        </div>
+      )}
+
+      {state.kind === 'ready' && bookings.length > 0 && (
+        <ActionRequiredPanel bookings={bookings} onJumpToBooking={handleJumpToBooking} />
+      )}
+
+      {/* Category tabs (Part 4) — a filtered VIEW over the one already-fetched booking list, never
+          a second fetch or a second data source. "Current" covers every active booking regardless
+          of payment state; "Payment" is a narrower, overlapping view for exactly the bookings that
+          currently need money from the customer; "History" is the existing past-bookings section,
+          now switched to by this tab instead of its own separate collapse button. flex-wrap (not
+          horizontal scroll) — three short labels fit comfortably even at 320px, and a customer is
+          less likely to miss a wrapped second pill than an undiscovered horizontal swipe. */}
+      {state.kind === 'ready' && bookings.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Booking categories">
+          <FilterPill selected={activeTab === 'current'} onClick={() => setActiveTab('current')}>
+            Current ({activeBookings.length})
+          </FilterPill>
+          <FilterPill selected={activeTab === 'payment'} onClick={() => setActiveTab('payment')}>
+            Payment{paymentBookings.length > 0 ? ` (${paymentBookings.length})` : ''}
+          </FilterPill>
+          <FilterPill selected={activeTab === 'history'} onClick={() => setActiveTab('history')}>
+            History ({pastBookings.length})
+          </FilterPill>
         </div>
       )}
 
@@ -1489,65 +2268,180 @@ export default function MyBookings() {
           a customer would need to cross-reference against whichever card is on screen. */}
       {state.kind === 'ready' && bookings.length > 0 && (
         <div className="flex flex-col gap-4">
-          {/* Three clearly separated groups — what's happening now, what's booked next, and what's
-              finished — so a customer never has to read a status badge to work out which of their
-              bookings is the live one. A group with nothing in it is omitted rather than shown as an
-              empty heading; the single "no active bookings" line covers the case where both of the
-              live groups are empty. */}
-          {activeBookings.length === 0 && (
+          {/* Each tab renders its own self-contained content below — never more than one at a
+              time, so a customer scanning the page only ever sees the category they actually
+              chose. */}
+          {activeTab === 'current' && (
+            <>
+              {/* Three clearly separated groups — what's happening now, what's booked next, and
+                  what's finished — so a customer never has to read a status badge to work out
+                  which of their bookings is the live one. A group with nothing in it is omitted
+                  rather than shown as an empty heading; the single "no active bookings" line
+                  covers the case where both of the live groups are empty. */}
+              {activeBookings.length === 0 && (
+                <p className="rounded-xl border border-line bg-surface-muted p-6 text-center text-sm text-ink-muted">
+                  No active bookings right now.
+                </p>
+              )}
+
+              {currentBookings.length > 0 && (
+                <div className="flex flex-col gap-4">
+                  <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-ink-muted">
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-brand-forest" aria-hidden="true" />
+                    Current Rental{currentBookings.length === 1 ? '' : 's'}
+                  </h2>
+                  {currentBookings.map((booking) => (
+                    <BookingCard
+                      key={booking.bookingId}
+                      booking={booking}
+                      onDepositProofSubmitted={() => handleProofSubmitted(booking.bookingId)}
+                      onRentalFeeProofSubmitted={() => handleRentalFeeProofSubmitted(booking.bookingId)}
+                      onAdditionalChargeProofSubmitted={(chargeId) =>
+                        handleAdditionalChargeProofSubmitted(booking.bookingId, chargeId)
+                      }
+                      onVerificationResubmitted={(kind) => handleVerificationResubmitted(booking.bookingId, kind)}
+                      highlighted={booking.bookingNumber === highlightedBookingNumber}
+                      defaultOpen
+                    />
+                  ))}
+                </div>
+              )}
+
+              {upcomingBookings.length > 0 && (
+                <div className="flex flex-col gap-4">
+                  <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-muted">
+                    Upcoming ({upcomingBookings.length})
+                  </h2>
+                  {upcomingBookings.map((booking) => (
+                    <BookingCard
+                      key={booking.bookingId}
+                      booking={booking}
+                      onDepositProofSubmitted={() => handleProofSubmitted(booking.bookingId)}
+                      onRentalFeeProofSubmitted={() => handleRentalFeeProofSubmitted(booking.bookingId)}
+                      onAdditionalChargeProofSubmitted={(chargeId) =>
+                        handleAdditionalChargeProofSubmitted(booking.bookingId, chargeId)
+                      }
+                      onVerificationResubmitted={(kind) => handleVerificationResubmitted(booking.bookingId, kind)}
+                      highlighted={booking.bookingNumber === highlightedBookingNumber}
+                      defaultOpen
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* "Payment" tab — a filtered view over the same bookings, never a second payment
+              system or a recomputed figure; every amount shown lives on the card itself, sourced
+              straight from the RMS's own securityDeposit/rentalFee fields exactly as everywhere
+              else on this page. */}
+          {activeTab === 'payment' && (
+            <>
+              {paymentBookings.length === 0 ? (
+                <p className="rounded-xl border border-line bg-surface-muted p-6 text-center text-sm text-ink-muted">
+                  Nothing pending — you're all paid up.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  {paymentBookings.map((booking) => (
+                    <BookingCard
+                      key={booking.bookingId}
+                      booking={booking}
+                      onDepositProofSubmitted={() => handleProofSubmitted(booking.bookingId)}
+                      onRentalFeeProofSubmitted={() => handleRentalFeeProofSubmitted(booking.bookingId)}
+                      onAdditionalChargeProofSubmitted={(chargeId) =>
+                        handleAdditionalChargeProofSubmitted(booking.bookingId, chargeId)
+                      }
+                      onVerificationResubmitted={(kind) => handleVerificationResubmitted(booking.bookingId, kind)}
+                      highlighted={booking.bookingNumber === highlightedBookingNumber}
+                      defaultOpen
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {activeTab === 'history' && pastBookings.length === 0 && (
             <p className="rounded-xl border border-line bg-surface-muted p-6 text-center text-sm text-ink-muted">
-              No active bookings right now.
+              No booking history yet. Your completed or past rentals will appear here.
             </p>
           )}
 
-            {currentBookings.length > 0 && (
-              <div className="flex flex-col gap-4">
-                <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-ink-muted">
-                  <span className="h-2 w-2 shrink-0 rounded-full bg-brand-forest" aria-hidden="true" />
-                  Current Rental{currentBookings.length === 1 ? '' : 's'}
-                </h2>
-                {currentBookings.map((booking) => (
-                  <BookingCard
-                    key={booking.bookingId}
-                    booking={booking}
-                    onDepositProofSubmitted={() => handleProofSubmitted(booking.bookingId)}
-                    onRentalFeeProofSubmitted={() => handleRentalFeeProofSubmitted(booking.bookingId)}
-                    onVerificationResubmitted={(kind) => handleVerificationResubmitted(booking.bookingId, kind)}
-                    highlighted={booking.bookingNumber === highlightedBookingNumber}
-                  />
-                ))}
-              </div>
-            )}
-
-            {upcomingBookings.length > 0 && (
+          {activeTab === 'history' && pastBookings.length > 0 && (
               <div className="flex flex-col gap-4">
                 <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-muted">
-                  Upcoming ({upcomingBookings.length})
-                </h2>
-                {upcomingBookings.map((booking) => (
-                  <BookingCard
-                    key={booking.bookingId}
-                    booking={booking}
-                    onDepositProofSubmitted={() => handleProofSubmitted(booking.bookingId)}
-                    onRentalFeeProofSubmitted={() => handleRentalFeeProofSubmitted(booking.bookingId)}
-                    onVerificationResubmitted={(kind) => handleVerificationResubmitted(booking.bookingId, kind)}
-                    highlighted={booking.bookingNumber === highlightedBookingNumber}
-                  />
-                ))}
-              </div>
-            )}
-
-            {pastBookings.length > 0 && (
-              <div className="flex flex-col gap-4 border-t border-line-soft pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowPast((prev) => !prev)}
-                  aria-expanded={showPast}
-                  className="flex items-center gap-1.5 self-start text-sm font-semibold uppercase tracking-wide text-ink-muted transition-colors hover:text-ink"
-                >
                   Booking History ({pastBookings.length})
-                  <ChevronDownIcon className={`h-3.5 w-3.5 transition-transform ${showPast ? 'rotate-180' : ''}`} />
-                </button>
+                </h2>
+
+                {/* Narrowing controls appear only once there's genuinely something to narrow — a
+                    customer with two finished bookings gets the plain list, not a filter bar. */}
+                {showPast && showHistoryControls && (
+                  <div className="flex flex-col gap-2.5">
+                    {historyStatusOptions.length > 1 && (
+                      // Scrolls horizontally instead of wrapping, so on a narrow phone the row stays
+                      // one line rather than growing into a block that pushes the cards down.
+                      <div
+                        role="group"
+                        aria-label="Filter booking history by status"
+                        className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5"
+                      >
+                        {[HISTORY_FILTER_ALL, ...historyStatusOptions].map((option) => {
+                          const active = historyStatusFilter === option;
+                          const count =
+                            option === HISTORY_FILTER_ALL
+                              ? pastBookings.length
+                              : pastBookings.filter((booking) => booking.status === option).length;
+                          return (
+                            <button
+                              key={option}
+                              type="button"
+                              onClick={() => handleHistoryFilterChange(option)}
+                              aria-pressed={active}
+                              className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
+                                active
+                                  ? 'bg-brand-forest text-white'
+                                  : 'bg-surface-strong text-ink-muted hover:bg-line hover:text-ink'
+                              }`}
+                            >
+                              {option === HISTORY_FILTER_ALL
+                                ? 'All'
+                                : (BOOKING_STATUS_LABELS[option] ?? formatStatusLabel(option))}{' '}
+                              ({count})
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {pastBookings.length >= HISTORY_SEARCH_MIN && (
+                      <label className="block">
+                        <span className="sr-only">Search booking history</span>
+                        <input
+                          type="search"
+                          value={historyQuery}
+                          onChange={(e) => handleHistoryQueryChange(e.target.value)}
+                          placeholder="Search booking history"
+                          className="h-10 w-full rounded-xl border border-line bg-surface px-3 text-sm text-ink shadow-sm outline-none transition-colors [&::-webkit-search-cancel-button]:appearance-none focus:border-brand-forest focus:ring-2 focus:ring-brand-forest/20 sm:max-w-xs"
+                        />
+                      </label>
+                    )}
+                  </div>
+                )}
+
+                {showPast && filteredPastBookings.length === 0 && (
+                  <div className="flex flex-col items-center gap-2 rounded-xl border border-line bg-surface-muted p-6 text-center">
+                    <p className="text-sm text-ink-muted">No past bookings match your search or filter.</p>
+                    <button
+                      type="button"
+                      onClick={clearHistoryFilters}
+                      className="text-sm font-semibold text-accent underline underline-offset-2"
+                    >
+                      Clear filters
+                    </button>
+                  </div>
+                )}
+
                 {showPast &&
                   visiblePastBookings.map((booking) => (
                     <BookingCard
@@ -1555,18 +2449,22 @@ export default function MyBookings() {
                       booking={booking}
                       onDepositProofSubmitted={() => handleProofSubmitted(booking.bookingId)}
                       onRentalFeeProofSubmitted={() => handleRentalFeeProofSubmitted(booking.bookingId)}
+                      onAdditionalChargeProofSubmitted={(chargeId) =>
+                        handleAdditionalChargeProofSubmitted(booking.bookingId, chargeId)
+                      }
                       onVerificationResubmitted={(kind) => handleVerificationResubmitted(booking.bookingId, kind)}
                       highlighted={booking.bookingNumber === highlightedBookingNumber}
+                      defaultOpen={booking.bookingNumber === highlightedBookingNumber}
                     />
                   ))}
 
-                {showPast && visiblePastBookings.length < pastBookings.length && (
+                {showPast && visiblePastBookings.length < filteredPastBookings.length && (
                   <button
                     type="button"
                     onClick={() => setHistoryPageSize((size) => size + HISTORY_PAGE_SIZE)}
                     className="self-center rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium text-ink shadow-sm transition-colors hover:bg-surface-strong"
                   >
-                    Show more ({pastBookings.length - visiblePastBookings.length} remaining)
+                    Show more ({filteredPastBookings.length - visiblePastBookings.length} remaining)
                   </button>
                 )}
               </div>

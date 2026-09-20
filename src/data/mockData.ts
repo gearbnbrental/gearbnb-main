@@ -24,8 +24,8 @@ export const mockPackages: PackageKit[] = [
     ],
     imageUrl: '/images/packages/nomad-black.png',
     editions: [
-      { id: 'kit-nomad-black', label: 'Black Edition', imageUrl: '/images/packages/nomad-black.png', packageNumber: 'MOCK-NOMAD-BLACK' },
-      { id: 'kit-nomad-khaki', label: 'Khaki Edition', imageUrl: '/images/packages/nomad-khaki.png', packageNumber: 'MOCK-NOMAD-KHAKI' },
+      { id: 'kit-nomad-black', label: 'Black Edition', imageUrl: '/images/packages/nomad-black.png', packageNumber: 'MOCK-NOMAD-BLACK', pricing: { '48h': 2490, '72h': 2790 }, depositAmount: 400 },
+      { id: 'kit-nomad-khaki', label: 'Khaki Edition', imageUrl: '/images/packages/nomad-khaki.png', packageNumber: 'MOCK-NOMAD-KHAKI', pricing: { '48h': 2490, '72h': 2790 }, depositAmount: 400 },
     ],
     unavailableRanges: [{ start: '2026-08-10', end: '2026-08-12' }],
     extras: [
@@ -77,8 +77,8 @@ export const mockPackages: PackageKit[] = [
     ],
     imageUrl: '/images/packages/base-camper-black.png',
     editions: [
-      { id: 'kit-basecamper-black', label: 'Black Edition', imageUrl: '/images/packages/base-camper-black.png', packageNumber: 'MOCK-BASECAMPER-BLACK' },
-      { id: 'kit-basecamper-khaki', label: 'Khaki Edition', imageUrl: '/images/packages/base-camper-khaki.png', packageNumber: 'MOCK-BASECAMPER-KHAKI' },
+      { id: 'kit-basecamper-black', label: 'Black Edition', imageUrl: '/images/packages/base-camper-black.png', packageNumber: 'MOCK-BASECAMPER-BLACK', pricing: { '48h': 5690, '72h': 6210 }, depositAmount: 900 },
+      { id: 'kit-basecamper-khaki', label: 'Khaki Edition', imageUrl: '/images/packages/base-camper-khaki.png', packageNumber: 'MOCK-BASECAMPER-KHAKI', pricing: { '48h': 5690, '72h': 6210 }, depositAmount: 900 },
     ],
     extras: [
       { id: 'extra-basecamper-plus-kit', name: 'Plus Kit Upgrade — Cooler + Cooking Set', price: 999, minDurationHours: 0, imageUrl: PLUS_KIT_IMAGE },

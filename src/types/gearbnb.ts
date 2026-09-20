@@ -18,7 +18,15 @@ export interface KitExtra {
   imageUrl?: string;
 }
 
-/** A color/material variant of a kit that shares the same price and inclusions. */
+/**
+ * A color/material variant of a kit. Each edition is its own distinct real RMS `Package` row (own
+ * `packageNumber`, own price/deposit columns) — NOT guaranteed to share the parent kit's pricing;
+ * two editions of the same kit (e.g. Black vs Khaki) can be priced differently in RMS. `pricing`/
+ * `depositAmount`/`extraPerDayPrice`/`isOutOfStock` are this edition's own values, resolved from
+ * its own row — never inherited from whichever edition happens to be first/`primary` in
+ * groupPackageRows. Once a customer actually selects an edition, these are what must be displayed
+ * and charged, not the parent PackageKit's own fields (which only ever reflect the first edition).
+ */
 export interface KitEdition {
   id: string;
   label: string;
@@ -29,6 +37,22 @@ export interface KitEdition {
    * submission; the RMS customer API identifies packages by this, not by the Supabase row id.
    */
   packageNumber: string;
+  /** This edition's own fixed price tiers — see this interface's own doc comment on why this can
+   *  differ from the parent kit's `pricing`. */
+  pricing: {
+    '48h': number;
+    '72h': number;
+  };
+  /** This edition's own refundable deposit in PHP. */
+  depositAmount: number;
+  /** This edition's own authoritative per-extra-day rate — see `PackageKit.extraPerDayPrice`. */
+  extraPerDayPrice?: number;
+  /**
+   * True when RMS reports this specific edition as currently unselectable (its own component
+   * stock, via the RMS catalog's `canSelect` — see `PackageKit.isOutOfStock`'s own doc comment).
+   * Two editions of the same kit can disagree (Black in stock, Khaki isn't).
+   */
+  isOutOfStock?: boolean;
 }
 
 /** A bundled equipment package (e.g. "Nomad Kit") available for rent. */
@@ -69,11 +93,14 @@ export interface PackageKit {
   /** Optional duration-gated add-ons for this kit. */
   extras?: KitExtra[];
   /**
-   * True when this kit is permanently unbookable regardless of selected dates (e.g. a required
-   * component is out of stock) — distinct from `unavailableRanges`, which is date-specific. Per
-   * client rule: still shown in the catalog, just marked "Out of Stock" and not addable to cart.
-   * The real `Package` schema has no such column yet; this is a backend/schema requirement, not
-   * something this frontend can compute on its own.
+   * True when RMS's own catalog `canSelect` signal (GET /api/customer/catalog/packages — see
+   * RmsCatalogPackage.canSelect's own doc comment) reports this package as currently unselectable
+   * — a required component's live stock can't cover it, by RMS's own current-snapshot check.
+   * Distinct from `unavailableRanges`, which is date-specific. Per client rule: still shown in the
+   * catalog, just marked "Out of Stock" and not addable to cart (see checkKitAvailability). For a
+   * kit with editions, this reflects the first/primary edition only — see KitEdition's own
+   * `isOutOfStock` for a specific edition's real status. Advisory only, same as RMS's own
+   * `canSelect`: the authoritative, date-aware gate is the availability check re-run at submission.
    */
   isOutOfStock?: boolean;
 }
@@ -240,6 +267,14 @@ export interface CheckoutSelection {
   kitIds: string[];
   itemIds: string[];
   byoGearKeys: string[];
+  /** Selected package add-on keys (byoGearKey(gear)), one array per parent kit id — the same
+   *  include/exclude-from-checkout granularity as kitIds, one level down. An add-on can be excluded
+   *  from checkout on its own, independent of its parent kit or any of that kit's other add-ons.
+   *  Only meaningful for a kitId also present in kitIds. */
+  packageAddOnKeys: Record<string, string[]>;
+  /** Selected BYO add-on keys (byoGearKey(addOn)), one array per parent BYO gear's byoGearKey —
+   *  mirrors packageAddOnKeys, one level down from byoGearKeys. */
+  byoAddOnKeys: Record<string, string[]>;
 }
 
 /** The full shape of the shopping cart / booking flow state. */
@@ -247,6 +282,14 @@ export interface CartState {
   selectedKits: PackageKit[];
   /** Selected KitExtra ids per kit id, for kits chosen via Path A. */
   kitExtras: Record<string, string[]>;
+  /** Optional EXTRA rentable inventory a customer added on top of a selected package, keyed by
+   *  that kit's cart id. These are ordinary gear kinds from the same live Build Your Own catalog
+   *  (`BookableGearSelection`, identical to `byoGears`) — not package contents, and not the
+   *  GearPairing-based `BookableAddOn` mechanism that `byoAddOns` uses. They are submitted to the
+   *  RMS as `bookingGears[]` alongside `packageCode`, which the RMS validates, prices and reserves
+   *  as real inventory. Kept separate from `byoGears` so a package booking never reads as a Build
+   *  Your Own one: the package stays a package, these ride along with it. */
+  packageAddOns: Record<string, BookableGearSelection[]>;
   selectedItems: IndividualItem[];
   /** Selected paid add-on ids per item id, for individual gear chosen via Path B. */
   itemExtras: Record<string, string[]>;

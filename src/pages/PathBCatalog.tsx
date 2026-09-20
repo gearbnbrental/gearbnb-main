@@ -1,19 +1,38 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+﻿import { usePageMeta } from '../hooks/usePageMeta';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import BackLink from '../components/BackLink';
+import FilterPill from '../components/FilterPill';
 import { ChevronIcon, GearPlaceholderIcon } from '../components/icons';
+import ImageLightbox from '../components/ImageLightbox';
 import { useAuth } from '../context/AuthContext';
-import { useCatalog } from '../context/CatalogContext';
+import { useCatalog } from '../context/useCatalog';
 import {
   byoGearKey,
   calculateRentalDurationDays,
   getGearKindPrice,
   useRental,
 } from '../context/RentalContext';
-import type { BookableAddOn, BookableAddOnSelection, BookableGearKind, DurationPresetId, TripDetails } from '../types/gearbnb';
-import { DURATION_PRESETS, DURATION_PROMO_BADGES, getDurationRange, getSeventyTwoHourUpsellDelta } from '../utils/duration';
+import type {
+  BookableAddOn,
+  BookableAddOnSelection,
+  BookableGearKind,
+  DurationPresetId,
+  TripDetails,
+} from '../types/gearbnb';
+import {
+  DURATION_PRESETS,
+  DURATION_PROMO_BADGES,
+  durationFromDates,
+  extraDaysFromDates,
+  getDurationRange,
+  getSeventyTwoHourUpsellDelta,
+  toAvailabilityTimestamp,
+  TODAY,
+} from '../utils/duration';
 import { formatCurrency } from '../utils/format';
-import { checkAvailability, type RmsAvailabilityResult } from '../utils/rmsApi';
+import { toRmsBrand, type RmsAvailabilityRequest, type RmsAvailabilityResult } from '../utils/rmsApi';
+import { useAvailabilityCheck } from '../hooks/useAvailabilityCheck';
 
 /** Mirrors the RMS's own customer-safe display-name construction
  * (src/server/availability/service.ts's kindDisplayName) exactly, so an
@@ -62,6 +81,7 @@ const BYO_DURATION_PRESETS = DURATION_PRESETS.filter(
 // shared module) since they're just a few presentational class strings, matching how each page
 // already owns its own small constants like BYO_DURATION_PRESETS above.
 const CONTROL_LABEL_CLASS = 'mb-2 block text-[11px] font-bold uppercase tracking-wider text-ink-muted';
+const HELPER_TEXT_CLASS = 'mt-1.5 text-xs text-ink-faint';
 const DATE_FIELD_CLASS =
   'h-11 rounded-xl border border-line bg-surface px-3 text-sm text-ink shadow-sm outline-none transition-colors focus:border-brand-forest focus:ring-2 focus:ring-brand-forest/20';
 
@@ -172,21 +192,25 @@ interface AddOnRowProps {
 function AddOnRow({ addOn, quantity, hasDuration, price, showUpsell, onChange }: AddOnRowProps) {
   const max = Math.min(addOn.maxQuantity, addOn.availableCount);
   return (
-    <div className="flex items-center justify-between gap-3 rounded-xl bg-surface-muted p-3">
-      <div>
-        <p className="text-sm font-medium text-ink">{addOn.name}</p>
-        <p className="text-xs text-ink-muted">
+    // Stacked below `sm` for the same reason as GearCard's own price/stepper row above — this row
+    // sits nested one level deeper (inside a selected card's "Optional Add-ons" list), so its
+    // available width is narrower still; the name column previously had no `min-w-0` at all, so a
+    // longer add-on name would force the row to overflow rather than wrap.
+    <div className="flex flex-col items-start gap-2 rounded-xl bg-surface-muted p-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:p-3">
+      <div className="min-w-0">
+        <p className="break-words text-xs font-medium text-ink sm:text-sm">{addOn.name}</p>
+        <p className="text-[11px] text-ink-muted sm:text-xs">
           {hasDuration && price !== null
             ? `${formatCurrency(price)} each`
             : `${formatCurrency(addOn.pricing['48h'])}–${formatCurrency(addOn.pricing['72h'])} each`}
         </p>
         {showUpsell && (
-          <p className="text-xs font-medium text-accent">
+          <p className="hidden text-xs font-medium text-accent sm:block">
             Add {formatCurrency(getSeventyTwoHourUpsellDelta(addOn.pricing))} each to rent for 72h instead
           </p>
         )}
         {quantity > 1 && hasDuration && price !== null && (
-          <p className="text-xs text-ink-muted">Subtotal: {formatCurrency(price * quantity)}</p>
+          <p className="text-[11px] text-ink-muted sm:text-xs">Subtotal: {formatCurrency(price * quantity)}</p>
         )}
       </div>
       {max > 0 ? (
@@ -229,6 +253,7 @@ function GearCard({
   onAddOnQuantityChange,
 }: GearCardProps) {
   const [imageFailed, setImageFailed] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const addOnQuantities = new Map(addOnSelections.map((a) => [`${a.category}|${a.brand}|${a.model ?? ''}`, a.quantity]));
   const isSelected = quantity > 0;
 
@@ -239,19 +264,34 @@ function GearCard({
       }`}
     >
       {/* Edge-to-edge image with overlaid badges — free-accessory tag, stock state, and selected
-       * quantity all sit on the image itself rather than competing with it for space below. */}
+       * quantity all sit on the image itself rather than competing with it for space below.
+       * aspect-square at every width: this grid is 2 columns even at the narrowest mobile width
+       * (see the grid below), so a card's own column is already only ~half the old single-column
+       * width — the image needs no further breakpoint-specific ratio concession beyond a square
+       * crop, which previously only kicked in from `sm` up. */}
       <div className="relative aspect-square w-full overflow-hidden bg-surface-strong">
         {imageFailed || !kind.imageUrl ? (
           <div className="flex h-full w-full items-center justify-center">
             <GearPlaceholderIcon className="h-10 w-10 text-ink-faint" />
           </div>
         ) : (
-          <img
-            src={kind.imageUrl}
-            alt={kind.name}
-            onError={() => setImageFailed(true)}
-            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-          />
+          // A real button (not a click handler on a bare <img>) for keyboard/assistive-tech
+          // reachability — opens the shared ImageLightbox for a larger view. The overlaid
+          // free-accessory/quantity badges below aren't inside this button, so they're unaffected;
+          // the card's own quantity stepper/add button live further down, untouched.
+          <button
+            type="button"
+            onClick={() => setLightboxOpen(true)}
+            aria-label={`View larger image of ${kind.name}`}
+            className="h-full w-full"
+          >
+            <img
+              src={kind.imageUrl}
+              alt={kind.name}
+              onError={() => setImageFailed(true)}
+              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            />
+          </button>
         )}
 
         {kind.freeAccessories.length > 0 && (
@@ -284,34 +324,40 @@ function GearCard({
         )}
       </div>
 
-      <div className="flex flex-1 flex-col gap-2 p-4">
+      <div className="flex flex-1 flex-col gap-1.5 p-2.5 sm:gap-2 sm:p-4">
         <div className="flex items-start justify-between gap-2">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">{kind.category}</p>
+          <p className="text-[10px] font-medium uppercase tracking-wide text-ink-faint sm:text-[11px]">{kind.category}</p>
           {/* Real, RMS-sourced stock count (GET /api/customer/catalog/gear) — never a client-side
            * estimate. Shown even before the item is selected, matching the "Available: N" +
            * quantity control pairing requested for once it is. */}
           {kind.canSelect && (
-            <span className="shrink-0 text-[11px] text-ink-faint">Available: {kind.availableCount}</span>
+            <span className="shrink-0 text-[10px] text-ink-faint sm:text-[11px]">Avail: {kind.availableCount}</span>
           )}
         </div>
-        <h3 className="line-clamp-2 text-sm font-medium leading-snug text-ink" title={kind.name}>
+        <h3 className="line-clamp-2 text-xs font-medium leading-snug text-ink sm:text-sm" title={kind.name}>
           {kind.name}
         </h3>
 
-        <div className="mt-auto flex items-end justify-between gap-2 pt-2">
+        {/* Stacked below `sm` so the QuantityStepper (a fixed ~136px: two h-9 buttons + a w-12
+            input) gets the full width of the card instead of being squeezed beside the price —
+            at 375px in this 2-column grid, a card's own content column is only ~146px, which left
+            room for barely 2-3px of price text once a gear kind was actually selected. Side by
+            side again once the card is wide enough — mirrors PathACatalog's own PackageAddOnsSection
+            card, which already uses this exact pattern for the identical reason. */}
+        <div className="mt-auto flex flex-col items-start gap-1.5 pt-1 sm:flex-row sm:items-end sm:justify-between sm:gap-2 sm:pt-2">
           <div className="min-w-0">
-            <p className="text-lg font-bold leading-tight text-accent">
+            <p className="text-sm font-bold leading-tight text-accent sm:text-lg">
               {hasDuration && price !== null
                 ? formatCurrency(price)
                 : `${formatCurrency(kind.pricing['48h'])}–${formatCurrency(kind.pricing['72h'])}`}
             </p>
             {showUpsell && (
-              <p className="text-[11px] font-medium text-accent">
+              <p className="hidden text-[11px] font-medium text-accent sm:block">
                 +{formatCurrency(getSeventyTwoHourUpsellDelta(kind.pricing))} for 72h
               </p>
             )}
             {quantity > 1 && hasDuration && price !== null && (
-              <p className="text-[11px] text-ink-muted">Subtotal {formatCurrency(price * quantity)}</p>
+              <p className="text-[10px] text-ink-muted sm:text-[11px]">Subtotal {formatCurrency(price * quantity)}</p>
             )}
           </div>
 
@@ -330,6 +376,12 @@ function GearCard({
               // unavailableForDates is only ever computed for already-selected kinds (see the
               // availability effect below, which only checks cart.byoGears) — an unselected kind
               // reaching this branch is always still governed by the static canSelect snapshot.
+              // h-9 w-9 at every width (not a smaller mobile size): this is the one tap target
+              // that actually adds gear to the cart, and it shrank to h-7 (28px) in an earlier
+              // compaction pass — noticeably harder to hit accurately on a real phone, and smaller
+              // than the h-9 QuantityStepper buttons this same control turns into once quantity >
+              // 0. Matching QuantityStepper's own size keeps the tap target consistent whether the
+              // card is showing "+" or the full stepper.
               <button
                 type="button"
                 onClick={() => onQuantityChange(1)}
@@ -340,12 +392,12 @@ function GearCard({
               </button>
             )
           ) : (
-            <span className="shrink-0 text-xs font-medium text-ink-faint">Unavailable</span>
+            <span className="shrink-0 text-[11px] font-medium text-ink-faint sm:text-xs">Unavailable</span>
           )}
         </div>
 
         {isSelected && kind.compatibleAddOns.length > 0 && (
-          <div className="mt-2 flex flex-col gap-2 border-t border-line-soft pt-2">
+          <div className="mt-1.5 flex flex-col gap-1.5 border-t border-line-soft pt-1.5 sm:mt-2 sm:gap-2 sm:pt-2">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-muted">Optional Add-ons</p>
             {kind.compatibleAddOns.map((addOn) => {
               const key = `${addOn.category}|${addOn.brand}|${addOn.model ?? ''}`;
@@ -364,22 +416,42 @@ function GearCard({
           </div>
         )}
       </div>
+      {lightboxOpen && kind.imageUrl && (
+        <ImageLightbox
+          images={[{ src: kind.imageUrl, alt: kind.name }]}
+          index={0}
+          onClose={() => setLightboxOpen(false)}
+          onNavigate={() => {}}
+        />
+      )}
     </div>
   );
 }
 
 export default function PathBCatalog() {
+  usePageMeta(
+    'Camping Gear Rental in Metro Manila | GearBnB',
+    'Customize your adventure with camping gear rental in Metro Manila. Pick the gear you need, build your own package, and enjoy the outdoors your way.',
+  );
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
   const { gearKinds, gearCatalogState, retryGearCatalog } = useCatalog();
   const { cart, totals, updateTripDetails, setByoGearQuantity, setByoAddOnQuantity } = useRental();
-  const [selectedPreset, setSelectedPreset] = useState<ByoDuration | 'custom' | null>(null);
+  // Restored from any already-saved dates (same reasoning as PathACatalog's own selectedDuration
+  // state) so navigating away and back — or simply reloading — doesn't silently drop a duration
+  // the customer already picked while `cart.tripDetails` itself already remembers it.
+  const [selectedPreset, setSelectedPreset] = useState<ByoDuration | null>(() =>
+    durationFromDates(cart.tripDetails.startDate, cart.tripDetails.returnDate),
+  );
+  // Whole days added on top of the 72h preset — see the "Want to rent longer?" control below,
+  // identical in behavior to PathACatalog's own. Restored the same way selectedPreset is.
+  const [extraDays, setExtraDays] = useState(() =>
+    extraDaysFromDates(cart.tripDetails.startDate, cart.tripDetails.returnDate),
+  );
   const [activeCategory, setActiveCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [itemsPage, setItemsPage] = useState(1);
-  const [byoAvailability, setByoAvailability] = useState<RmsAvailabilityResult | 'checking' | null>(null);
-
   const cartItemCount = cart.selectedKits.length + cart.selectedItems.length + cart.byoGears.length;
   const isUnlocked = totals.rentalDurationDays > 0;
   const hasDuration = calculateRentalDurationDays(cart.tripDetails) > 0;
@@ -393,43 +465,51 @@ export default function PathBCatalog() {
   // against the RMS's actual inventory/assignment data, never computed locally, and never checked
   // for the whole catalog (only the customer's own cart selection, one batched request). Add-ons
   // are folded in the same way the RMS's own booking submission treats them: real inventory
-  // consumption alongside the parent gear, not a separate concern.
-  useEffect(() => {
-    if (!isUnlocked || cart.byoGears.length === 0) {
-      setByoAvailability(null);
-      return;
-    }
-    let cancelled = false;
-    setByoAvailability('checking');
-    const timer = setTimeout(() => {
-      const bookingGears = cart.byoGears.map((g) => ({ category: g.category, brand: g.brand, model: g.model, quantity: g.quantity }));
-      const addOns = Object.values(cart.byoAddOns)
-        .flat()
-        .map((a) => ({ category: a.category, brand: a.brand, model: a.model, quantity: a.quantity }));
-      checkAvailability({
-        pickupAt: new Date(`${cart.tripDetails.startDate}T00:00:00`).toISOString(),
-        returnAt: new Date(`${cart.tripDetails.returnDate}T00:00:00`).toISOString(),
-        bookingGears,
-        addOns,
-      })
-        .then((result) => {
-          if (!cancelled) setByoAvailability(result);
-        })
-        .catch(() => {
-          if (!cancelled) setByoAvailability(null);
-        });
-    }, 350);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-    // cart.byoGears / cart.byoAddOns are new array/object references on every relevant change
-    // (RentalContext's reducer never mutates in place), so re-running whenever their identity
-    // changes is exactly "whenever the selection or dates change," nothing more.
-  }, [isUnlocked, cart.tripDetails.startDate, cart.tripDetails.returnDate, cart.byoGears, cart.byoAddOns]);
+  // consumption alongside the parent gear, not a separate concern. The actual debounce/abort/
+  // retry/timeout lifecycle now lives in the shared useAvailabilityCheck hook — this only builds
+  // the request object (or null, when there's nothing to check yet).
+  const byoAvailabilityRequest: RmsAvailabilityRequest | null = useMemo(() => {
+    if (!isUnlocked || cart.byoGears.length === 0) return null;
+    // toAvailabilityTimestamp, not a hardcoded midnight literal — this runs before the customer
+    // ever reaches Trip Details (falls back to midnight until Preferred Time has a real value),
+    // but sends the exact same timestamp the final booking submission would once one exists.
+    // dates are already known-valid here (isUnlocked requires totals.rentalDurationDays > 0), so
+    // these can never actually be null.
+    const pickupAt = toAvailabilityTimestamp(cart.tripDetails.startDate, cart.tripDetails.preferredTime)!;
+    const returnAt = toAvailabilityTimestamp(cart.tripDetails.returnDate, cart.tripDetails.preferredTime)!;
+    const bookingGears = cart.byoGears.map((g) => ({ category: g.category, brand: toRmsBrand(g.brand), model: g.model, quantity: g.quantity }));
+    const addOns = Object.values(cart.byoAddOns)
+      .flat()
+      .map((a) => ({ category: a.category, brand: toRmsBrand(a.brand), model: a.model, quantity: a.quantity }));
+    return { pickupAt, returnAt, bookingGears, addOns };
+  }, [isUnlocked, cart.tripDetails.startDate, cart.tripDetails.returnDate, cart.tripDetails.preferredTime, cart.byoGears, cart.byoAddOns]);
+
+  const byoAvailabilityCheck = useAvailabilityCheck(byoAvailabilityRequest);
+  // Preserves the exact pre-existing local shape every consumer below already reads
+  // (RmsAvailabilityResult | 'checking' | 'error' | null) — no changes needed to
+  // unavailableNames or any of the render/CTA logic further down. 'rate_limited' collapses into
+  // the same 'error' this page has always shown: BYO never had a distinct rate-limited message,
+  // and the shared hook's own coordinator already absorbs short rate-limit blips inline before
+  // ever surfacing this state at all.
+  const byoAvailability: RmsAvailabilityResult | 'checking' | 'error' | null =
+    byoAvailabilityCheck.status === 'idle'
+      ? null
+      : byoAvailabilityCheck.status === 'checking'
+        ? 'checking'
+        : byoAvailabilityCheck.status === 'success'
+          ? byoAvailabilityCheck.result ?? 'error'
+          : 'error';
+
+  const retryByoAvailability = byoAvailabilityCheck.retry;
 
   const unavailableNames = useMemo(() => {
-    if (!byoAvailability || byoAvailability === 'checking' || byoAvailability.available) return new Set<string>();
+    // 'error' has no issues list to draw from (the RMS never actually answered) — never treated as
+    // "nothing is unavailable," just as "nothing SPECIFIC can be named yet." The bottom CTA below
+    // still blocks on 'error' independently of this set, so a stale "everything looks fine" per-item
+    // badge state is never the only thing standing between the customer and checking out.
+    if (!byoAvailability || byoAvailability === 'checking' || byoAvailability === 'error' || byoAvailability.available) {
+      return new Set<string>();
+    }
     return new Set(byoAvailability.issues.map((i) => i.name));
   }, [byoAvailability]);
 
@@ -475,21 +555,50 @@ export default function PathBCatalog() {
     return false;
   }
 
-  function handlePresetSelect(preset: ByoDuration) {
+  // Mirrors PathACatalog's own handleDurationSelect exactly: extra days only ever stack on top of
+  // 72h, so switching to 48h always clears them rather than letting a previously-chosen "+2 extra
+  // days" silently reappear once 72h is picked again.
+  function handleDurationSelect(preset: ByoDuration) {
     setSelectedPreset(preset);
-    updateTripDetails(getDurationRange(preset));
+    const nextExtraDays = preset === '72h' ? extraDays : 0;
+    setExtraDays(nextExtraDays);
+    // TODAY (the customer's local day), not getDurationRange's own default — that default is the
+    // UTC day, which would seed a start date below this field's own `min` for the first 8 hours of
+    // every Philippine day. Same reasoning as PathACatalog's own handleDurationSelect.
+    updateTripDetails(getDurationRange(preset, cart.tripDetails.startDate || TODAY, nextExtraDays));
   }
 
-  function handleCustomToggle() {
-    setSelectedPreset('custom');
+  // Mirrors PathACatalog's own handleStartDateChange exactly.
+  function handleStartDateChange(value: string) {
+    if (!selectedPreset) return;
+    // A date input can be cleared to '' (and a partially-typed date reads as invalid), which
+    // getDurationRange would turn into an Invalid Date and throw on — clearing the field just
+    // clears both dates instead, which the rest of this page already treats as "no duration yet"
+    // (see isUnlocked/hasDuration above).
+    if (!value || Number.isNaN(new Date(value).getTime())) {
+      updateTripDetails({ startDate: '', returnDate: '' });
+      return;
+    }
+    updateTripDetails(getDurationRange(selectedPreset, value, extraDays));
+  }
+
+  /** Only reachable while `selectedPreset === '72h'` (see the control itself) — clamped to never
+   *  go negative, since there's no "-1 extra day" concept. Mirrors PathACatalog's own
+   *  handleExtraDaysChange exactly. */
+  function handleExtraDaysChange(next: number) {
+    const clamped = Math.max(0, next);
+    setExtraDays(clamped);
+    updateTripDetails(getDurationRange('72h', cart.tripDetails.startDate || TODAY, clamped));
   }
 
   return (
-    <div className="flex min-h-screen flex-col pb-28">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-5 sm:p-6">
+    // pb-56 — see Cart.tsx's identical comment: this route's lifted floating buttons reach up to
+    // ~208px above the viewport bottom, more than pb-28 (112px) cleared.
+    <div className="flex min-h-screen flex-col pb-56">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 p-4 sm:gap-6 sm:p-6">
         <BackLink to="/catalog" label="Back to Browse Gear" />
         <div className="flex flex-col gap-1">
-          <h1 className="font-serif text-xl font-semibold text-ink">Build Your Own</h1>
+          <h1 className="font-serif text-lg font-semibold text-ink sm:text-xl">Build Your Own</h1>
           <p className="text-sm text-ink-muted">Pick your rental duration first, then mix and match individual gear.</p>
           <p className="text-xs text-ink-faint">
             Prices shown are estimates from our live catalog — GearBnB confirms final rates when your booking
@@ -502,22 +611,15 @@ export default function PathBCatalog() {
 
         <div
           id="byo-duration-picker"
-          className="flex flex-col space-y-6 rounded-2xl border border-line/80 bg-surface-muted/60 p-6 shadow-sm md:p-8"
+          className="flex flex-col space-y-3 rounded-2xl border border-line/80 bg-surface-muted/60 p-3 shadow-sm sm:space-y-6 sm:p-6 md:p-8"
         >
           <div>
             <span className={CONTROL_LABEL_CLASS}>Rental Duration</span>
+            {/* Duration pills and the extra-day stepper share one flex-wrap row so they read as
+                one control group — identical structure to PathACatalog's own Rental Duration row. */}
             <div className="flex flex-wrap items-center gap-3">
               {BYO_DURATION_PRESETS.map((preset) => (
-                <button
-                  key={preset.id}
-                  type="button"
-                  onClick={() => handlePresetSelect(preset.id)}
-                  className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-                    selectedPreset === preset.id
-                      ? 'bg-brand-forest text-white'
-                      : 'bg-surface text-ink-muted hover:bg-surface-strong'
-                  }`}
-                >
+                <FilterPill key={preset.id} selected={selectedPreset === preset.id} onClick={() => handleDurationSelect(preset.id)}>
                   {preset.label}
                   {DURATION_PROMO_BADGES[preset.id] && (
                     <span
@@ -528,46 +630,87 @@ export default function PathBCatalog() {
                       {DURATION_PROMO_BADGES[preset.id]}
                     </span>
                   )}
-                </button>
+                </FilterPill>
               ))}
-              <button
-                type="button"
-                onClick={handleCustomToggle}
-                className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-                  selectedPreset === 'custom' ? 'bg-brand-forest text-white' : 'bg-surface text-ink-muted hover:bg-surface-strong'
-                }`}
-              >
-                Custom / Extra Days
-              </button>
+
+              {/* Subtle, additive control — the 48h/72h pills above are untouched, exactly as
+                  before. Only appears once 72h is actually selected, since extra days only ever
+                  stack on top of that tier (48h has no "beyond" concept here). Replaces the old
+                  free-form "Custom / Extra Days" date pair: that let a customer pick any arbitrary
+                  date range, which is a duration this page's own pricing (getGearKindPrice's tiered
+                  48h/72h+extra-day formula) was never designed to be chosen outside of — this
+                  control reaches the same "rent longer than 72h" outcome without inventing a new
+                  duration value, identical to PathACatalog's own "Want to rent longer?" control. */}
+              {selectedPreset === '72h' && (
+                <>
+                  <span className="text-sm text-ink-muted">Want to rent longer?</span>
+                  <div className="flex items-center gap-2 rounded-full border border-line bg-surface px-1.5 py-1">
+                    <button
+                      type="button"
+                      onClick={() => handleExtraDaysChange(extraDays - 1)}
+                      disabled={extraDays === 0}
+                      aria-label="Remove one extra day"
+                      className="flex h-7 w-7 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-surface-strong hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      −
+                    </button>
+                    <span className="min-w-[6.5rem] text-center text-sm font-medium text-ink">
+                      {extraDays === 0 ? 'No extra days' : `+${extraDays} extra day${extraDays > 1 ? 's' : ''}`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleExtraDaysChange(extraDays + 1)}
+                      aria-label="Add one extra day"
+                      className="flex h-7 w-7 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-surface-strong hover:text-ink"
+                    >
+                      +
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
-          {selectedPreset === 'custom' && (
-            <div>
-              <span className={CONTROL_LABEL_CLASS}>Custom Rental Dates</span>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-sm font-medium text-ink">Start Date</span>
-                  <input
-                    type="date"
-                    value={cart.tripDetails.startDate}
-                    onChange={(e) => updateTripDetails({ startDate: e.target.value })}
-                    className={DATE_FIELD_CLASS}
-                  />
-                </label>
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-sm font-medium text-ink">End Date</span>
-                  <input
-                    type="date"
-                    value={cart.tripDetails.returnDate}
-                    min={cart.tripDetails.startDate}
-                    onChange={(e) => updateTripDetails({ returnDate: e.target.value })}
-                    className={DATE_FIELD_CLASS}
-                  />
-                </label>
-              </div>
+          {/* Both dates read from (and write back to) the shared cart trip details — same as
+              PathACatalog's identical Rental Dates section. */}
+          <div>
+            <span className={CONTROL_LABEL_CLASS}>Rental Dates</span>
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-ink">Start Date</span>
+                <input
+                  type="date"
+                  value={cart.tripDetails.startDate}
+                  min={TODAY}
+                  disabled={!selectedPreset}
+                  onChange={(e) => handleStartDateChange(e.target.value)}
+                  className={`${DATE_FIELD_CLASS} disabled:cursor-not-allowed disabled:opacity-60`}
+                />
+              </label>
+              {/* Read-only by design, never a free-form input — identical reasoning to
+                  PathACatalog's own End Date field: the end date is fully determined by the chosen
+                  duration, so letting it be typed freely would produce rental periods this page's
+                  own tiered pricing can't price, and would make an invalid range (end before start)
+                  possible instead of structurally impossible. */}
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-ink">End Date</span>
+                <input
+                  type="date"
+                  value={cart.tripDetails.returnDate}
+                  readOnly
+                  disabled
+                  className={`${DATE_FIELD_CLASS} cursor-not-allowed`}
+                />
+              </label>
             </div>
-          )}
+            <p className={HELPER_TEXT_CLASS}>
+              {selectedPreset
+                ? `Your end date is set automatically from the ${
+                    BYO_DURATION_PRESETS.find((preset) => preset.id === selectedPreset)?.label ?? 'selected'
+                  } rental duration${extraDays > 0 ? ` plus ${extraDays} extra day${extraDays > 1 ? 's' : ''}` : ''} above.`
+                : 'Select a rental duration above to choose your rental dates.'}
+            </p>
+          </div>
         </div>
 
         {isUnlocked && byoAvailability === 'checking' && (
@@ -575,7 +718,22 @@ export default function PathBCatalog() {
             Checking availability for your selected gear…
           </p>
         )}
-        {isUnlocked && byoAvailability && byoAvailability !== 'checking' && !byoAvailability.available && (
+        {isUnlocked && byoAvailability === 'error' && (
+          <div className="flex flex-col items-start gap-2 rounded-xl border border-red-300 bg-red-50 p-4 text-sm dark:border-red-500/30 dark:bg-red-500/10">
+            <p className="font-semibold text-red-700 dark:text-red-400">Couldn't check availability</p>
+            <p className="text-red-700/90 dark:text-red-400/90">
+              We couldn't verify your selected gear's availability just now. Please try again before checking out.
+            </p>
+            <button
+              type="button"
+              onClick={retryByoAvailability}
+              className="rounded-lg border border-red-300 bg-surface px-3 py-1.5 text-xs font-medium text-red-700 shadow-sm transition-colors hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+        {isUnlocked && byoAvailability && byoAvailability !== 'checking' && byoAvailability !== 'error' && !byoAvailability.available && (
           <div className="flex flex-col gap-1 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm dark:border-amber-400/30 dark:bg-amber-400/10">
             <p className="font-semibold text-amber-800 dark:text-amber-300">
               Some of your selected gear isn't available for these dates
@@ -618,7 +776,7 @@ export default function PathBCatalog() {
 
           <div className={!isUnlocked ? 'pointer-events-none opacity-40' : undefined}>
             {gearCatalogState === 'loading' && (
-              <div className="grid animate-pulse gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-busy="true" aria-label="Loading gear catalog">
+              <div className="grid grid-cols-2 animate-pulse gap-2.5 sm:gap-4 lg:grid-cols-3" aria-busy="true" aria-label="Loading gear catalog">
                 {Array.from({ length: 6 }, (_, index) => (
                   <div key={index} className="flex flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-sm">
                     <div className="aspect-square w-full bg-surface-strong" />
@@ -662,13 +820,22 @@ export default function PathBCatalog() {
                   )}
                 </label>
 
-                <div className="flex flex-wrap items-center gap-2">
+                {/* One swipeable row on phones — same pattern as PackageAddOnsSection's category
+                    filter: wrapping many category chips into a block of buttons would consume far
+                    more vertical space than the products it filters. Bleeds to the page's own
+                    edges (-mx-4/px-4 match the outer container's mobile padding) so chips scroll
+                    off-screen cleanly. From `sm` up there's room, so it wraps normally. */}
+                <div
+                  role="group"
+                  aria-label="Filter gear by category"
+                  className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0"
+                >
                   {categories.map((category) => (
                     <button
                       key={category}
                       type="button"
                       onClick={() => setActiveCategory(category)}
-                      className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+                      className={`h-8 shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-medium transition-colors sm:h-9 sm:px-4 sm:text-sm ${
                         activeCategory === category
                           ? 'bg-brand-forest text-white'
                           : 'bg-surface-strong text-ink-muted hover:bg-line'
@@ -686,7 +853,9 @@ export default function PathBCatalog() {
                   </p>
                 ) : (
                   <>
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {/* grid-cols-2 below sm (not stacked to 1) — same reasoning as Path A's package
+                        grid: a mobile catalog should show several gear cards per viewport. */}
+                    <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-3">
                       {paginatedKinds.map((kind) => {
                         const key = byoGearKey(kind);
                         return (
@@ -783,7 +952,18 @@ export default function PathBCatalog() {
               Rental Fee {formatCurrency(totals.dueBeforeStart)}
             </span>
           </div>
-          {byoAvailability !== 'checking' && byoAvailability && !byoAvailability.available ? (
+          {byoAvailability === 'error' ? (
+            // A failed check is never treated as "nothing to block on" — same reasoning as
+            // unavailableNames above: the RMS never actually confirmed this selection is bookable,
+            // so this blocks exactly like a real unavailable result would, not like the "not yet
+            // checked" null state.
+            <span
+              className="cursor-not-allowed rounded-lg bg-surface-strong px-5 py-2.5 text-sm font-semibold text-ink-faint"
+              title="We couldn't verify availability — try again above before checking out"
+            >
+              Couldn't check availability
+            </span>
+          ) : byoAvailability !== 'checking' && byoAvailability && !byoAvailability.available ? (
             <span
               className="cursor-not-allowed rounded-lg bg-surface-strong px-5 py-2.5 text-sm font-semibold text-ink-faint"
               title="Adjust or remove the unavailable gear above before checking out"

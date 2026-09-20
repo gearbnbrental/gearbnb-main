@@ -22,7 +22,7 @@ import type {
   VerificationDocs,
   VerificationDocumentKey,
 } from '../types/gearbnb';
-import { useCatalog } from './CatalogContext';
+import { useCatalog } from './useCatalog';
 import { useAuth } from './AuthContext';
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
@@ -51,11 +51,18 @@ const initialVerificationDocs: VerificationDocs = {
   confirmed: false,
 };
 
-const initialCheckoutSelection: CheckoutSelection = { kitIds: [], itemIds: [], byoGearKeys: [] };
+const initialCheckoutSelection: CheckoutSelection = {
+  kitIds: [],
+  itemIds: [],
+  byoGearKeys: [],
+  packageAddOnKeys: {},
+  byoAddOnKeys: {},
+};
 
 const initialCartState: CartState = {
   selectedKits: [],
   kitExtras: {},
+  packageAddOns: {},
   selectedItems: [],
   itemExtras: {},
   byoGears: [],
@@ -86,28 +93,120 @@ function userCartStorageKey(authUserId: string): string {
 }
 
 /**
- * The slices of the cart that survive a reload. Verification state is deliberately excluded:
- * the browser File objects behind it cannot be serialised, and persisting slot metadata without
- * them would let the submission gate pass on files the page no longer holds.
+ * The slices of the cart that survive a reload. Verification state is mostly deliberately
+ * excluded: the browser File objects behind an upload can't be serialised, and persisting slot
+ * metadata without them would let the submission gate pass on files the page no longer holds —
+ * see loadPersistedCart's own per-user branch, which still starts `documents`/`confirmed`/the
+ * agreement checkboxes empty. The one exception is `verificationContact`: plain text the customer
+ * already typed (never a file, a token, or anything sensitive), persisted so it isn't lost to a
+ * refresh or an accidental nav-away — the actual "verification DETAILS shouldn't disappear" ask,
+ * without touching the file-upload gate's correctness at all.
  */
 interface PersistedCart {
   selectedKits: PackageKit[];
   kitExtras: Record<string, string[]>;
+  packageAddOns: Record<string, BookableGearSelection[]>;
   selectedItems: IndividualItem[];
   itemExtras: Record<string, string[]>;
   byoGears: BookableGearSelection[];
   byoAddOns: Record<string, BookableAddOnSelection[]>;
   tripDetails: TripDetails;
+  verificationContact: Pick<VerificationDocs, 'fullName' | 'phone' | 'email'>;
+  /** The customer's own include/exclude-from-checkout choices — persisted (unlike verification
+   *  documents) so a refresh no longer silently re-includes something the customer had unchecked.
+   *  Sanitized against the rest of this restored cart in loadPersistedCart, never trusted as-is. */
+  checkoutSelection: CheckoutSelection;
 }
+
+const EMPTY_VERIFICATION_CONTACT: Pick<VerificationDocs, 'fullName' | 'phone' | 'email'> = {
+  fullName: '',
+  phone: '',
+  email: '',
+};
 
 const EMPTY_PERSISTED_CART: Omit<PersistedCart, 'tripDetails'> = {
   selectedKits: [],
   kitExtras: {},
+  packageAddOns: {},
   selectedItems: [],
   itemExtras: {},
   byoGears: [],
   byoAddOns: {},
+  verificationContact: EMPTY_VERIFICATION_CONTACT,
+  checkoutSelection: initialCheckoutSelection,
 };
+
+/**
+ * Restores a persisted `checkoutSelection` against what actually survived the rest of restoration
+ * above (selectedKits/selectedItems/packageAddOns/byoGears/byoAddOns, already sanitized) — a stale
+ * id/key pointing at something that's gone (removed, corrupted, or dropped by sanitization) is
+ * dropped rather than trusted, same reasoning as packageAddOns/byoAddOns' own sanitization just
+ * above. `persisted` is `undefined` only for a cart saved before this field existed (an older
+ * localStorage payload) — that one case falls back to the pre-existing "everything restored starts
+ * selected" behavior for kits/items/byoGears only, since there's no real prior choice to preserve
+ * for those. Package/BYO add-ons are deliberately NOT auto-selected in that fallback (unlike
+ * kits/items/byoGears): an add-on the customer never re-confirmed this session must require an
+ * explicit checkbox before it can ride along into an availability check or a booking — see the
+ * "Tri-Pod Camping Fan" legacy-cart bug this fixes. Any other cart, however partial or malformed,
+ * restores exactly what it can and discards the rest, never re-selecting something the customer
+ * had actually unchecked.
+ */
+export function sanitizeCheckoutSelection(
+  persisted: Partial<CheckoutSelection> | undefined,
+  restored: {
+    selectedKits: PackageKit[];
+    selectedItems: IndividualItem[];
+    packageAddOns: Record<string, BookableGearSelection[]>;
+    byoGears: BookableGearSelection[];
+    byoAddOns: Record<string, BookableAddOnSelection[]>;
+  },
+): CheckoutSelection {
+  const validKitIds = new Set(restored.selectedKits.map((kit) => kit.id));
+  const validItemIds = new Set(restored.selectedItems.map((item) => item.id));
+  const validByoGearKeys = new Set(restored.byoGears.map((gear) => byoGearKey(gear)));
+
+  if (!persisted) {
+    // Kits/items/byoGears keep the pre-existing "everything restored starts selected" behavior —
+    // there's no prior explicit choice to preserve for a cart this old, and it's the same
+    // top-level entry a customer already reviews via its own checkbox on the Cart page. Add-ons,
+    // however, start UNselected: they're a second, independent selection level the customer never
+    // had a chance to set for this legacy cart, and defaulting them to selected is exactly what
+    // silently reintroduced a stale add-on (e.g. "Tri-Pod Camping Fan") into an availability check
+    // or booking payload the customer never asked for.
+    return {
+      kitIds: [...validKitIds],
+      itemIds: [...validItemIds],
+      byoGearKeys: [...validByoGearKeys],
+      packageAddOnKeys: {},
+      byoAddOnKeys: {},
+    };
+  }
+
+  const packageAddOnKeys: Record<string, string[]> = {};
+  for (const [kitId, keys] of Object.entries(persisted.packageAddOnKeys ?? {})) {
+    if (!validKitIds.has(kitId) || !Array.isArray(keys)) continue;
+    const validKeys = new Set((restored.packageAddOns[kitId] ?? []).map((gear) => byoGearKey(gear)));
+    const kept = keys.filter((key) => validKeys.has(key));
+    if (kept.length > 0) packageAddOnKeys[kitId] = kept;
+  }
+  const byoAddOnKeys: Record<string, string[]> = {};
+  for (const [gearKey, keys] of Object.entries(persisted.byoAddOnKeys ?? {})) {
+    if (!validByoGearKeys.has(gearKey) || !Array.isArray(keys)) continue;
+    const validKeys = new Set((restored.byoAddOns[gearKey] ?? []).map((addOn) => byoGearKey(addOn)));
+    const kept = keys.filter((key) => validKeys.has(key));
+    if (kept.length > 0) byoAddOnKeys[gearKey] = kept;
+  }
+
+  return {
+    kitIds: (Array.isArray(persisted.kitIds) ? persisted.kitIds : []).filter((id) => validKitIds.has(id)),
+    itemIds: (Array.isArray(persisted.itemIds) ? persisted.itemIds : []).filter((id) => validItemIds.has(id)),
+    byoGearKeys: (Array.isArray(persisted.byoGearKeys) ? persisted.byoGearKeys : []).filter((key) =>
+      validByoGearKeys.has(key),
+    ),
+    packageAddOnKeys,
+    byoAddOnKeys,
+  };
+}
 
 function loadPersistedCart(storageKey: string): CartState {
   try {
@@ -129,6 +228,16 @@ function loadPersistedCart(storageKey: string): CartState {
 
     const selectedKits = Array.isArray(parsed.selectedKits) ? parsed.selectedKits : [];
     const selectedItems = Array.isArray(parsed.selectedItems) ? parsed.selectedItems : [];
+    // Same sanitization reasoning as byoAddOns below: an entry whose parent kit is no longer in
+    // the restored cart is dropped outright, and a corrupted (non-positive/non-integer) quantity
+    // is filtered out rather than trusted — these become real reserved inventory at submission.
+    const validKitIds = new Set(selectedKits.map((kit) => kit.id));
+    const packageAddOns: Record<string, BookableGearSelection[]> = {};
+    for (const [kitId, gears] of Object.entries(parsed.packageAddOns ?? {})) {
+      if (!validKitIds.has(kitId) || !Array.isArray(gears)) continue;
+      const sanitized = gears.filter((gear) => Number.isInteger(gear?.quantity) && gear.quantity > 0);
+      if (sanitized.length > 0) packageAddOns[kitId] = sanitized;
+    }
     // Sanitized here, at hydration, rather than relying solely on REVALIDATE_AGAINST_CATALOG:
     // that pass deliberately leaves byoGears untouched whenever the (no-mock-fallback) gear
     // catalog hasn't loaded yet or failed to — correct for not wiping a legitimate BYO selection
@@ -149,19 +258,23 @@ function loadPersistedCart(storageKey: string): CartState {
       ...initialCartState,
       selectedKits,
       kitExtras: parsed.kitExtras ?? {},
+      packageAddOns,
       selectedItems,
       itemExtras: parsed.itemExtras ?? {},
       byoGears,
       byoAddOns,
       tripDetails: { ...initialTripDetails, ...parsed.tripDetails },
-      // The selection itself is never persisted — every entry restored from a previous session
-      // starts selected again, same as a freshly-added one, rather than reviving a stale
-      // in-progress narrowing from before the tab was closed.
-      checkoutSelection: {
-        kitIds: selectedKits.map((kit) => kit.id),
-        itemIds: selectedItems.map((item) => item.id),
-        byoGearKeys: byoGears.map((gear) => byoGearKey(gear)),
-      },
+      // Only the plain contact fields restore — documents/confirmed/the agreement checkboxes
+      // stay at their initial (empty) values exactly as before, so a stale unconfirmed upload
+      // reference can never sit in the restored cart. See PersistedCart's own doc comment.
+      verificationDocs: { ...initialVerificationDocs, ...parsed.verificationContact },
+      checkoutSelection: sanitizeCheckoutSelection(parsed.checkoutSelection, {
+        selectedKits,
+        selectedItems,
+        packageAddOns,
+        byoGears,
+        byoAddOns,
+      }),
     };
   } catch {
     // Unavailable (private mode, disabled storage) or corrupt — start clean rather than throw.
@@ -181,11 +294,18 @@ function persistCart(storageKey: string, cart: CartState): void {
         : {
             selectedKits: cart.selectedKits,
             kitExtras: cart.kitExtras,
+            packageAddOns: cart.packageAddOns,
             selectedItems: cart.selectedItems,
             itemExtras: cart.itemExtras,
             byoGears: cart.byoGears,
             byoAddOns: cart.byoAddOns,
             tripDetails: cart.tripDetails,
+            verificationContact: {
+              fullName: cart.verificationDocs.fullName,
+              phone: cart.verificationDocs.phone,
+              email: cart.verificationDocs.email,
+            },
+            checkoutSelection: cart.checkoutSelection,
           };
     localStorage.setItem(storageKey, JSON.stringify(payload));
   } catch {
@@ -263,9 +383,19 @@ type CartAction =
   | { type: 'DISMISS_REMOVED_NOTICE' }
   | { type: 'SET_BYO_GEAR_QUANTITY'; gear: BookableGearKind; quantity: number }
   | { type: 'SET_BYO_ADDON_QUANTITY'; gearKey: string; addOn: BookableAddOn; quantity: number }
+  // Extra rentable inventory added on top of a selected PACKAGE — ordinary gear kinds from the
+  // same live BYO catalog, submitted as bookingGears[] alongside packageCode. Never converts the
+  // package into a Build Your Own selection; see CartState.packageAddOns' own comment.
+  | { type: 'SET_PACKAGE_ADDON_QUANTITY'; kitId: string; gear: BookableGearKind; quantity: number }
   | { type: 'TOGGLE_KIT_SELECTED'; kitId: string }
   | { type: 'TOGGLE_ITEM_SELECTED'; itemId: string }
   | { type: 'TOGGLE_BYO_GEAR_SELECTED'; gearKey: string }
+  // Independent checkout-selection toggle for one package add-on, scoped to its parent kit id —
+  // excludes just this add-on from the next checkout without touching the kit or its other
+  // add-ons, and without removing it from the cart (see CheckoutSelection.packageAddOnKeys).
+  | { type: 'TOGGLE_PACKAGE_ADDON_SELECTED'; kitId: string; addOnKey: string }
+  // Mirrors TOGGLE_PACKAGE_ADDON_SELECTED for a BYO add-on, scoped to its parent gear's byoGearKey.
+  | { type: 'TOGGLE_BYO_ADDON_SELECTED'; gearKey: string; addOnKey: string }
   | { type: 'SET_ALL_CHECKOUT_SELECTED'; selected: boolean }
   | { type: 'CLEAR_CART' }
   // Wholesale-replaces the cart with whatever is stored under a different account's (or the
@@ -306,13 +436,23 @@ function cartReducer(state: CartState, action: CartAction): CartState {
       const kitExtras = Object.fromEntries(
         Object.entries(state.kitExtras).filter(([kitId]) => kitId !== action.kitId),
       );
+      // Extra inventory belongs to the package it was added to — removing the package removes it
+      // too, while every unrelated BYO selection (a different cart concept entirely) is untouched.
+      const packageAddOns = Object.fromEntries(
+        Object.entries(state.packageAddOns).filter(([kitId]) => kitId !== action.kitId),
+      );
+      const packageAddOnKeys = Object.fromEntries(
+        Object.entries(state.checkoutSelection.packageAddOnKeys).filter(([kitId]) => kitId !== action.kitId),
+      );
       return {
         ...state,
         selectedKits: state.selectedKits.filter((kit) => kit.id !== action.kitId),
         kitExtras,
+        packageAddOns,
         checkoutSelection: {
           ...state.checkoutSelection,
           kitIds: withoutSelected(state.checkoutSelection.kitIds, action.kitId),
+          packageAddOnKeys,
         },
       };
     }
@@ -415,6 +555,8 @@ function cartReducer(state: CartState, action: CartAction): CartState {
       if (action.quantity <= 0) {
         const byoAddOns = { ...state.byoAddOns };
         delete byoAddOns[key];
+        const byoAddOnKeys = { ...state.checkoutSelection.byoAddOnKeys };
+        delete byoAddOnKeys[key];
         return {
           ...state,
           byoGears: withoutGear,
@@ -422,6 +564,7 @@ function cartReducer(state: CartState, action: CartAction): CartState {
           checkoutSelection: {
             ...state.checkoutSelection,
             byoGearKeys: withoutSelected(state.checkoutSelection.byoGearKeys, key),
+            byoAddOnKeys,
           },
         };
       }
@@ -453,16 +596,93 @@ function cartReducer(state: CartState, action: CartAction): CartState {
     case 'SET_BYO_ADDON_QUANTITY': {
       if (!state.byoGears.some((g) => byoGearKey(g) === action.gearKey)) return state;
 
+      const addOnKey = byoGearKey(action.addOn);
       const existing = state.byoAddOns[action.gearKey] ?? [];
-      const withoutAddOn = existing.filter(
-        (a) => byoGearKey(a) !== byoGearKey(action.addOn),
-      );
+      const hadAddOn = existing.some((a) => byoGearKey(a) === addOnKey);
+      const withoutAddOn = existing.filter((a) => byoGearKey(a) !== addOnKey);
       const nextForGear =
         action.quantity <= 0 ? withoutAddOn : [...withoutAddOn, { ...action.addOn, quantity: action.quantity }];
+
+      // Mirrors ADD_KIT/ADD_ITEM/SET_BYO_GEAR_QUANTITY: a newly added add-on starts selected for
+      // checkout; going to quantity 0 (removal) drops its selection reference the same way
+      // SET_BYO_GEAR_QUANTITY(0) does above; an ordinary quantity change on an already-present
+      // add-on leaves its existing checked/unchecked state untouched.
+      const existingKeys = state.checkoutSelection.byoAddOnKeys[action.gearKey] ?? [];
+      const nextKeys =
+        action.quantity <= 0
+          ? withoutSelected(existingKeys, addOnKey)
+          : hadAddOn
+            ? existingKeys
+            : withSelected(existingKeys, addOnKey);
+      const byoAddOnKeys = { ...state.checkoutSelection.byoAddOnKeys };
+      if (nextKeys.length > 0) byoAddOnKeys[action.gearKey] = nextKeys;
+      else delete byoAddOnKeys[action.gearKey];
 
       return {
         ...state,
         byoAddOns: { ...state.byoAddOns, [action.gearKey]: nextForGear },
+        checkoutSelection: { ...state.checkoutSelection, byoAddOnKeys },
+      };
+    }
+    case 'TOGGLE_BYO_ADDON_SELECTED': {
+      const existingKeys = state.checkoutSelection.byoAddOnKeys[action.gearKey] ?? [];
+      const nextKeys = existingKeys.includes(action.addOnKey)
+        ? withoutSelected(existingKeys, action.addOnKey)
+        : withSelected(existingKeys, action.addOnKey);
+      return {
+        ...state,
+        checkoutSelection: {
+          ...state.checkoutSelection,
+          byoAddOnKeys: { ...state.checkoutSelection.byoAddOnKeys, [action.gearKey]: nextKeys },
+        },
+      };
+    }
+
+    // Mirrors SET_BYO_GEAR_QUANTITY's upsert, but scoped to one selected package's extra
+    // inventory: quantity 0 removes the line, a positive quantity stores the full catalog
+    // snapshot (price/availability included) exactly as byoGears does. Guarded on the kit
+    // actually being selected so a stale control can never attach inventory to nothing.
+    case 'SET_PACKAGE_ADDON_QUANTITY': {
+      if (!state.selectedKits.some((kit) => kit.id === action.kitId)) return state;
+
+      const key = byoGearKey(action.gear);
+      const existing = state.packageAddOns[action.kitId] ?? [];
+      const hadGear = existing.some((gear) => byoGearKey(gear) === key);
+      const withoutGear = existing.filter((gear) => byoGearKey(gear) !== key);
+      const nextForKit =
+        action.quantity <= 0 ? withoutGear : [...withoutGear, { ...action.gear, quantity: action.quantity }];
+
+      // Same selection bookkeeping as SET_BYO_ADDON_QUANTITY above — newly added starts selected,
+      // quantity 0 (removal) drops the selection reference, an ordinary quantity change on an
+      // already-present add-on leaves its checked/unchecked state as the customer set it.
+      const existingKeys = state.checkoutSelection.packageAddOnKeys[action.kitId] ?? [];
+      const nextKeys =
+        action.quantity <= 0
+          ? withoutSelected(existingKeys, key)
+          : hadGear
+            ? existingKeys
+            : withSelected(existingKeys, key);
+      const packageAddOnKeys = { ...state.checkoutSelection.packageAddOnKeys };
+      if (nextKeys.length > 0) packageAddOnKeys[action.kitId] = nextKeys;
+      else delete packageAddOnKeys[action.kitId];
+
+      return {
+        ...state,
+        packageAddOns: { ...state.packageAddOns, [action.kitId]: nextForKit },
+        checkoutSelection: { ...state.checkoutSelection, packageAddOnKeys },
+      };
+    }
+    case 'TOGGLE_PACKAGE_ADDON_SELECTED': {
+      const existingKeys = state.checkoutSelection.packageAddOnKeys[action.kitId] ?? [];
+      const nextKeys = existingKeys.includes(action.addOnKey)
+        ? withoutSelected(existingKeys, action.addOnKey)
+        : withSelected(existingKeys, action.addOnKey);
+      return {
+        ...state,
+        checkoutSelection: {
+          ...state.checkoutSelection,
+          packageAddOnKeys: { ...state.checkoutSelection.packageAddOnKeys, [action.kitId]: nextKeys },
+        },
       };
     }
 
@@ -540,10 +760,62 @@ function cartReducer(state: CartState, action: CartAction): CartState {
       const kitIdSet = new Set(selectedKits.map((kit) => kit.id));
       const itemIdSet = new Set(selectedItems.map((item) => item.id));
       const byoGearKeySet = new Set(byoGears.map((gear) => byoGearKey(gear)));
+
+      // Package extra-inventory gets the same treatment byoGears above already receives: dropped
+      // when its parent package is gone, and — once the gear catalog has actually loaded — each
+      // line re-snapshotted from the live catalog with its quantity clamped down (never up) to the
+      // current availableCount. Skipped entirely while gearLookup is null so a slow/failed gear
+      // catalog can't wipe a restored selection. Preserves the original reference when nothing
+      // changed, so the `unchanged` check below doesn't see a false change every revalidation.
+      let packageAddOns = state.packageAddOns;
+      const packageAddOnEntries = Object.entries(state.packageAddOns);
+      if (gearLookup || packageAddOnEntries.some(([kitId]) => !kitIdSet.has(kitId))) {
+        const nextPackageAddOns: Record<string, BookableGearSelection[]> = {};
+        for (const [kitId, gears] of packageAddOnEntries) {
+          if (!kitIdSet.has(kitId)) continue;
+          const nextGears = gearLookup
+            ? gears
+                .map((selection) => {
+                  const fresh = gearLookup.get(byoGearKey(selection));
+                  if (!fresh || !fresh.canSelect) return undefined;
+                  const quantity = Math.min(selection.quantity, fresh.availableCount);
+                  if (quantity <= 0) return undefined;
+                  return { ...fresh, quantity };
+                })
+                .filter((gear): gear is BookableGearSelection => gear !== undefined)
+            : gears;
+          if (nextGears.length > 0) nextPackageAddOns[kitId] = nextGears;
+        }
+        if (JSON.stringify(nextPackageAddOns) !== JSON.stringify(state.packageAddOns)) {
+          packageAddOns = nextPackageAddOns;
+        }
+      }
+
+      // Same "never outlive the entry it points at" pruning as kitIds/itemIds/byoGearKeys just
+      // above, one level down: an add-on selection reference is dropped once either its parent (no
+      // longer in kitIdSet/byoGearKeySet) or the add-on itself (re-snapshotted out of packageAddOns/
+      // byoAddOns above) is gone.
+      const packageAddOnKeys: Record<string, string[]> = {};
+      for (const [kitId, keys] of Object.entries(state.checkoutSelection.packageAddOnKeys)) {
+        if (!kitIdSet.has(kitId)) continue;
+        const validKeys = new Set((packageAddOns[kitId] ?? []).map((gear) => byoGearKey(gear)));
+        const kept = keys.filter((key) => validKeys.has(key));
+        if (kept.length > 0) packageAddOnKeys[kitId] = kept;
+      }
+      const byoAddOnKeys: Record<string, string[]> = {};
+      for (const [gearKey, keys] of Object.entries(state.checkoutSelection.byoAddOnKeys)) {
+        if (!byoGearKeySet.has(gearKey)) continue;
+        const validKeys = new Set((byoAddOns[gearKey] ?? []).map((addOn) => byoGearKey(addOn)));
+        const kept = keys.filter((key) => validKeys.has(key));
+        if (kept.length > 0) byoAddOnKeys[gearKey] = kept;
+      }
+
       const checkoutSelection: CheckoutSelection = {
         kitIds: state.checkoutSelection.kitIds.filter((id) => kitIdSet.has(id)),
         itemIds: state.checkoutSelection.itemIds.filter((id) => itemIdSet.has(id)),
         byoGearKeys: state.checkoutSelection.byoGearKeys.filter((key) => byoGearKeySet.has(key)),
+        packageAddOnKeys,
+        byoAddOnKeys,
       };
 
       const unchanged =
@@ -556,6 +828,7 @@ function cartReducer(state: CartState, action: CartAction): CartState {
         byoGears.length === state.byoGears.length &&
         byoGears.every((gear, index) => gear.quantity === state.byoGears[index]?.quantity && byoGearKey(gear) === byoGearKey(state.byoGears[index])) &&
         JSON.stringify(byoAddOns) === JSON.stringify(state.byoAddOns) &&
+        packageAddOns === state.packageAddOns &&
         JSON.stringify(checkoutSelection) === JSON.stringify(state.checkoutSelection);
 
       if (unchanged) return state;
@@ -580,6 +853,7 @@ function cartReducer(state: CartState, action: CartAction): CartState {
         selectedKits,
         selectedItems,
         kitExtras,
+        packageAddOns,
         itemExtras,
         byoGears,
         byoAddOns,
@@ -597,15 +871,29 @@ function cartReducer(state: CartState, action: CartAction): CartState {
     // entry currently in the cart, selected:false clears the whole checkout selection, same as
     // toggling each item individually would but in one dispatch.
     case 'SET_ALL_CHECKOUT_SELECTED': {
+      if (!action.selected) {
+        return {
+          ...state,
+          checkoutSelection: { kitIds: [], itemIds: [], byoGearKeys: [], packageAddOnKeys: {}, byoAddOnKeys: {} },
+        };
+      }
+      const packageAddOnKeys: Record<string, string[]> = {};
+      for (const [kitId, gears] of Object.entries(state.packageAddOns)) {
+        packageAddOnKeys[kitId] = gears.map((gear) => byoGearKey(gear));
+      }
+      const byoAddOnKeys: Record<string, string[]> = {};
+      for (const [gearKey, addOns] of Object.entries(state.byoAddOns)) {
+        byoAddOnKeys[gearKey] = addOns.map((addOn) => byoGearKey(addOn));
+      }
       return {
         ...state,
-        checkoutSelection: action.selected
-          ? {
-              kitIds: state.selectedKits.map((kit) => kit.id),
-              itemIds: state.selectedItems.map((item) => item.id),
-              byoGearKeys: state.byoGears.map((gear) => byoGearKey(gear)),
-            }
-          : { kitIds: [], itemIds: [], byoGearKeys: [] },
+        checkoutSelection: {
+          kitIds: state.selectedKits.map((kit) => kit.id),
+          itemIds: state.selectedItems.map((item) => item.id),
+          byoGearKeys: state.byoGears.map((gear) => byoGearKey(gear)),
+          packageAddOnKeys,
+          byoAddOnKeys,
+        },
       };
     }
 
@@ -631,7 +919,7 @@ function cartReducer(state: CartState, action: CartAction): CartState {
  * unchanged — those aren't per-entry.
  */
 export function filterCartToSelection(cart: CartState): CartState {
-  const { kitIds, itemIds, byoGearKeys } = cart.checkoutSelection;
+  const { kitIds, itemIds, byoGearKeys, packageAddOnKeys, byoAddOnKeys } = cart.checkoutSelection;
   const kitIdSet = new Set(kitIds);
   const itemIdSet = new Set(itemIds);
   const byoGearKeySet = new Set(byoGearKeys);
@@ -642,11 +930,27 @@ export function filterCartToSelection(cart: CartState): CartState {
 
   const kitExtras = pruneExtras(cart.kitExtras, selectedKits, (kit) => kit.extras ?? []);
   const itemExtras = pruneExtras(cart.itemExtras, selectedItems, (item) => item.paidAddOns ?? []);
-  const byoAddOns = Object.fromEntries(
-    Object.entries(cart.byoAddOns).filter(([gearKey]) => byoGearKeySet.has(gearKey)),
-  );
 
-  return { ...cart, selectedKits, selectedItems, kitExtras, itemExtras, byoGears, byoAddOns };
+  // Two-level narrowing, mirroring kitIds/byoGearKeys above one level down: an add-on is included
+  // only when its PARENT is checked (an unchecked package/BYO gear can never submit or be billed
+  // for gear attached to it) AND the add-on itself is checked — a customer can exclude just one
+  // add-on from this checkout while leaving its parent, and every other add-on under it, untouched.
+  const byoAddOns: Record<string, BookableAddOnSelection[]> = {};
+  for (const [gearKey, addOns] of Object.entries(cart.byoAddOns)) {
+    if (!byoGearKeySet.has(gearKey)) continue;
+    const selectedKeys = new Set(byoAddOnKeys[gearKey] ?? []);
+    const kept = addOns.filter((addOn) => selectedKeys.has(byoGearKey(addOn)));
+    if (kept.length > 0) byoAddOns[gearKey] = kept;
+  }
+  const packageAddOns: Record<string, BookableGearSelection[]> = {};
+  for (const [kitId, gears] of Object.entries(cart.packageAddOns)) {
+    if (!kitIdSet.has(kitId)) continue;
+    const selectedKeys = new Set(packageAddOnKeys[kitId] ?? []);
+    const kept = gears.filter((gear) => selectedKeys.has(byoGearKey(gear)));
+    if (kept.length > 0) packageAddOns[kitId] = kept;
+  }
+
+  return { ...cart, selectedKits, selectedItems, kitExtras, packageAddOns, itemExtras, byoGears, byoAddOns };
 }
 
 /** Whole rental days between startDate and returnDate; 0 if either date is missing/invalid. */
@@ -763,8 +1067,19 @@ export function calculateByoAddOnsFee(cart: CartState): number {
     .reduce((sum, addOn) => sum + getGearKindPrice(addOn, cart.tripDetails) * addOn.quantity, 0);
 }
 
-/** Total rental fee owed before the trip starts: kit tier prices + extras + item tier prices +
- * Build Your Own gear and add-on prices. Display only — see calculateByoGearsFee. */
+/** Total rental fee for every extra rentable item added on top of a selected package, quantity
+ * included. Reuses getGearKindPrice exactly like calculateByoGearsFee — these are the same gear
+ * kinds at the same catalog prices; only the cart field they live in differs. Display only: the
+ * RMS recomputes and is the sole authority when the booking is actually created. */
+export function calculatePackageAddOnsFee(cart: CartState): number {
+  return Object.values(cart.packageAddOns)
+    .flat()
+    .reduce((sum, gear) => sum + getGearKindPrice(gear, cart.tripDetails) * gear.quantity, 0);
+}
+
+/** Total rental fee owed before the trip starts: kit tier prices + extras + package extra
+ * inventory + item tier prices + Build Your Own gear and add-on prices. Display only — see
+ * calculateByoGearsFee. */
 export function calculateDueBeforeStart(cart: CartState): number {
   const kitFees = cart.selectedKits.reduce((sum, kit) => sum + getKitPrice(kit, cart.tripDetails), 0);
   const itemFees = cart.selectedItems.reduce(
@@ -775,6 +1090,7 @@ export function calculateDueBeforeStart(cart: CartState): number {
   return (
     kitFees +
     calculateKitExtrasFee(cart) +
+    calculatePackageAddOnsFee(cart) +
     itemFees +
     calculateItemExtrasFee(cart) +
     calculateByoGearsFee(cart) +
@@ -870,12 +1186,21 @@ interface RentalContextValue {
   /** Sets the selected quantity of an add-on for a given gear (keyed by byoGearKey); 0 removes it.
    *  Same increase-only gate as setByoGearQuantity. */
   setByoAddOnQuantity: (gearKey: string, addOn: BookableAddOn, quantity: number) => boolean;
+  /** Sets the quantity of one extra rentable item attached to a selected package (keyed by that
+   *  kit's cart id); 0 removes it. Same increase-only auth gate as setByoGearQuantity, and never
+   *  converts the package into a Build Your Own selection. */
+  setPackageAddOnQuantity: (kitId: string, gear: BookableGearKind, quantity: number) => boolean;
   updateTripDetails: (details: Partial<TripDetails>) => void;
   updateVerificationDocs: (docs: Partial<VerificationDocs>) => void;
   /** Toggles whether a cart entry is included in the *next* checkout — see CheckoutSelection. */
   toggleKitSelected: (kitId: string) => void;
   toggleItemSelected: (itemId: string) => void;
   toggleByoGearSelected: (gearKey: string) => void;
+  /** Toggles whether one package add-on (identified by byoGearKey, scoped to its parent kit id) is
+   *  included in the next checkout, independent of its parent kit and every other add-on under it. */
+  togglePackageAddOnSelected: (kitId: string, addOnKey: string) => void;
+  /** Mirrors togglePackageAddOnSelected for a BYO add-on, scoped to its parent gear's byoGearKey. */
+  toggleByoAddOnSelected: (gearKey: string, addOnKey: string) => void;
   /** Checks (true) or unchecks (false) every entry currently in the cart at once — the Cart
    *  page's "Select All" / "Deselect All" control. */
   setAllCheckoutSelected: (selected: boolean) => void;
@@ -932,8 +1257,8 @@ export function RentalProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'LOAD_CART', cart: nextCart });
   }, [authLoading, user]);
 
-  // Wait for the live catalog before pruning: revalidating against the initial mock data would
-  // drop every restored entry that only exists in the real catalog. gearKinds is passed as null
+  // Wait for the live catalog before pruning: revalidating against the still-empty initial state
+  // would drop every restored entry before the real catalog has even arrived. gearKinds is passed as null
   // until the (independent, no-mock-fallback) gear catalog fetch resolves, so a slow or errored
   // BYO catalog never wipes a restored Build Your Own selection before it's had a chance to load.
   useEffect(() => {
@@ -975,6 +1300,14 @@ export function RentalProvider({ children }: { children: ReactNode }) {
         // friendly redirect, but this is the backstop a button can't be bypassed around: calling
         // this function directly (e.g. from devtools) while signed out is still refused here.
         if (!user) return false;
+        // Same backstop reasoning as the auth check above, for RMS's own `canSelect` (surfaced here
+        // as kit.isOutOfStock — see PackageKit.isOutOfStock's own doc comment). PathACatalog already
+        // hides/disables the "Book Now" action for an out-of-stock kit or edition, but this is the
+        // real enforcement point a caller can't be bypassed around. This is still only the advisory
+        // catalog-level signal, never a security boundary on its own — the authoritative, date-aware
+        // check is the fresh availability re-check PaymentBreakdown's own submit gate performs right
+        // before booking creation, which this can never substitute for.
+        if (!checkKitAvailability(kit, null)) return false;
         dispatch({ type: 'ADD_KIT', kit });
         return true;
       },
@@ -1011,11 +1344,21 @@ export function RentalProvider({ children }: { children: ReactNode }) {
         dispatch({ type: 'SET_BYO_ADDON_QUANTITY', gearKey, addOn, quantity });
         return true;
       },
+      setPackageAddOnQuantity: (kitId, gear, quantity) => {
+        const current =
+          (cart.packageAddOns[kitId] ?? []).find((g) => byoGearKey(g) === byoGearKey(gear))?.quantity ?? 0;
+        if (quantity > current && !user) return false;
+        dispatch({ type: 'SET_PACKAGE_ADDON_QUANTITY', kitId, gear, quantity });
+        return true;
+      },
       updateTripDetails: (details) => dispatch({ type: 'UPDATE_TRIP_DETAILS', details }),
       updateVerificationDocs: (docs) => dispatch({ type: 'UPDATE_VERIFICATION_DOCS', docs }),
       toggleKitSelected: (kitId) => dispatch({ type: 'TOGGLE_KIT_SELECTED', kitId }),
       toggleItemSelected: (itemId) => dispatch({ type: 'TOGGLE_ITEM_SELECTED', itemId }),
       toggleByoGearSelected: (gearKey) => dispatch({ type: 'TOGGLE_BYO_GEAR_SELECTED', gearKey }),
+      togglePackageAddOnSelected: (kitId, addOnKey) =>
+        dispatch({ type: 'TOGGLE_PACKAGE_ADDON_SELECTED', kitId, addOnKey }),
+      toggleByoAddOnSelected: (gearKey, addOnKey) => dispatch({ type: 'TOGGLE_BYO_ADDON_SELECTED', gearKey, addOnKey }),
       setAllCheckoutSelected: (selected) => dispatch({ type: 'SET_ALL_CHECKOUT_SELECTED', selected }),
       clearCart: () => dispatch({ type: 'CLEAR_CART' }),
       dismissRemovedNotice: () => dispatch({ type: 'DISMISS_REMOVED_NOTICE' }),

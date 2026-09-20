@@ -28,19 +28,24 @@ export interface DocumentSlotConfig {
  *  CORRECTION_REQUIRED, reviewed on the My Bookings page) shows the exact
  *  same four slots/labels/accept-types as the original upload here, instead
  *  of a second, potentially-drifting copy of this config. */
+/** Exactly the image types the RMS's private `verification-documents` bucket allows (see the RMS's
+ *  docs/verification-storage-setup.sql allowed_mime_types) — never the broader `image/*`, which would
+ *  let a GIF/BMP/SVG/AVIF through client validation only for the bucket to reject it on upload. */
+const VERIFICATION_IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,image/heic,image/heif';
+
 export const DOCUMENT_SLOTS: DocumentSlotConfig[] = [
   {
     key: 'idType1',
     title: 'Government ID #1',
     helperText: "Driver's License, Passport, UMID, or similar",
-    accept: 'image/*',
+    accept: VERIFICATION_IMAGE_ACCEPT,
     expectedKind: 'image',
   },
   {
     key: 'idType2',
     title: 'Government ID #2',
     helperText: 'A second, different valid government ID',
-    accept: 'image/*',
+    accept: VERIFICATION_IMAGE_ACCEPT,
     expectedKind: 'image',
   },
   {
@@ -55,7 +60,7 @@ export const DOCUMENT_SLOTS: DocumentSlotConfig[] = [
     key: 'proofOfBilling',
     title: 'Proof of Billing',
     helperText: 'Accepted: Electricity bill, Rent Agreement, Water bill, or Parcel.',
-    accept: 'image/*,application/pdf',
+    accept: `${VERIFICATION_IMAGE_ACCEPT},application/pdf`,
     expectedKind: 'document',
   },
 ];
@@ -114,9 +119,9 @@ export function wrongFileTypeMessage(expectedKind: ExpectedKind): string {
     case 'video':
       return 'Please upload a video file (MP4, WebM, or MOV) — a photo won\'t work here.';
     case 'image':
-      return 'Please upload an image file.';
+      return 'Please upload a JPEG, PNG, WebP, or HEIC image.';
     default:
-      return 'Unsupported file type.';
+      return 'Please upload a JPEG, PNG, WebP, or HEIC image, or a PDF.';
   }
 }
 
@@ -236,18 +241,38 @@ export interface DocumentDropzoneProps {
    * own row header, which needs the title next to a status badge regardless of whether this
    * dropzone is shown) — omits this component's own title line so it doesn't appear twice. */
   hideTitle?: boolean;
+  /** The name of a file already durably uploaded (a real storagePath exists) from an earlier mount
+   *  of this form — e.g. the customer navigated away from Checkout and back. `file`/`previewUrl`
+   *  are always null in that case (the in-memory File/blob genuinely can't survive a remount), but
+   *  the upload itself already succeeded, so this renders the same "Uploaded" state instead of the
+   *  empty prompt, using this name in place of `file.name`. Ignored whenever `file` is non-null. */
+  persistedFileName?: string | null;
 }
 
 /** Exported so the post-submission resubmission flow (see
  *  VerificationDocumentsReview.tsx) renders the identical dropzone UI for
  *  replacing a single CORRECTION_REQUIRED document, instead of a second,
  *  visually-diverging copy of this control. */
-export function DocumentDropzone({ config, file, previewUrl, error, uploading, uploaded, onSelect, onRemove, hideTitle }: DocumentDropzoneProps) {
+export function DocumentDropzone({
+  config,
+  file,
+  previewUrl,
+  error,
+  uploading,
+  uploaded,
+  onSelect,
+  onRemove,
+  hideTitle,
+  persistedFileName,
+}: DocumentDropzoneProps) {
   const [isDragActive, setIsDragActive] = useState(false);
   const inputId = `doc-upload-${config.key}`;
   const hasFile = file !== null;
   const isImagePreview = hasFile && file.type.startsWith('image/');
   const isVideoPreview = hasFile && file.type.startsWith('video/');
+  // Already uploaded in an earlier mount of this form — see persistedFileName's own doc comment.
+  // Never true alongside hasFile: a freshly (re)selected file always takes precedence below.
+  const isPersistedOnly = !hasFile && uploaded && Boolean(persistedFileName);
 
   function handleFiles(fileList: FileList | null) {
     const selected = fileList?.[0];
@@ -282,7 +307,11 @@ export function DocumentDropzone({ config, file, previewUrl, error, uploading, u
         onDragLeave={() => setIsDragActive(false)}
         onDrop={handleDrop}
         className={[
-          'relative flex h-36 flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed p-3 text-center transition-colors',
+          // h-28 on phones: drag-and-drop itself is a desktop-only affordance (touch devices tap
+          // to open a file picker instead), so the full h-36 this box needs to host that desktop
+          // interaction comfortably was pure unused height on mobile — and with 4 of these
+          // required documents stacked in a column, that added up to real scroll distance.
+          'relative flex h-28 flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed p-3 text-center transition-colors sm:h-36',
           uploading ? 'cursor-wait' : 'cursor-pointer',
           error
             ? 'border-red-400 bg-red-50 dark:border-red-500 dark:bg-red-500/10'
@@ -302,7 +331,7 @@ export function DocumentDropzone({ config, file, previewUrl, error, uploading, u
           onChange={(e: ChangeEvent<HTMLInputElement>) => handleFiles(e.target.files)}
         />
 
-        {hasFile && !uploading && (
+        {(hasFile || isPersistedOnly) && !uploading && (
           <button
             type="button"
             onClick={(e) => {
@@ -346,6 +375,18 @@ export function DocumentDropzone({ config, file, previewUrl, error, uploading, u
               {file.name} · {formatFileSize(file.size)}
             </p>
           </>
+        ) : isPersistedOnly ? (
+          // Already uploaded before this component last mounted — no local File/blob survives a
+          // remount, but the storagePath does (see persistedFileName's own doc comment), so this
+          // reads as "still uploaded," never as an empty slot the customer must fill again.
+          <>
+            <DocumentPreviewIcon className="h-10 w-10 text-accent" />
+            <div className="flex items-center gap-1 text-xs font-medium text-accent">
+              <CheckCircleIcon className="h-4 w-4" />
+              <span>Uploaded</span>
+            </div>
+            <p className="max-w-full truncate px-2 text-xs text-ink-muted">{persistedFileName}</p>
+          </>
         ) : (
           <>
             <UploadIcon className="h-7 w-7 text-ink-faint" />
@@ -382,10 +423,6 @@ export default function VerificationUpload({ onSubmit }: VerificationUploadProps
   // Tracks every blob URL created for previews so they can all be released on unmount. Preview
   // URLs stay local to this component — they are never written to shared checkout state.
   const objectUrlsRef = useRef<Set<string>>(new Set());
-  // Dispatch is stable, but the context helper is re-created each render; a ref keeps the unmount
-  // cleanup on a single subscription instead of re-running whenever the cart changes.
-  const updateVerificationDocsRef = useRef(updateVerificationDocs);
-  updateVerificationDocsRef.current = updateVerificationDocs;
 
   // Bumped on every remove/replace so a slower upload that finishes after the customer already
   // removed or swapped that slot's file can recognize it's stale and discard its own result
@@ -400,14 +437,15 @@ export default function VerificationUpload({ onSubmit }: VerificationUploadProps
   useEffect(() => {
     const trackedUrls = objectUrlsRef.current;
     return () => {
+      // Only the local blob previews die with this component instance — revoke those to avoid
+      // leaking memory. Deliberately does NOT clear cart.verificationDocs.documents/confirmed here:
+      // a slot with a real storagePath already succeeded (the file is durably in the private
+      // "verification-documents" bucket — see VerificationFileMeta's own doc comment on why it holds
+      // no blob URL, precisely so it can outlive this component), so wiping it on every unmount used
+      // to force a customer to re-upload already-uploaded documents merely for navigating away from
+      // Checkout (e.g. "Back to Cart") and returning. A slot that never finished uploading already
+      // reads as incomplete via its own null storagePath — nothing here needs to double-enforce that.
       trackedUrls.forEach((url) => URL.revokeObjectURL(url));
-      // The selected File objects live only in this component's state, so once it unmounts the
-      // selection is genuinely gone. Clear the shared slots too, or the submission gate would
-      // pass on files the page can no longer produce.
-      updateVerificationDocsRef.current({
-        documents: { idType1: null, idType2: null, verificationVideo: null, proofOfBilling: null },
-        confirmed: false,
-      });
     };
   }, []);
 
@@ -527,7 +565,7 @@ export default function VerificationUpload({ onSubmit }: VerificationUploadProps
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mx-auto flex w-full max-w-2xl flex-col gap-8 p-5 sm:p-6">
+    <form onSubmit={handleSubmit} className="mx-auto flex w-full max-w-2xl flex-col gap-5 p-5 sm:gap-8 sm:p-6">
       <div className="flex flex-col gap-1">
         <h1 className="font-serif text-xl font-semibold text-ink">Identity Verification</h1>
         <p className="text-sm text-ink-muted">
@@ -590,6 +628,7 @@ export default function VerificationUpload({ onSubmit }: VerificationUploadProps
               error={fileErrors[slot.key]}
               uploading={uploading[slot.key]}
               uploaded={Boolean(verificationDocs.documents[slot.key]?.storagePath)}
+              persistedFileName={verificationDocs.documents[slot.key]?.name ?? null}
               onSelect={(file) => handleDocumentSelect(slot, file)}
               onRemove={() => handleDocumentRemove(slot.key)}
             />

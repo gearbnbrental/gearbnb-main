@@ -1,126 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { type CampSetupPhoto } from '../config/campSetups';
+import ImageLightbox from './ImageLightbox';
 import { GearPlaceholderIcon } from './icons';
-
-function XMarkIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className={className}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-    </svg>
-  );
-}
 
 function ChevronArrowIcon({ direction, className }: { direction: 'left' | 'right'; className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className={className}>
       <path strokeLinecap="round" strokeLinejoin="round" d={direction === 'left' ? 'M15 19l-7-7 7-7' : 'M9 5l7 7-7 7'} />
     </svg>
-  );
-}
-
-/**
- * Full-screen lightbox for one gallery photo — deliberately the photo and nothing else. Escape and
- * a click on the dimmed backdrop both close it (two independent, standard ways to dismiss a
- * modal); Left/Right arrow keys step between photos when there's more than one. Focus-trapping is
- * intentionally not implemented — this is a photo viewer with a handful of controls, not a form,
- * so the added complexity of a full trap isn't earning its keep here.
- *
- * The photo opens with a short zoom-in (the `campZoomIn` keyframes in index.css), keyed on the
- * photo's own src so stepping between photos replays the zoom rather than swapping the image
- * abruptly. `object-contain` means a photo is never cropped or stretched out of its real aspect
- * ratio, whatever shape the viewport happens to be.
- */
-function Lightbox({
-  photos,
-  index,
-  onClose,
-  onNavigate,
-}: {
-  photos: CampSetupPhoto[];
-  index: number;
-  onClose: () => void;
-  onNavigate: (nextIndex: number) => void;
-}) {
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose();
-      if (event.key === 'ArrowRight') onNavigate((index + 1) % photos.length);
-      if (event.key === 'ArrowLeft') onNavigate((index - 1 + photos.length) % photos.length);
-    }
-    document.addEventListener('keydown', handleKeyDown);
-    // Locks background scroll while the lightbox is open — a full-screen overlay with the page
-    // still scrolling behind it reads as broken, especially on mobile.
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [index, photos.length, onClose, onNavigate]);
-
-  const photo = photos[index];
-  const controlButtonClass =
-    'flex items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70';
-
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={photo.alt}
-      onClick={onClose}
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4 sm:p-8"
-    >
-      <button type="button" onClick={onClose} aria-label="Close" className={`absolute right-4 top-4 h-10 w-10 ${controlButtonClass}`}>
-        <XMarkIcon className="h-5 w-5" />
-      </button>
-
-      {/* 1-based "N / total" — a small, standard orientation cue so a customer flipping through
-          knows how many photos there are and where they are in the set. */}
-      {photos.length > 1 && (
-        <span className="absolute left-4 top-4 rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm">
-          {index + 1} / {photos.length}
-        </span>
-      )}
-
-      {photos.length > 1 && (
-        <>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onNavigate((index - 1 + photos.length) % photos.length);
-            }}
-            aria-label="Previous photo"
-            className={`absolute left-2 top-1/2 h-11 w-11 -translate-y-1/2 sm:left-4 ${controlButtonClass}`}
-          >
-            <ChevronArrowIcon direction="left" className="h-5 w-5" />
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onNavigate((index + 1) % photos.length);
-            }}
-            aria-label="Next photo"
-            className={`absolute right-2 top-1/2 h-11 w-11 -translate-y-1/2 sm:right-4 ${controlButtonClass}`}
-          >
-            <ChevronArrowIcon direction="right" className="h-5 w-5" />
-          </button>
-        </>
-      )}
-
-      {/* The photo is the whole point — no title, no gear list, no CTA underneath it, per the
-          client's "PHOTO → SLIDE → CLICK → ZOOM" request. The photo's title still exists for
-          screen readers via the dialog's own aria-label above. stopPropagation keeps a click on
-          the image itself from reaching the backdrop's onClose. */}
-      <img
-        key={photo.src}
-        src={photo.src}
-        alt={photo.alt}
-        onClick={(e) => e.stopPropagation()}
-        className="camp-zoom-in max-h-full max-w-full rounded-xl object-contain shadow-2xl"
-      />
-    </div>
   );
 }
 
@@ -223,6 +110,7 @@ export default function CampSetupsGallery({ photos }: { photos: CampSetupPhoto[]
                 <img
                   src={photo.src}
                   alt={photo.alt}
+                  loading="lazy"
                   className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105 group-active:scale-105"
                 />
               </button>
@@ -274,7 +162,7 @@ export default function CampSetupsGallery({ photos }: { photos: CampSetupPhoto[]
       </div>
 
       {openIndex !== null && (
-        <Lightbox photos={photos} index={openIndex} onClose={() => setOpenIndex(null)} onNavigate={setOpenIndex} />
+        <ImageLightbox images={photos} index={openIndex} onClose={() => setOpenIndex(null)} onNavigate={setOpenIndex} />
       )}
     </>
   );

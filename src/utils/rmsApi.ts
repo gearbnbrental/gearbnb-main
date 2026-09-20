@@ -2,20 +2,25 @@ import { supabase } from '../supabase';
 import type { VerificationDocumentKey } from '../types/gearbnb';
 
 /**
- * In `vite dev` (import.meta.env.DEV), always talk to the local RMS dev server — never the
+ * In `vite dev` (import.meta.env.DEV), always talk to a local/LAN RMS dev server — never the
  * production RMS configured in .env for the real deployed build. Without this, every RMS
  * integration (BYO catalog, bookings, verification, payment proofs, My Bookings, Plan an Event)
  * silently calls production while developing locally: the request either gets redirected by the
  * production proxy's login gate or blocked by its CORS allowlist (which deliberately excludes
  * localhost origins whenever NODE_ENV === "production" — see CUSTOMER_PORTAL_DEV_ORIGIN in the
  * RMS's src/proxy.ts), surfacing as "We couldn't load the Build Your Own catalog right now" with
- * no indication the request never reached a local server at all. Mirrors the RMS's own
- * CUSTOMER_PORTAL_DEV_ORIGIN convention (a hardcoded localhost dev value, never used in a real
- * build) rather than requiring every developer to hand-create a local env override. The RMS dev
- * server's default port (`next dev`, unconfigured) is 3000.
+ * no indication the request never reached a local server at all.
+ *
+ * Defaults to `http://localhost:3000` — the RMS dev server's default port (`next dev`,
+ * unconfigured) — for the common case of both apps running on the same machine, mirroring the
+ * RMS's own CUSTOMER_PORTAL_DEV_ORIGIN convention. `VITE_RMS_DEV_API_URL` overrides this for a
+ * dev RMS reachable elsewhere on the LAN (a different machine, e.g. `http://192.168.x.x:3000`) —
+ * deliberately a SEPARATE variable from `VITE_RMS_API_URL` (the production URL below), never
+ * reused for this: `VITE_RMS_API_URL` must stay exactly what a production build expects
+ * regardless of what a developer's own machine happens to be pointed at locally.
  */
 const RMS_API_URL = import.meta.env.DEV
-  ? 'http://localhost:3000'
+  ? ((import.meta.env.VITE_RMS_DEV_API_URL as string | undefined) ?? 'http://localhost:3000')
   : (import.meta.env.VITE_RMS_API_URL as string | undefined);
 
 /** Matches the RMS's VerificationDocumentKind enum (prisma/schema.prisma) exactly. */
@@ -40,15 +45,73 @@ export const VERIFICATION_BUCKET = 'verification-documents';
  * Separate from VERIFICATION_BUCKET — different RLS setup, different retention/review workflow. */
 export const PAYMENT_PROOF_BUCKET = 'payment-proofs';
 
+/** Thrown by checkAvailability specifically when ITS OWN internal bounded timeout fired — never
+ *  when the caller's own signal aborted (that's a deliberate, silent supersede, not a failure).
+ *  A distinct class rather than reusing the generic AbortError DOMException so a caller can tell
+ *  "this request never got an answer in time" (a real, recoverable failure worth surfacing) apart
+ *  from "this request was intentionally cancelled because something newer superseded it" (never
+ *  surfaced as an error) — both produce an AbortError-shaped rejection from fetch() itself, and
+ *  without this they'd be indistinguishable. */
+export class RmsAvailabilityTimeoutError extends Error {
+  constructor() {
+    super('The availability check took too long to respond.');
+  }
+}
+
+/** `RmsApiError.code` set only by rmsFetch's own client-side "VITE_RMS_API_URL is missing" check —
+ *  distinguishes that from a genuine HTTP 500 returned by the RMS, which never carries this code. */
+export const RMS_NOT_CONFIGURED_CODE = 'RMS_NOT_CONFIGURED';
+
 export class RmsApiError extends Error {
   status: number;
   fields?: Record<string, string[]>;
+  /** Parsed from the RMS's own `Retry-After` response header (seconds, converted to ms) when
+   *  present on a 429 — lets a caller back off for exactly as long as the RMS actually asked for,
+   *  rather than guessing. `undefined` whenever the header is absent or unparsable; callers must
+   *  fall back to their own bounded default in that case, never retry immediately. */
+  retryAfterMs?: number;
+  /** The RMS's own stable machine-readable `code`, present only on the few errors that define one
+   *  (e.g. "DUPLICATE_BOOKING_REQUEST" on POST /api/customer/bookings) — never on the plain
+   *  inventory-conflict 409. */
+  code?: string;
+  /** Present alongside DUPLICATE_BOOKING_REQUEST: the customer's OWN existing booking's number. */
+  bookingNumber?: string;
 
-  constructor(message: string, status: number, fields?: Record<string, string[]>) {
+  constructor(
+    message: string,
+    status: number,
+    fields?: Record<string, string[]>,
+    retryAfterMs?: number,
+    extra?: { code?: string; bookingNumber?: string },
+  ) {
     super(message);
     this.status = status;
     this.fields = fields;
+    this.retryAfterMs = retryAfterMs;
+    this.code = extra?.code;
+    this.bookingNumber = extra?.bookingNumber;
   }
+}
+
+export type BookingSubmitFailure =
+  | { kind: 'duplicate'; bookingNumber?: string }
+  | { kind: 'inventory_conflict' }
+  | { kind: 'other'; message: string };
+
+/**
+ * Classifies a failed POST /api/customer/bookings. The RMS uses HTTP 409 for three different
+ * things (confirmed in server/bookings/service.ts): inventory no longer available (no `code`; body
+ * "The following items are no longer available…"), DUPLICATE_BOOKING_REQUEST (has `code` +
+ * `bookingNumber`), and a customer-identity conflict. Only the first means "adjust your
+ * selection"; the others must never be reported as an availability problem. Retry-After is only
+ * ever sent by the RMS on 429 (rate limit) — no 409 defines a retry interval, so none is applied.
+ */
+export function classifyBookingSubmitError(err: unknown): BookingSubmitFailure {
+  if (err instanceof RmsApiError && err.status === 409) {
+    if (err.code === 'DUPLICATE_BOOKING_REQUEST') return { kind: 'duplicate', bookingNumber: err.bookingNumber };
+    if (!err.code && /no longer available/i.test(err.message)) return { kind: 'inventory_conflict' };
+  }
+  return { kind: 'other', message: describeRmsError(err) };
 }
 
 /**
@@ -124,6 +187,11 @@ interface RmsFetchOptions {
    * gear catalog, browsable before login just like the package catalog already is). Defaults to
    * true — every other customer endpoint requires the Bearer token. */
   requireAuth?: boolean;
+  /** Lets a caller genuinely cancel this specific request (e.g. its inputs went stale before the
+   *  RMS answered) — forwarded straight to `fetch()`, which throws a `DOMException` named
+   *  "AbortError" rather than resolving. Only ever wired up for requests a caller can actually
+   *  supersede (see checkAvailability); most callers have no reason to pass this. */
+  signal?: AbortSignal;
 }
 
 /**
@@ -133,7 +201,9 @@ interface RmsFetchOptions {
  */
 async function rmsFetch<T>(path: string, options: RmsFetchOptions = {}): Promise<T> {
   if (!RMS_API_URL) {
-    throw new RmsApiError('The booking system is not configured yet — please try again later.', 500);
+    throw new RmsApiError('The booking system is not configured yet — please try again later.', 500, undefined, undefined, {
+      code: RMS_NOT_CONFIGURED_CODE,
+    });
   }
 
   const requireAuth = options.requireAuth ?? true;
@@ -151,6 +221,7 @@ async function rmsFetch<T>(path: string, options: RmsFetchOptions = {}): Promise
     method: options.method ?? 'GET',
     headers,
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    signal: options.signal,
   });
 
   let data: unknown = null;
@@ -161,8 +232,16 @@ async function rmsFetch<T>(path: string, options: RmsFetchOptions = {}): Promise
   }
 
   if (!response.ok) {
-    const body = (data ?? {}) as { error?: string; fields?: Record<string, string[]> };
-    throw new RmsApiError(body.error ?? 'The request could not be completed.', response.status, body.fields);
+    const body = (data ?? {}) as { error?: string; fields?: Record<string, string[]>; code?: string; bookingNumber?: string };
+    // Only meaningful on a 429 (see RMS's own checkRateLimit) — a plain integer number of seconds
+    // per the standard Retry-After header, never trusted beyond that single well-formed shape.
+    const retryAfterHeader = response.headers.get('Retry-After');
+    const retryAfterSeconds = retryAfterHeader !== null ? Number(retryAfterHeader) : NaN;
+    const retryAfterMs = Number.isFinite(retryAfterSeconds) && retryAfterSeconds >= 0 ? retryAfterSeconds * 1000 : undefined;
+    throw new RmsApiError(body.error ?? 'The request could not be completed.', response.status, body.fields, retryAfterMs, {
+      code: typeof body.code === 'string' ? body.code : undefined,
+      bookingNumber: typeof body.bookingNumber === 'string' ? body.bookingNumber : undefined,
+    });
   }
 
   return data as T;
@@ -213,6 +292,22 @@ export interface RmsBookingGearLine {
   brand: string;
   model: string | null;
   quantity: number;
+}
+
+/**
+ * The RMS's own gear catalog blanks a "Generic" inventory brand to an empty string for customer
+ * display (see cleanBrand() in the RMS's src/server/catalog/service.ts — "never meant to reach a
+ * customer"). Its booking/availability schema, however, requires a non-empty brand, and its
+ * inventory lookup is keyed on the real underlying value, which is always the literal "Generic"
+ * whenever the display value was blanked. Restoring it here — for any RMS-bound request, never for
+ * display — is what makes a `RmsBookingGearLine.brand` conform to the existing RMS contract;
+ * sending the blanked "" fails validation with "String must contain at least 1 character(s)".
+ * Shared by every place that builds an `RmsBookingGearLine` (availability checks in
+ * PathACatalog.tsx/PathBCatalog.tsx, and the final booking submission in PaymentBreakdown.tsx) so
+ * this conversion can never drift out of sync between them again.
+ */
+export function toRmsBrand(brand: string): string {
+  return brand.trim() === '' ? 'Generic' : brand;
 }
 
 export interface RmsBookingSubmission {
@@ -285,6 +380,48 @@ export interface RmsSecurityDeposit {
    * relying on the reviewer's free-text note alone. Null only when no proof has ever been
    * submitted. Never treat this as verified/paid — it's the customer's own unreviewed claim. */
   amountClaimedCentavos: number | null;
+  /** The portion of `requiredCentavos` attributable to add-ons attached on top of a package,
+   * decided by GearBnB staff after reviewing the specific add-ons selected — never computed on
+   * this site. `requiredCentavos` already includes this amount once staff set it; this field
+   * exists only so the UI can show the add-on portion as its own line within the one refundable
+   * security deposit, never as a separate charge. `null` means staff haven't decided yet (still
+   * "To Be Determined"); `0` means staff decided no additional deposit is needed. Optional
+   * defensively — an older RMS response (or a booking predating this field) won't have it, and
+   * the UI must fall back to the existing single-figure display, never crash. */
+  addOnDepositCentavos?: number | null;
+  /** Amount of the collected deposit kept to cover a return-inspection issue (damage/loss) —
+   * always the RMS's own already-settled figure, set once a return settlement has actually run
+   * (see `RmsMyBooking.returnSettlement`). Optional defensively — an older RMS response, or a
+   * booking that hasn't gone through return settlement yet, won't have it; the UI must treat a
+   * missing value the same as "nothing retained," never a fabricated ₱0 settlement. */
+  retainedCentavos?: number;
+  /** Amount of the collected deposit actually returned to the customer, from the same return
+   * settlement as `retainedCentavos` above — same optionality/defensiveness reasoning. */
+  refundedCentavos?: number;
+}
+
+/**
+ * The outcome of a post-rental gear-inspection settlement, once RMS has actually run one —
+ * `null` for a clean return with no issue (see RmsMyBooking.returnSettlement's own comment) and
+ * absent entirely on an older RMS response that predates this workflow. Every figure here is the
+ * RMS's own final, authoritative settlement math (issue amount → how much of the deposit covered
+ * it → any excess still owed → what's left to refund) — this site never recomputes, reconstructs,
+ * or cross-checks these numbers from DamageReport/AdditionalCharge/Payment records itself.
+ */
+export interface RmsReturnSettlement {
+  /** The raw damage/loss value the return inspection found — before any deposit is applied. */
+  issueAmountCentavos: number;
+  /** How much of the collected security deposit RMS applied toward the issue above. */
+  depositAppliedCentavos: number;
+  /** What's left of the issue once the deposit applied above didn't fully cover it — 0 when the
+   * deposit alone was enough. This is the one genuinely new amount the customer may still owe for
+   * the return issue; it is never the same obligation as `issueAmountCentavos` restated. */
+  excessChargeCentavos: number;
+  /** How much of the collected deposit RMS is returning to the customer. */
+  refundCentavos: number;
+  /** RMS's own final "what remains payable for this return issue" figure — never derived here
+   * from excessChargeCentavos or any other field; displayed exactly as returned. */
+  balanceDueCentavos: number;
 }
 
 /** Matches the RMS's DerivedPaymentStatus exactly (src/domain/paymentStatus.ts) — this is the
@@ -350,6 +487,11 @@ export interface RmsDamageReport {
  *  who raised it, and any reversal note. Charges raised in error (reversed) or forgiven (waived)
  *  are never sent. */
 export interface RmsAdditionalCharge {
+  /** The charge's own id — used only to identify which charge a payment proof is submitted
+   * against (see AdditionalChargeProofSubmission.additionalChargeId below); never displayed to
+   * the customer or used to construct a storage path. Distinct from `chargeNumber` below, which
+   * remains the customer-facing reference shown on screen. */
+  id: string;
   chargeNumber: string;
   type: 'DAMAGE' | 'LOSS' | 'LATE_FEE' | 'EXTENSION' | 'OTHER';
   /** Null for a charge against the whole rental rather than one item. */
@@ -358,14 +500,50 @@ export interface RmsAdditionalCharge {
   extraDays: number | null;
   reason: string;
   amountCentavos: number;
-  status: 'PENDING' | 'PAID';
+  /** WAIVED (staff forgave the charge) and REVERSED (staff reversed it, e.g. raised in error) are
+   * both terminal, non-payable states — same as PAID, no payment action is ever shown for either. */
+  status: 'PENDING' | 'PAID' | 'WAIVED' | 'REVERSED';
   createdAt: string;
+  /**
+   * The charge's own, independent cashless-payment proof workflow — a third one, never merged with
+   * the deposit's or rental fee's own (see RmsSecurityDeposit.proofStatus/RmsRentalFee.proofStatus).
+   * Confirmed against the actual RMS response shape (myBookingsForCustomer in
+   * src/server/customers/service.ts): unlike the deposit's and rental fee's own proof fields, this
+   * one is NOT flattened onto RmsAdditionalCharge directly — it's its own nested object, `null` when
+   * no proof has ever been submitted for this specific charge, `undefined` only for an older RMS
+   * response predating this field entirely. Either way, the UI must fall back to the plain
+   * PENDING/PAID/WAIVED/REVERSED status display, never crash.
+   */
+  paymentProof?: {
+    status: DepositProofStatus;
+    method: PaymentMethodKind;
+    /** What the customer's most recent proof for this specific charge claimed, in centavos — never
+     * treated as paid/verified; only an admin-confirmed review actually marks the charge PAID. */
+    amountClaimedCentavos: number | null;
+    uploadedAt: string;
+    /** Staff's explanation, set when paymentProof.status is REJECTED. */
+    reviewNote: string | null;
+  } | null;
+  /**
+   * Display hint only (RMS re-checks everything server-side on actual submission) for whether the
+   * "Pay Additional Charge" / "Submit New Proof" action should be offered — true only while the
+   * charge itself is still PENDING and no proof for it is currently under review. `undefined` only
+   * for an older RMS response predating this field; the UI derives the same payable/rejected check
+   * itself from `status`/`paymentProof` in that case (see getChargeProofState in MyBookings.tsx).
+   */
+  canSubmitPaymentProof?: boolean;
 }
+
+/** Matches the RMS's ReturnCondition exactly (src/domain/returnCondition.ts) — derived server-side,
+ * separate from the booking's own status. */
+export type RmsReturnCondition = 'NOT_RETURNED' | 'UNDER_INSPECTION' | 'CLEAN' | 'ISSUE_UNRESOLVED' | 'ISSUE_RESOLVED';
 
 export interface RmsMyBooking {
   bookingId: string;
   bookingNumber: string;
   status: string;
+  /** Optional defensively — an older RMS response won't carry it (see getReturnOutcome). */
+  returnCondition?: RmsReturnCondition;
   pickupAt: string;
   returnAt: string;
   rentalFeeCentavos: number;
@@ -391,17 +569,49 @@ export interface RmsMyBooking {
   /** Server-derived totals — never recomputed in the browser. */
   additionalChargesOutstandingCentavos?: number;
   additionalChargesTotalCentavos?: number;
+  /** The return-inspection settlement, once RMS has actually run one. `null` means RMS explicitly
+   * confirms this booking had a clean return with no settlement to show (a real, meaningful
+   * answer — the UI must not show a settlement section for it). `undefined` means an older RMS
+   * response predating this field — treated the same as `null` (no section), never crashes, never
+   * fabricates a settlement. See RmsReturnSettlement's own doc comment for the individual fields. */
+  returnSettlement?: RmsReturnSettlement | null;
 }
 
 /** Read-only — safe to retry a transient failure (see withReadRetry). Never used for a mutation. */
-export function fetchMyBookingsFromRms() {
-  return withReadRetry(() => rmsFetch<{ bookings: RmsMyBooking[] }>('/api/customer/bookings'));
+export async function fetchMyBookingsFromRms(): Promise<{ bookings: RmsMyBooking[] }> {
+  try {
+    return await withReadRetry(() => rmsFetch<{ bookings: RmsMyBooking[] }>('/api/customer/bookings'));
+  } catch (err) {
+    // The RMS resolves the caller to a Customer row, which only exists once the account has made a
+    // first booking (see getSessionCustomer in the RMS's src/lib/customerAuth.ts) — a brand-new,
+    // fully authenticated account with no booking yet therefore gets the same 401 as an expired
+    // session. Only when Supabase itself confirms the token is still valid is that 401 read as
+    // "no bookings yet" (an empty list); a genuinely expired/revoked session still fails the check
+    // below and rethrows, so the caller's "session expired" handling is unchanged. RMS still
+    // enforces authentication and ownership — this only decides what Main displays.
+    if (err instanceof RmsApiError && err.status === 401 && (await hasVerifiedSupabaseUser())) {
+      return { bookings: [] };
+    }
+    throw err;
+  }
+}
+
+async function hasVerifiedSupabaseUser(): Promise<boolean> {
+  try {
+    const { data, error } = await supabase.auth.getUser();
+    return !error && Boolean(data.user);
+  } catch {
+    return false;
+  }
 }
 
 /** Matches the RMS's PaymentMethod enum (prisma/schema.prisma) exactly — this is what actually
- * gets recorded against the payment proof, not a display label. There is no dedicated "MariBank"
- * value; a MariBank transfer is recorded as BANK_TRANSFER (see paymentMethods.ts config mapping). */
-export type PaymentMethodKind = 'CASH' | 'GCASH' | 'MAYA' | 'BANK_TRANSFER' | 'CARD' | 'OTHER';
+ * gets recorded against the payment proof, not a display label. `MARIBANK` is the dedicated value
+ * the Additional Charge payment-proof endpoint expects for a MariBank transfer; the older
+ * Security Deposit and Rental Fee proof endpoints still expect a MariBank transfer recorded as
+ * `BANK_TRANSFER` (see paymentMethods.ts's own `additionalChargeRmsMethod` field for how the two
+ * are kept separate from the one shared MariBank config entry). */
+export type PaymentMethodKind = 'CASH' | 'GCASH' | 'MAYA' | 'BANK_TRANSFER' | 'CARD' | 'OTHER' | 'MARIBANK';
 
 export interface DepositProofSubmission {
   storagePath: string;
@@ -452,6 +662,39 @@ export type RmsRentalFeeProofResult = RmsDepositProofResult;
  */
 export function submitRentalFeeProof(bookingId: string, input: RentalFeeProofSubmission) {
   return rmsFetch<RmsRentalFeeProofResult>(`/api/customer/bookings/${bookingId}/rental-fee-proof`, {
+    method: 'POST',
+    body: input,
+  });
+}
+
+export interface AdditionalChargeProofSubmission {
+  /** Which specific RmsAdditionalCharge this proof is for — a booking can have more than one
+   * outstanding charge at once (damage + a late fee, for instance), each with its own independent
+   * proof workflow, so this is required and always the RMS's own `RmsAdditionalCharge.id`, never
+   * a client-side index or the customer-facing `chargeNumber`. */
+  additionalChargeId: string;
+  storagePath: string;
+  /** Always that specific charge's own `amountCentavos`, sent exactly as RMS already returned it
+   * — never a customer-typed figure. See AdditionalChargeProofDialog: the amount field is
+   * display-only, there is no input the customer could edit this from. */
+  amountClaimedCentavos: number;
+  method: PaymentMethodKind;
+  referenceNumber?: string;
+}
+
+export type RmsAdditionalChargeProofResult = RmsDepositProofResult;
+
+/**
+ * Submits an already-uploaded additional-charge payment-proof file for RMS staff review — a
+ * third, independent cashless-payment proof workflow (separate from, and never merged with, the
+ * security-deposit and rental-fee proofs above). Mirrors submitDepositProof/submitRentalFeeProof
+ * exactly: the file itself must already be in the private "payment-proofs" bucket (see
+ * AdditionalChargeProofDialog.tsx), this call never sends the raw file, and RMS admin review —
+ * not this call — decides whether the charge is actually marked PAID. This site never creates a
+ * Payment record or flips a charge's status itself.
+ */
+export function submitAdditionalChargeProof(bookingId: string, input: AdditionalChargeProofSubmission) {
+  return rmsFetch<RmsAdditionalChargeProofResult>(`/api/customer/bookings/${bookingId}/additional-charge-proof`, {
     method: 'POST',
     body: input,
   });
@@ -523,11 +766,78 @@ export interface RmsCatalogGearKind {
  * The Build Your Own gear catalog — GET /api/customer/catalog/gear, confirmed public/
  * unauthenticated in the RMS route (matches the package catalog's own pre-login browsability).
  * Never falls back to mock data on failure: unlike the package catalog (fetched directly from
- * Supabase with a mock fallback), a BYO catalog failure must surface as a real error state so a
- * customer never selects and submits a booking against inventory that doesn't actually exist.
+ * Supabase — see supabaseCatalog.ts), a BYO catalog failure must surface as a real error state so
+ * a customer never selects and submits a booking against inventory that doesn't actually exist.
  */
 export function fetchGearCatalogFromRms() {
   return withReadRetry(() => rmsFetch<{ kinds: RmsCatalogGearKind[] }>('/api/customer/catalog/gear', { requireAuth: false }));
+}
+
+/** Matches the RMS's CustomerCatalogPackageComponent exactly (src/server/catalog/service.ts) — one
+ * required kind within a package (e.g. "1 TENT"). `name`/`availableCount` are resolved from live
+ * InventoryItem data by the same category/brand/model key as everything else in that file; `name`
+ * is null on the rare component whose kind has no current live-priced inventory at all. */
+export interface RmsCatalogPackageComponent {
+  category: string;
+  brand: string;
+  model: string | null;
+  name: string | null;
+  quantity: number;
+  availableCount: number;
+}
+
+/**
+ * Matches the RMS's CustomerCatalogPackage exactly. `price48hCentavos`/`price72hCentavos` are
+ * ALREADY resolved server-side (`Package.price48hCentavos ?? Package.basePriceCentavos`, same for
+ * 72h) — never null here, unlike the raw `packages` table columns supabaseCatalog.ts reads
+ * directly. `canSelect` is a current-snapshot "does every required component have enough live
+ * stock right now" signal — informational only; the authoritative, date-aware check is the
+ * availability endpoint (useAvailabilityCheck), run again at booking creation. Never a security
+ * boundary on its own — see fetchPackageCatalogFromRms's own doc comment. */
+export interface RmsCatalogPackage {
+  packageNumber: string;
+  name: string;
+  description: string | null;
+  price48hCentavos: number;
+  price72hCentavos: number;
+  extraPerDayCentavos: number;
+  depositCentavos: number;
+  imageUrl: string | null;
+  components: RmsCatalogPackageComponent[];
+  canSelect: boolean;
+  compatibleAddOns: RmsCatalogAddOn[];
+}
+
+/**
+ * The real package catalog's own `canSelect`/live-component-availability signal — GET
+ * /api/customer/catalog/packages, confirmed public/unauthenticated in the RMS route. Main's own
+ * package catalog (name, description, image, pricing) is still read directly from Supabase (see
+ * supabaseCatalog.ts) rather than switched to this endpoint wholesale; this is used only to enrich
+ * that data with the one signal Supabase's own `packages` table has no equivalent for — whether
+ * RMS's own component-level stock currently allows the package to be selected at all. A failure
+ * here is deliberately non-fatal to the catalog itself (see CatalogContext's own handling): the
+ * authoritative, date-aware availability check that runs before a customer can actually submit a
+ * booking (useAvailabilityCheck, then a fresh re-check at PaymentBreakdown's own submit gate) is
+ * what actually protects against booking real out-of-stock inventory, so a transient failure of
+ * this purely-advisory signal must never block the whole package catalog from rendering.
+ */
+export function fetchPackageCatalogFromRms() {
+  return withReadRetry(() => rmsFetch<{ packages: RmsCatalogPackage[] }>('/api/customer/catalog/packages', { requireAuth: false }));
+}
+
+/** The currently RMS-configured customer-facing payment QR codes, exactly as staff last set them
+ * on the RMS Settings page. `null` for a method means no QR is currently configured for it — a
+ * real, meaningful "coming soon" answer, never treated as "the fetch didn't happen yet." */
+export interface RmsPaymentQrConfig {
+  gcash: string | null;
+  maribank: string | null;
+}
+
+/** Public/unauthenticated, same reasoning as fetchGearCatalogFromRms above — a customer must be
+ * able to see how to pay before (or without ever) logging in. Read-only, so safe to retry a
+ * transient failure (see withReadRetry). */
+export function fetchPaymentQrConfig() {
+  return withReadRetry(() => rmsFetch<RmsPaymentQrConfig>('/api/customer/payment-qr', { requireAuth: false }));
 }
 
 /**
@@ -583,9 +893,61 @@ export interface RmsAvailabilityIssue {
   availableCount: number;
 }
 
+/** A kind with enough date-free stock to keep `available: true` (so it never appears in `issues`
+ * above), but not enough of that stock is currently in the RMS's own AVAILABLE inventory status
+ * right now — e.g. it's mid-cleaning/maintenance. `available` still correctly means "the dates
+ * themselves are fine" (the RMS deliberately keeps allowing this, since a unit may finish
+ * cleaning/maintenance before a future rental date with no fixed schedule to check it against) —
+ * this is the separate, additive signal for "would RMS's own final reservation actually be able to
+ * claim this right now." Same customer-safe display name as RmsAvailabilityIssue; never an
+ * inventory id, QR code, or storage location. */
+export interface RmsPendingTurnoverNotice {
+  name: string;
+  requested: number;
+  currentlyReservableCount: number;
+}
+
 export interface RmsAvailabilityResult {
+  /** Whether the requested dates are free of conflicting active assignments — RMS's own
+   * date-availability answer. Never reinterpret this as "can be booked right now" — see
+   * `currentlyReservable` below, which is the separate question that answers that. */
   available: boolean;
   issues: RmsAvailabilityIssue[];
+  /** True only when every requested kind also has enough RMS-status-AVAILABLE stock right now to
+   * actually be claimed if a booking were submitted this instant. Can be false even when
+   * `available` is true — see RmsPendingTurnoverNotice's own doc comment. Optional defensively:
+   * an older RMS response predating this field won't have it, and the UI must treat a missing
+   * value as "unknown," never silently assume it's true. */
+  currentlyReservable?: boolean;
+  /** Empty (or absent, on an older RMS response) unless currentlyReservable is false. See
+   * RmsPendingTurnoverNotice's own doc comment. */
+  pendingTurnover?: RmsPendingTurnoverNotice[];
+}
+
+/** Upper bound on how long a single availability request is allowed to stay pending before this
+ *  function gives up on it itself, rather than trusting the network/RMS to always answer promptly.
+ *  Comfortably above the RMS's own documented worst-case pooler-contention latency for this exact
+ *  query path (measured there at 500ms-5.8s under contention — see
+ *  countAvailableUnitsBatch's doc comment in the RMS), so a genuinely slow-but-alive RMS still gets
+ *  to answer; only a truly stuck/unreachable request is ever cut off here. Retrying (if a caller
+ *  wants to) and rate-limit backoff both live at the caller/coordinator layer now, never inside
+ *  this function — see useAvailabilityCheck.ts's own doc comment for why a single-retry loop
+ *  embedded here couldn't prevent a fan-out of many simultaneous callers each retrying on their own. */
+const AVAILABILITY_TIMEOUT_MS = 8_000;
+
+/** Aborts if EITHER input signal aborts — manual implementation (not `AbortSignal.any`, which
+ *  isn't guaranteed available in every browser this site needs to support) so `checkAvailability`
+ *  can enforce its own bounded timeout without ever weakening a caller's own cancellation: an
+ *  explicit caller abort (a superseded input) and an internal timeout both reach the same
+ *  underlying `fetch()` the identical way. */
+function combineAbortSignals(a: AbortSignal | undefined, b: AbortSignal): AbortSignal {
+  if (!a) return b;
+  if (a.aborted || b.aborted) return AbortSignal.abort();
+  const combined = new AbortController();
+  const onAbort = () => combined.abort();
+  a.addEventListener('abort', onAbort, { once: true });
+  b.addEventListener('abort', onAbort, { once: true });
+  return combined.signal;
 }
 
 /**
@@ -595,11 +957,45 @@ export interface RmsAvailabilityResult {
  * /api/customer/bookings performs its own independent, authoritative re-check immediately before
  * creating the booking, so a stale/optimistic result from this call can never itself create an
  * overbooked reservation.
+ *
+ * `options.signal` lets a caller genuinely cancel this specific check once its inputs go stale
+ * (see PathACatalog) — the underlying `fetch()` is actually aborted, not just ignored client-side,
+ * so a superseded check stops consuming RMS capacity instead of running to completion for nothing.
+ * Independently of that, this call always enforces its own bounded timeout
+ * (AVAILABILITY_TIMEOUT_MS) so a hung connection can never leave a caller waiting forever even if
+ * it never passes a signal of its own.
+ *
+ * Deliberately does NOT retry on 429/5xx itself — see useAvailabilityCheck.ts (the shared
+ * coordinator every caller of this function goes through) for where retry-with-backoff now lives.
+ * A retry embedded in this single-request function has no way to know about every OTHER
+ * simultaneous call to it (e.g. one per visible package card), so it could only ever repeat the
+ * exact fan-out that caused a 429 in the first place; only a caller with visibility across all of
+ * them can safely coordinate a retry.
  */
-export function checkAvailability(input: RmsAvailabilityRequest) {
-  return rmsFetch<RmsAvailabilityResult>('/api/customer/availability', {
-    method: 'POST',
-    body: input,
-    requireAuth: false,
-  });
+export async function checkAvailability(
+  input: RmsAvailabilityRequest,
+  options?: { signal?: AbortSignal },
+): Promise<RmsAvailabilityResult> {
+  const timeoutController = new AbortController();
+  const timer = setTimeout(() => timeoutController.abort(), AVAILABILITY_TIMEOUT_MS);
+  try {
+    return await rmsFetch<RmsAvailabilityResult>('/api/customer/availability', {
+      method: 'POST',
+      body: input,
+      requireAuth: false,
+      signal: combineAbortSignals(options?.signal, timeoutController.signal),
+    });
+  } catch (err) {
+    // The caller's OWN signal aborting is a deliberate, silent supersede — rethrown as-is so
+    // existing "if (signal.aborted) return" guards keep working unchanged. Our OWN timeout firing,
+    // while the caller never asked to cancel, is a genuine failure the caller couldn't have caused
+    // or anticipated — re-thrown as a distinct type so it's never confused with the caller's own
+    // intentional cancellation.
+    if (!options?.signal?.aborted && timeoutController.signal.aborted) {
+      throw new RmsAvailabilityTimeoutError();
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }

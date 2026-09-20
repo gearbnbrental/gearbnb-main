@@ -6,6 +6,7 @@
   type DragEvent,
 } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useCatalog } from '../../context/useCatalog';
 import { supabase } from '../../supabase';
 import { formatCurrency } from '../../utils/format';
 import { PAYMENT_METHODS } from '../../config/paymentMethods';
@@ -101,7 +102,22 @@ function InfoCircleIcon({ className }: { className?: string }) {
   );
 }
 
-function ApprovedStatus({ verifiedCentavos }: { verifiedCentavos: number }) {
+function ApprovedStatus({ verifiedCentavos, settled }: { verifiedCentavos: number; settled: boolean }) {
+  // `settled`: the proof was approved, but the RMS's own net figure (collected − returned −
+  // forfeited) has since dropped to zero — the deposit was refunded or applied to a return issue. Showing "Verified amount: ₱0.00" there would read as if nothing was ever paid.
+  if (settled) {
+    return (
+      <div className="flex items-start gap-3 rounded-xl border border-brand-forest/30 bg-brand-forest/10 p-4">
+        <CheckCircleIcon className="h-5 w-5 shrink-0 text-accent" />
+        <div className="flex flex-col gap-1">
+          <p className="text-sm font-semibold text-accent">Security Deposit Received</p>
+          <p className="text-sm text-ink-muted">
+            Your deposit was verified. Any refund or deduction is shown in the payment summary above.
+          </p>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="flex items-start gap-3 rounded-xl border border-brand-forest/30 bg-brand-forest/10 p-4">
       <CheckCircleIcon className="h-5 w-5 shrink-0 text-accent" />
@@ -193,6 +209,85 @@ function ResubmissionGuidance({ requiredCentavos }: { requiredCentavos: number }
   );
 }
 
+/**
+ * A package's own security deposit is a real, admin-configured value known from booking creation
+ * — the customer website never computes it, and never computes an add-on's own deposit either
+ * (see DepositProofUploadProps.hasPackageAddOns). GearBnB staff decide, after reviewing the
+ * specific add-ons selected, whether this booking needs anything beyond the package deposit
+ * already shown above; if they do, the RMS's own `requiredCentavos` simply becomes that larger
+ * number the next time this page loads — nothing here recalculates or stores a second figure.
+ * Shown whenever this booking has add-ons, regardless of proof/verification status: staff can
+ * revisit the add-on deposit question at any point up to pickup, not only before the customer's
+ * first payment.
+ */
+function AddOnDepositPendingNotice() {
+  return (
+    <div className="flex items-start gap-3 rounded-xl border border-line-soft bg-surface-muted p-4">
+      <InfoCircleIcon className="h-5 w-5 shrink-0 text-ink-muted" />
+      <div className="flex flex-col gap-1">
+        <p className="text-sm font-semibold text-ink">Additional Add-on Deposit</p>
+        <p className="text-sm font-medium text-ink-muted">To Be Determined</p>
+        <p className="text-sm text-ink-muted">
+          GearBnB staff will review your selected add-ons and confirm any additional deposit
+          required. If one applies, it will be reflected in the Security Deposit amount above —
+          never a separate charge you have to track yourself.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Shown once GearBnB staff have actually set a positive add-on deposit (see
+ * DepositProofUploadProps.addOnDepositCentavos — replaces AddOnDepositPendingNotice above once
+ * that happens). `baseCentavos`/`addOnCentavos` are never independently computed charges, just the
+ * same one refundable `totalCentavos` (the headline figure already shown above this notice) split
+ * into its two parts, so the customer can see what the add-ons themselves added without losing
+ * sight of the package's own original deposit.
+ */
+function AddOnDepositDeterminedNotice({
+  baseCentavos,
+  addOnCentavos,
+  totalCentavos,
+}: {
+  baseCentavos: number;
+  addOnCentavos: number;
+  totalCentavos: number;
+}) {
+  return (
+    <div className="flex items-start gap-3 rounded-xl border border-line-soft bg-surface-muted p-4">
+      <InfoCircleIcon className="h-5 w-5 shrink-0 text-ink-muted" />
+      <div className="flex w-full flex-col gap-2">
+        <p className="text-sm font-semibold text-ink">Security Deposit Breakdown</p>
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+          <dt className="text-ink-muted">Base Security Deposit</dt>
+          <dd className="text-right font-medium text-ink">{formatCurrency(baseCentavos / 100)}</dd>
+          <dt className="text-ink-muted">Additional Add-on Deposit</dt>
+          <dd className="text-right font-medium text-ink">{formatCurrency(addOnCentavos / 100)}</dd>
+          <dt className="font-semibold text-ink">Total Security Deposit</dt>
+          <dd className="text-right font-semibold text-ink">{formatCurrency(totalCentavos / 100)}</dd>
+        </dl>
+        <p className="text-sm text-ink-muted">
+          GearBnB reviewed your selected add-ons and included their deposit in the total above — this
+          is part of your one refundable security deposit, never a separate charge to pay on top of it.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function NoDepositRequiredStatus() {
+  return (
+    <div className="flex items-start gap-3 rounded-xl border border-line-soft bg-surface-muted p-4">
+      <InfoCircleIcon className="h-5 w-5 shrink-0 text-ink-muted" />
+      <div className="flex flex-col gap-1">
+        <p className="text-sm font-semibold text-ink">No Security Deposit Required</p>
+        <p className="text-sm text-ink-muted">This booking has no security deposit, so there's nothing to pay or upload.</p>
+      </div>
+    </div>
+  );
+}
+
 function NotYetDeterminedStatus() {
   return (
     <div className="flex items-start gap-3 rounded-xl border border-line-soft bg-surface-muted p-4">
@@ -270,10 +365,28 @@ function RejectedNotice({
 }
 
 /** `purpose` swaps only the first step's wording (e.g. "rental fee" for RentalFeeProofUpload) —
- *  everything else, including the real GCash/MariBank QR images/account details, is shared and
- *  must never diverge between the security-deposit and rental-fee upload flows. Defaults to
- *  'security deposit' so every existing caller keeps its exact original text. */
-export function PaymentInstructionsSection({ purpose = 'security deposit' }: { purpose?: string } = {}) {
+ *  everything else, including the GCash/MariBank QR images/account details, is shared and must
+ *  never diverge between the security-deposit, rental-fee, and additional-charge upload flows.
+ *  Defaults to 'security deposit' so every existing caller keeps its exact original text.
+ *
+ *  `additionalNote`, when given, renders as its own short callout under the numbered steps —
+ *  currently only DepositProofUpload passes one, and only for a package booking with add-ons
+ *  attached (see its own hasPackageAddOns prop): the amount shown elsewhere on this card is the
+ *  package's own deposit, and this is what stops "pay the required security deposit" from reading
+ *  as a guarantee that figure is the final word once add-ons are involved. */
+export function PaymentInstructionsSection({
+  purpose = 'security deposit',
+  additionalNote,
+}: { purpose?: string; additionalNote?: string } = {}) {
+  // The RMS Settings page's own currently-configured QR (GET /api/customer/payment-qr, fetched
+  // once per app load by CatalogContext — see its own doc comment) is authoritative. This file's
+  // local `PAYMENT_METHODS[i].qrImageUrl` is only ever a fallback for a genuine fetch failure
+  // (paymentQrState === 'error') — never preferred over a successful fetch, even when that
+  // fetch's own answer is "no QR configured right now" (null). That distinction matters: an admin
+  // who deliberately removes a QR on the Settings page must see it disappear here too, not
+  // silently keep showing this bundled placeholder image as if it were still current.
+  const { paymentQr, paymentQrState } = useCatalog();
+
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-line-soft bg-surface-muted p-4">
       <div>
@@ -293,40 +406,47 @@ export function PaymentInstructionsSection({ purpose = 'security deposit' }: { p
             </li>
           ))}
         </ol>
+        {additionalNote && <p className="mt-2.5 text-xs text-ink-faint">{additionalNote}</p>}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        {PAYMENT_METHODS.map((method) => (
-          <div
-            key={method.id}
-            className="flex flex-col items-center gap-2 rounded-lg border border-line bg-surface p-4 text-center shadow-sm"
-          >
-            <span className="text-sm font-semibold text-ink">{method.name}</span>
-            {method.qrImageUrl ? (
-              <img
-                src={method.qrImageUrl}
-                alt={method.qrImageAlt}
-                className="h-36 w-36 rounded-lg border border-line-soft object-contain"
-              />
-            ) : (
-              <div
-                role="img"
-                aria-label={`${method.qrImageAlt} — not yet available`}
-                className="flex h-36 w-36 items-center justify-center rounded-lg border-2 border-dashed border-line p-2 text-center text-xs text-ink-faint"
-              >
-                QR code coming soon
+        {PAYMENT_METHODS.map((method) => {
+          const liveQrUrl =
+            method.id === 'gcash' ? paymentQr?.gcash : method.id === 'maribank' ? paymentQr?.maribank : null;
+          const qrImageUrl = paymentQrState === 'error' ? method.qrImageUrl : liveQrUrl ?? null;
+
+          return (
+            <div
+              key={method.id}
+              className="flex flex-col items-center gap-2 rounded-lg border border-line bg-surface p-4 text-center shadow-sm"
+            >
+              <span className="text-sm font-semibold text-ink">{method.name}</span>
+              {qrImageUrl ? (
+                <img
+                  src={qrImageUrl}
+                  alt={method.qrImageAlt}
+                  className="h-36 w-36 rounded-lg border border-line-soft object-contain"
+                />
+              ) : (
+                <div
+                  role="img"
+                  aria-label={`${method.qrImageAlt} — not yet available`}
+                  className="flex h-36 w-36 items-center justify-center rounded-lg border-2 border-dashed border-line p-2 text-center text-xs text-ink-faint"
+                >
+                  QR code coming soon
+                </div>
+              )}
+              {/* Account details sit directly beneath their own QR so there's no ambiguity about
+                  which number belongs to which method. `break-all` keeps a long account number
+                  inside its card at narrow widths instead of forcing the page to scroll. */}
+              <p className="text-xs text-ink-muted">{method.accountName}</p>
+              <div className="flex flex-col gap-0.5">
+                <p className="text-[11px] uppercase tracking-wide text-ink-faint">{method.accountNumberLabel}</p>
+                <p className="break-all text-sm font-semibold text-ink">{method.accountNumber}</p>
               </div>
-            )}
-            {/* Account details sit directly beneath their own QR so there's no ambiguity about
-                which number belongs to which method. `break-all` keeps a long account number
-                inside its card at narrow widths instead of forcing the page to scroll. */}
-            <p className="text-xs text-ink-muted">{method.accountName}</p>
-            <div className="flex flex-col gap-0.5">
-              <p className="text-[11px] uppercase tracking-wide text-ink-faint">{method.accountNumberLabel}</p>
-              <p className="break-all text-sm font-semibold text-ink">{method.accountNumber}</p>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -371,7 +491,9 @@ function ProofDropzone({ file, previewUrl, error, disabled, onSelect, onRemove }
         onDragLeave={() => setIsDragActive(false)}
         onDrop={handleDrop}
         className={[
-          'relative flex h-32 flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed p-3 text-center transition-colors',
+          // Same reasoning as VerificationUpload's own dropzones: drag-and-drop is a desktop-only
+          // affordance, so the full h-32 it needs there is unused height on a phone.
+          'relative flex h-24 flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed p-3 text-center transition-colors sm:h-32',
           disabled ? 'cursor-wait' : 'cursor-pointer',
           error
             ? 'border-red-400 bg-red-50 dark:border-red-500 dark:bg-red-500/10'
@@ -452,6 +574,11 @@ export interface DepositProofUploadProps {
    * only to show a Required/Submitted/Shortfall breakdown when a proof was rejected for being
    * short; never treated as verified/paid. Null when no proof has ever been submitted. */
   amountClaimedCentavos: number | null;
+  /** The portion of `requiredCentavos` attributable to add-ons, from the RMS response — see
+   * RmsSecurityDeposit.addOnDepositCentavos' own doc comment. `null`/`undefined` means GearBnB
+   * staff haven't decided yet (still "To Be Determined"); `0` means staff decided no additional
+   * deposit is needed. Never computed on this site. */
+  addOnDepositCentavos?: number | null;
   /**
    * True for a Build Your Own booking (no package line item) — the RMS always creates these with
    * depositCentavos = 0 until an admin manually determines the real amount; a package's deposit,
@@ -461,9 +588,27 @@ export interface DepositProofUploadProps {
    * though nothing has actually been reviewed or paid. This flag is what lets that be caught.
    */
   isByoBooking: boolean;
+  /**
+   * True for a package booking that also has one or more add-ons attached — never true for a BYO
+   * booking (that already has its own separate "To Be Determined" story via isByoBooking above).
+   * The RMS never auto-computes an add-on's own deposit; a GearBnB staff member reviews the
+   * specific add-ons and decides whether anything beyond the package's own deposit is needed. This
+   * flag only controls whether that possibility is explained on screen — `requiredCentavos` above
+   * is always shown exactly as the RMS returns it, whether that's still just the package's own
+   * configured amount or one staff already increased after review; nothing here recalculates or
+   * stores a second deposit figure.
+   */
+  hasPackageAddOns: boolean;
   /** Called after the proof is uploaded and accepted by GearBnB for review — lets the parent
    * optimistically flip its local status to "pending" without a full refetch. */
   onProofSubmitted?: () => void;
+  /** True once the parent booking has reached a terminal status (COMPLETED/CANCELLED) — suppresses
+   * the interactive upload form (amount/method/reference fields, dropzone, submit button, and the
+   * shortfall resubmission guidance) while still showing whatever historical status this deposit's
+   * proof already reached (Approved/Pending Review/Rejected/To Be Determined), since a terminal
+   * booking is read-only going forward but its history must stay visible. Defaults to false so
+   * every existing caller keeps its exact current behavior. */
+  readOnly?: boolean;
 }
 
 export default function DepositProofUpload({
@@ -474,8 +619,11 @@ export default function DepositProofUpload({
   proofStatus,
   reviewNote,
   amountClaimedCentavos,
+  addOnDepositCentavos,
   isByoBooking,
+  hasPackageAddOns,
   onProofSubmitted,
+  readOnly = false,
 }: DepositProofUploadProps) {
   const { user } = useAuth();
 
@@ -511,7 +659,17 @@ export default function DepositProofUpload({
   // before the customer even opens the file picker.
   const isRejectedForShortfall =
     isRejected && amountClaimedCentavos !== null && requiredCentavos - amountClaimedCentavos > 0;
-  const showUploadForm = !isApproved && !isPending && !isNotYetDetermined;
+  // readOnly never changes isApproved/isPending/isRejected/isNotYetDetermined above — those still
+  // reflect this proof's real historical status and keep rendering their own read-only notice
+  // (ApprovedStatus/PendingStatus/NotYetDeterminedStatus/RejectedNotice below) exactly as before.
+  // It only suppresses the interactive form beneath them, since no new submission is ever possible
+  // once the parent booking is terminal.
+  // A package whose configured deposit is genuinely ₱0 (never a BYO booking — its ₱0 means "not yet
+  // determined," handled above). The RMS treats it as already satisfied (approveBooking: 0 paid >=
+  // 0 required reserves the booking directly), though its own `verified` flag stays false for
+  // `requiredCentavos <= 0` — so without this the form would ask for proof of a ₱0 payment.
+  const isNoDepositRequired = !isByoBooking && requiredCentavos <= 0 && proofStatus === null;
+  const showUploadForm = !isApproved && !isPending && !isNotYetDetermined && !isNoDepositRequired && !readOnly;
 
   function resetSelection() {
     if (objectUrlRef.current) {
@@ -626,31 +784,64 @@ export default function DepositProofUpload({
         <p className={isNotYetDetermined ? 'text-xl font-bold text-ink' : 'text-2xl font-bold text-ink'}>
           {isNotYetDetermined ? 'To Be Determined' : formatCurrency(requiredCentavos / 100)}
         </p>
+        {/* Clarifies what this figure actually is once add-ons are in the picture — never shown
+            for a plain package booking (existing single-deposit presentation stays untouched) or
+            a BYO booking (isNotYetDetermined already covers that story on its own). */}
+        {hasPackageAddOns && !isNotYetDetermined && (
+          <p className="text-xs text-ink-faint">Package security deposit</p>
+        )}
       </div>
 
-      {isApproved && <ApprovedStatus verifiedCentavos={verifiedCentavos} />}
+      {isApproved && <ApprovedStatus verifiedCentavos={verifiedCentavos} settled={!verified && verifiedCentavos <= 0} />}
+      {isNoDepositRequired && <NoDepositRequiredStatus />}
       {isPending && (
         <PendingStatus requiredCentavos={requiredCentavos} amountClaimedCentavos={amountClaimedCentavos} />
       )}
       {isNotYetDetermined && <NotYetDeterminedStatus />}
+      {/* Independent of proof/verification status above — staff can decide an add-on needs its
+          own deposit at any point up to pickup, not only before the customer's first payment.
+          Three states, matching addOnDepositCentavos exactly: null/undefined (staff haven't
+          decided — still the pending notice), 0 (staff decided nothing extra is needed — nothing
+          rendered, never a pointless "₱0" line), positive (the real breakdown, replacing the
+          pending notice now that it's no longer pending). */}
+      {hasPackageAddOns &&
+        (addOnDepositCentavos == null ? (
+          <AddOnDepositPendingNotice />
+        ) : (
+          addOnDepositCentavos > 0 && (
+            <AddOnDepositDeterminedNotice
+              baseCentavos={Math.max(0, requiredCentavos - addOnDepositCentavos)}
+              addOnCentavos={addOnDepositCentavos}
+              totalCentavos={requiredCentavos}
+            />
+          )
+        ))}
+
+      {/* Shown whenever the proof was actually rejected, regardless of readOnly — this is
+          historical fact about what happened to it, not an action, and must stay visible even once
+          the booking is terminal and no resubmission is offered anymore (see showUploadForm). */}
+      {isRejected && (
+        <RejectedNotice
+          reviewNote={reviewNote}
+          requiredCentavos={requiredCentavos}
+          amountClaimedCentavos={amountClaimedCentavos}
+        />
+      )}
 
       {showUploadForm && (
         <>
-          {isRejected && (
-            <>
-              <RejectedNotice
-                reviewNote={reviewNote}
-                requiredCentavos={requiredCentavos}
-                amountClaimedCentavos={amountClaimedCentavos}
-              />
-              {/* Only for a genuine shortfall — a proof rejected for an unrelated reason (unclear
-               * receipt, wrong reference) has no "total vs top-up" distinction to clarify, and
-               * repeating "required: X, show the full X" here would misstate why it was rejected. */}
-              {isRejectedForShortfall && <ResubmissionGuidance requiredCentavos={requiredCentavos} />}
-            </>
-          )}
+          {/* Only for a genuine shortfall — a proof rejected for an unrelated reason (unclear
+           * receipt, wrong reference) has no "total vs top-up" distinction to clarify, and
+           * repeating "required: X, show the full X" here would misstate why it was rejected. */}
+          {isRejected && isRejectedForShortfall && <ResubmissionGuidance requiredCentavos={requiredCentavos} />}
 
-          <PaymentInstructionsSection />
+          <PaymentInstructionsSection
+            additionalNote={
+              hasPackageAddOns
+                ? 'Your final security deposit will be confirmed after GearBnB staff reviews your booking and selected add-ons.'
+                : undefined
+            }
+          />
 
           <div className="flex flex-col gap-3">
             <div className="grid gap-4 sm:grid-cols-2">

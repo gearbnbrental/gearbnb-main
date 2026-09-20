@@ -63,14 +63,21 @@ interface DocumentReviewRowProps {
   title: string;
   document: RmsVerificationDocument;
   onResubmitted: (kind: RmsVerificationDocumentKind) => void;
+  /** True once the parent booking has reached a terminal status (COMPLETED/CANCELLED) — suppresses
+   *  the replace form even when the document is genuinely CORRECTION_REQUIRED, while still showing
+   *  the status badge and staff's reviewNote, since that remains real historical information about
+   *  a booking that's read-only going forward. */
+  readOnly: boolean;
 }
 
 /** One verification-document slot on the My Bookings page. Read-only status display for
- * APPROVED/PENDING_REVIEW/REJECTED; a single-file replace form only when CORRECTION_REQUIRED —
- * mirroring the RMS's own rule that only that status is customer-resubmittable (see
- * resubmitVerificationDocument in the RMS's src/server/bookings/service.ts). REJECTED
- * deliberately gets no action here: the RMS has no customer resubmission path for it. */
-function DocumentReviewRow({ bookingId, title, document, onResubmitted }: DocumentReviewRowProps) {
+ * APPROVED/PENDING_REVIEW/REJECTED; a single-file replace form only when CORRECTION_REQUIRED AND
+ * the parent booking isn't read-only — mirroring the RMS's own rule that only that status is
+ * customer-resubmittable (see resubmitVerificationDocument in the RMS's
+ * src/server/bookings/service.ts), further narrowed here so a terminal booking never offers a
+ * resubmission that can no longer lead anywhere. REJECTED deliberately gets no action here: the
+ * RMS has no customer resubmission path for it. */
+function DocumentReviewRow({ bookingId, title, document, onResubmitted, readOnly }: DocumentReviewRowProps) {
   const { user } = useAuth();
   const slot = DOCUMENT_SLOTS.find((s) => VERIFICATION_KIND_MAP[s.key] === document.kind);
 
@@ -207,7 +214,7 @@ function DocumentReviewRow({ bookingId, title, document, onResubmitted }: Docume
         <p className="text-sm text-ink-muted">{document.reviewNote}</p>
       )}
 
-      {isCorrectionRequired && slot && (
+      {isCorrectionRequired && (
         <div className="flex flex-col gap-3">
           <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-400/30 dark:bg-amber-400/10">
             <AlertIcon className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300" />
@@ -216,33 +223,40 @@ function DocumentReviewRow({ bookingId, title, document, onResubmitted }: Docume
             </p>
           </div>
 
-          <DocumentDropzone
-            config={slot}
-            file={file}
-            previewUrl={previewUrl}
-            error={fileError}
-            uploading={uploading}
-            uploaded={Boolean(storagePath)}
-            onSelect={handleSelect}
-            onRemove={handleRemove}
-            hideTitle
-          />
+          {/* The replace form itself is the only part suppressed by readOnly — the notice above
+              stays visible either way, since a terminal booking still needs to show WHY a document
+              was flagged, it just can no longer offer a resubmission that can't lead anywhere. */}
+          {!readOnly && slot && (
+            <>
+              <DocumentDropzone
+                config={slot}
+                file={file}
+                previewUrl={previewUrl}
+                error={fileError}
+                uploading={uploading}
+                uploaded={Boolean(storagePath)}
+                onSelect={handleSelect}
+                onRemove={handleRemove}
+                hideTitle
+              />
 
-          {submitError && (
-            <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
-              {submitError}
-            </p>
+              {submitError && (
+                <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+                  {submitError}
+                </p>
+              )}
+
+              <button
+                type="button"
+                onClick={handleReplace}
+                disabled={!storagePath || uploading || submitting}
+                aria-busy={submitting}
+                className="w-full rounded-lg bg-brand-forest px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-forest-dark disabled:cursor-not-allowed disabled:bg-surface-strong"
+              >
+                {submitting ? 'Replacing…' : uploading ? 'Uploading document…' : 'Replace Document'}
+              </button>
+            </>
           )}
-
-          <button
-            type="button"
-            onClick={handleReplace}
-            disabled={!storagePath || uploading || submitting}
-            aria-busy={submitting}
-            className="w-full rounded-lg bg-brand-forest px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-forest-dark disabled:cursor-not-allowed disabled:bg-surface-strong"
-          >
-            {submitting ? 'Replacing…' : uploading ? 'Uploading document…' : 'Replace Document'}
-          </button>
         </div>
       )}
     </div>
@@ -256,6 +270,10 @@ export interface VerificationDocumentsReviewProps {
    * optimistically flip that one document back to PENDING_REVIEW in its local state — the same
    * pattern DepositProofUpload's onProofSubmitted already uses for the security deposit. */
   onResubmitted: (kind: RmsVerificationDocumentKind) => void;
+  /** True once the parent booking has reached a terminal status (COMPLETED/CANCELLED) — forwarded
+   *  to every DocumentReviewRow; see that component's own doc comment. Defaults to false so every
+   *  existing caller keeps its exact current behavior. */
+  readOnly?: boolean;
 }
 
 /** The My Bookings "Verification Documents" section — one row per document the customer has
@@ -269,6 +287,7 @@ export default function VerificationDocumentsReview({
   bookingId,
   documents,
   onResubmitted,
+  readOnly = false,
 }: VerificationDocumentsReviewProps) {
   const [expanded, setExpanded] = useState(false);
 
@@ -314,6 +333,7 @@ export default function VerificationDocumentsReview({
               title={slot.title}
               document={document}
               onResubmitted={onResubmitted}
+              readOnly={readOnly}
             />
           ))}
         </div>

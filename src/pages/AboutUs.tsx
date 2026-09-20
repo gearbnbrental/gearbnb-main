@@ -7,7 +7,6 @@ import {
   CompassIcon,
   GearPlaceholderIcon,
   LeafIcon,
-  MapPinIcon,
   ShieldCheckIcon,
   TruckIcon,
 } from '../components/icons';
@@ -15,8 +14,8 @@ import { MESSENGER_URL } from '../config/social';
 import { usePageMeta } from '../hooks/usePageMeta';
 
 /**
- * /about-us â€” content sourced verbatim from the client's "ABOUT US PAGE.docx" (headings,
- * paragraphs, benefit list, three-step process, value statements, and FAQ) â€” nothing here is
+ * /about-us — content sourced verbatim from the client's "ABOUT US PAGE.docx" (headings,
+ * paragraphs, benefit list, three-step process, value statements, and FAQ) — nothing here is
  * paraphrased or invented. Visual composition (section order, card/hero/CTA-band treatment,
  * editorial two-column layouts) follows the client-supplied "ABOUTUS_REF" reference image,
  * recreated with this project's own design tokens and real image/icon assets rather than copied
@@ -25,18 +24,18 @@ import { usePageMeta } from '../hooks/usePageMeta';
  */
 
 // text-accent, not text-brand-forest: identical color in light mode (see index.css's @theme
-// block â€” --color-accent equals --color-brand-forest there), but accent has an actual dark-mode
+// block — --color-accent equals --color-brand-forest there), but accent has an actual dark-mode
 // override to a brighter green, while brand-forest deliberately stays constant across themes
 // (fine for a button's own background, but too low-contrast for text sitting on a dark surface).
 const EYEBROW_CLASS = 'text-xs font-bold uppercase tracking-[0.18em] text-accent';
 
-/** A very faint, repeating dot texture â€” an outdoor-inspired "grain" rather than a flat, plain
+/** A very faint, repeating dot texture — an outdoor-inspired "grain" rather than a flat, plain
  *  fill, applied to a few sections for cohesion. Built from `--color-brand-brown` at low opacity
  *  via `color-mix`, matching this page's existing color-mix idiom rather than a new hex value. */
 const TEXTURE_CLASS =
   'pointer-events-none absolute inset-0 -z-10 opacity-[0.05] [background-image:radial-gradient(circle,var(--color-brand-brown)_1px,transparent_1px)] [background-size:22px_22px]';
 
-/** One soft, asymmetric brand-colored glow â€” the same low-opacity `radial-gradient` +
+/** One soft, asymmetric brand-colored glow — the same low-opacity `radial-gradient` +
  *  `color-mix` idiom already used on the homepage (see LandingPage.tsx's logo glow / final CTA
  *  glow), just repositioned per-section so backgrounds read as gently layered rather than flat,
  *  without ever competing with the text sitting on top of them. */
@@ -133,7 +132,7 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: 'How much does it cost to rent camping equipment for a weekend?',
     answer:
-      'Your total cost depends on which items you select, how many pieces you rent, and how long youâ€™re renting. Feel free to browse our gear rental page for accurate pricing.',
+      'Your total cost depends on which items you select, how many pieces you rent, and how long you’re renting. Feel free to browse our gear rental page for accurate pricing.',
   },
   {
     question: 'How do I contact GearBnB?',
@@ -142,7 +141,7 @@ const FAQ_ITEMS: FaqItem[] = [
   },
 ];
 
-/** Every "Book Your Gear" CTA on this page â€” matches the destination the rest of the site's own
+/** Every "Book Your Gear" CTA on this page — matches the destination the rest of the site's own
  *  primary CTAs already use ("Rent Your Gears", "Start Your Rental Today", "Explore All Gear" on
  *  the homepage all send the customer to /catalog to choose Package vs Build Your Own). */
 function BookYourGearButton({ className = '' }: { className?: string }) {
@@ -161,30 +160,31 @@ function BookYourGearButton({ className = '' }: { className?: string }) {
 
 export default function AboutUs() {
   usePageMeta(
-    'Camping Gear Rental in Las PiÃ±as, Manila | GearBnB Rental',
-    'Meet GearBnB, your trusted camping gear rental in Las PiÃ±as, Manila. Learn the mission, values, and people behind every trip you plan with confidence.',
+    'Camping Gear Rental in Las Piñas, Metro Manila | GearBnB',
+    'Discover Gearbnb, your camping gear rental in Las Piñas, Metro Manila. Learn about our mission and find reliable gear for your next outdoor adventure.',
   );
 
   return (
     <div className="flex flex-col">
-      {/* Hero â€” reuses the landing page's own scenic lakeside camp photo (background_landpage.png)
-          rather than a stock/invented image, darkened for readable white text, matching the
-          reference's large-photo-with-overlay hero treatment. */}
+      {/* Hero — uses the client-provided AboutUS_2 reference photo (copied from
+          Reference UI/AboutUS_2.png to public/images/about-us-2.png, also reused by My Bookings'
+          own header banner) rather than a stock/invented image, darkened for readable white text,
+          matching the reference's large-photo-with-overlay hero treatment. */}
       <section className="relative isolate overflow-hidden">
         <img
-          src="/images/background_landpage.png"
-          alt="A GearBnB tent and camp chairs set up beside a lake at sunrise"
+          src="/images/about-us-2.png"
+          alt="A tent and camp chairs set up beside a mountain river with a waterfall in the background"
           className="absolute inset-0 h-full w-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-r from-black/75 via-black/45 to-black/10" />
-        <div className="relative mx-auto flex min-h-[440px] w-full max-w-5xl flex-col justify-center gap-4 px-5 py-20 sm:min-h-[540px] sm:px-6">
+        <div className="relative mx-auto flex min-h-[360px] w-full max-w-5xl flex-col justify-center gap-3 px-5 py-12 sm:min-h-[540px] sm:gap-4 sm:px-6 sm:py-20">
           <span className="text-xs font-bold uppercase tracking-[0.2em] text-white">About Us</span>
           <h1 className="max-w-xl font-serif text-3xl font-bold leading-tight text-white drop-shadow-sm sm:text-5xl">
-            Local Camping Gear Rental in Las PiÃ±as, Manila
+            Local Camping Gear Rental in Las Piñas, Metro Manila
           </h1>
           <p className="max-w-lg text-sm text-white sm:text-base">
             Your first camping trip should feel like a fresh breath of air. At GearBnB, we&rsquo;re your local
-            camping gear rental in Las PiÃ±as, Manila, guiding you through every step of your trip.
+            camping gear rental in Las Piñas, Metro Manila, guiding you through every step of your trip.
           </p>
           <BookYourGearButton className="mt-2" />
         </div>
@@ -198,14 +198,14 @@ export default function AboutUs() {
       </section>
 
       {/* Location / service area */}
-      <section className="relative overflow-hidden bg-page-band px-5 py-16 sm:px-6 sm:py-20">
+      <section className="relative overflow-hidden bg-page-band px-5 py-10 sm:px-6 sm:py-20">
         <div className={TEXTURE_CLASS} aria-hidden="true" />
         <SectionGlow variant="forest" corner="right" />
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-10 lg:flex-row lg:items-center">
           <div className="flex flex-1 flex-col gap-4">
             <span className={EYEBROW_CLASS}>Our Location &amp; Service Area</span>
             <h2 className="font-serif text-2xl font-bold text-ink sm:text-3xl">
-              Camping Gear Rental Serving Las PiÃ±as and Nearby Cities
+              Camping Gear Rental Serving Las Piñas and Nearby Cities
             </h2>
             <p className="text-sm text-ink-muted sm:text-base">
               Rent camping gear from trusted outdoor brands, including Naturehike, Blackdog, Vidalido, Mobi Garden,
@@ -216,7 +216,7 @@ export default function AboutUs() {
               <ul className="flex flex-col gap-1.5 text-sm text-ink-muted">
                 <li className="flex items-start gap-2">
                   <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-                  Las PiÃ±as and the rest of Metro Manila
+                  Las Piñas and the rest of Metro Manila
                 </li>
                 <li className="flex items-start gap-2">
                   <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
@@ -234,19 +234,27 @@ export default function AboutUs() {
             </p>
           </div>
 
-          {/* Map + brands card â€” the document marks the map itself as a "[NOTE: Embedded Map
-              placeholder]" and this project has no real configured address, coordinates, or Maps
-              URL anywhere (confirmed by inspection). Rather than invent one, the map stays a
-              clearly-labeled, non-functional placeholder; "Get Directions" is inert text, not
-              wired to a fabricated link. The brand chips alongside it are the exact brand names
-              from the document, styled like the reference's "Our Brands" panel. */}
+          {/* Map + brands card — now points at the real GearBnB Camping Gears Rental location
+              (confirmed via the client-provided Google Maps place link). The keyless
+              `google.com/maps?...&output=embed` form is used deliberately: it renders a real,
+              interactive embedded map with no Google Maps API key required, so nothing here adds
+              a key to expose. The brand chips alongside it are the exact brand names from the
+              client's original document, styled like the reference's "Our Brands" panel. */}
           <div className="flex flex-1 flex-col gap-4 rounded-2xl border border-line/80 bg-surface p-4 shadow-sm sm:flex-row sm:p-5">
-            <div className="flex aspect-[4/3] flex-1 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-line bg-surface-muted text-center">
-              <MapPinIcon className="h-9 w-9 text-ink-faint" />
-              <p className="text-sm font-medium text-ink">Map coming soon</p>
-              <p className="max-w-[12rem] text-xs text-ink-faint">
-                An embedded map will go here once a location is confirmed.
-              </p>
+            {/* aspect-[16/9] below sm (was aspect-square at every width): stacked as the first of
+                two full-width columns on mobile, a square map ran ~340px tall on its own before
+                "Our Brands" was visible below it — a wide, shorter ratio still shows the pin and
+                nearby streets clearly while taking meaningfully less vertical space. sm:aspect-
+                square restores the original ratio once this sits beside the brands card in a row,
+                where its height is already bounded by that row instead of standing alone. */}
+            <div className="aspect-[16/9] flex-1 overflow-hidden rounded-xl border border-line sm:aspect-square">
+              <iframe
+                title="GearBnB Camping Gears Rental location"
+                src="https://www.google.com/maps?q=14.4461908,120.9966593&z=17&output=embed"
+                className="h-full w-full border-0"
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
             </div>
             <div className="flex flex-1 flex-col gap-3">
               <p className="text-sm font-semibold text-ink">Our Brands</p>
@@ -263,24 +271,27 @@ export default function AboutUs() {
                   and more
                 </span>
               </div>
-              <span
-                className="mt-auto flex items-center gap-1 self-start text-sm font-semibold text-accent opacity-60"
-                aria-disabled="true"
+              <a
+                href="https://www.google.com/maps/place/GearBnB+Camping+Gears+Rental/@14.4461908,120.9966593,17z/data=!3m1!4b1!4m6!3m5!1s0x3397d3090cbbd26f:0x665f11a5d4c66dde!8m2!3d14.4461908!4d120.9966593!16s%2Fg%2F11z8h467l7?entry=ttu&g_ep=EgoyMDI2MDkwOS4wIKXMDSoASAFQAw%3D%3D"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-auto flex items-center gap-1 self-start text-sm font-semibold text-accent transition-colors hover:text-brand-forest-dark"
               >
                 Get Directions <span aria-hidden="true">&rarr;</span>
-              </span>
+              </a>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Have questions â€” horizontal banner reusing an existing GearBnB camp photo as the
+      {/* Have questions — horizontal banner reusing an existing GearBnB camp photo as the
           backdrop, matching the reference's imagery + message CTA banner. */}
-      <section className="px-5 py-16 sm:px-6 sm:py-20">
+      <section className="px-5 py-10 sm:px-6 sm:py-20">
         <div className="relative mx-auto isolate flex w-full max-w-5xl min-h-[220px] items-center overflow-hidden rounded-2xl sm:min-h-[260px]">
           <img
             src="/images/camp-setups/camp-setup-3.jpg"
             alt="A quiet forest campsite in the mist"
+            loading="lazy"
             className="absolute inset-0 h-full w-full object-cover"
           />
           <div className="absolute inset-0 bg-gradient-to-r from-black/75 via-black/50 to-black/20" />
@@ -304,7 +315,7 @@ export default function AboutUs() {
       </section>
 
       {/* What makes GearBnB different */}
-      <section className="relative overflow-hidden bg-page-band px-5 py-16 sm:px-6 sm:py-20">
+      <section className="relative overflow-hidden bg-page-band px-5 py-10 sm:px-6 sm:py-20">
         <div className={TEXTURE_CLASS} aria-hidden="true" />
         <SectionGlow variant="olive" corner="left" />
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-10 lg:flex-row lg:items-center">
@@ -336,18 +347,26 @@ export default function AboutUs() {
             <BookYourGearButton />
           </div>
 
+          {/* aspect-video below sm (was aspect-[4/3] at every width up to lg): this section
+              already stacks text above image below `lg`, so the image never pushes the heading,
+              benefits, or CTA down — but at a flat 4:3 it still ran ~290px tall on a 390px phone,
+              adding real scroll length before the next section. A wider, shorter mobile crop keeps
+              the photo clearly readable while taking less of that. sm:aspect-[4/3] restores the
+              original ratio from tablet width up; lg:aspect-[3/4] (desktop's side-by-side layout)
+              is unchanged. */}
           <div className="flex-1">
             <img
               src="/images/camp-setups/camp-setup-6.jpg"
               alt="A Naturehike tent camp setup rented from GearBnB"
-              className="aspect-[4/3] w-full rounded-2xl object-cover shadow-sm lg:aspect-[3/4]"
+              loading="lazy"
+              className="aspect-video w-full rounded-2xl object-cover shadow-sm sm:aspect-[4/3] lg:aspect-[3/4]"
             />
           </div>
         </div>
       </section>
 
       {/* How does it work */}
-      <section className="relative overflow-hidden px-5 py-16 sm:px-6 sm:py-20">
+      <section className="relative overflow-hidden px-5 py-10 sm:px-6 sm:py-20">
         <SectionGlow variant="forest" corner="right" />
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-10">
           <div className="flex flex-col gap-2">
@@ -383,7 +402,7 @@ export default function AboutUs() {
       </section>
 
       {/* Our promise */}
-      <section className="relative overflow-hidden bg-page-band px-5 py-16 sm:px-6 sm:py-20">
+      <section className="relative overflow-hidden bg-page-band px-5 py-10 sm:px-6 sm:py-20">
         <div className={TEXTURE_CLASS} aria-hidden="true" />
         <SectionGlow variant="olive" corner="left" />
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-10">
@@ -409,7 +428,7 @@ export default function AboutUs() {
         </div>
       </section>
 
-      {/* Final CTA â€” reuses the same scenic lakeside photo as the hero (bookend imagery), darkened
+      {/* Final CTA — reuses the same scenic lakeside photo as the hero (bookend imagery), darkened
           more evenly since the text here is centered rather than left-anchored. */}
       <section className="relative isolate overflow-hidden">
         <img
@@ -424,7 +443,7 @@ export default function AboutUs() {
           </h2>
           <p className="text-sm text-white">
             Are you planning your camping trip and not sure where to start? At GearBnB, we&rsquo;re your trusted
-            camping gear rental in Las PiÃ±as, Manila, serving campers across Metro Manila, Cavite, and Laguna. Your
+            camping gear rental in Las Piñas, Metro Manila, serving campers across Metro Manila, Cavite, and Laguna. Your
             next trip deserves gear you&rsquo;re able to rely on.
           </p>
           <BookYourGearButton className="bg-white !text-brand-forest hover:bg-brand-cream" />
@@ -438,7 +457,7 @@ export default function AboutUs() {
       </section>
 
       {/* FAQ */}
-      <section className="relative overflow-hidden px-5 py-16 sm:px-6 sm:py-20">
+      <section className="relative overflow-hidden px-5 py-10 sm:px-6 sm:py-20">
         <SectionGlow variant="forest" corner="right" />
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-10 lg:flex-row">
           <div className="flex flex-1 flex-col gap-2">

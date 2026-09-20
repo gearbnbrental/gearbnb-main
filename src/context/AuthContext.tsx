@@ -1,5 +1,5 @@
 import type { Session, User } from '@supabase/supabase-js';
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { supabase } from '../supabase';
 import { isAllowedRegistrationEmail, REGISTRATION_EMAIL_ERROR } from '../utils/email';
 
@@ -56,11 +56,11 @@ interface AuthContextValue {
    *  own built-in anti-enumeration behavior for this method (it resolves the same way either way),
    *  not something this app has to fake. Never throws. */
   requestPasswordReset: (email: string) => Promise<void>;
-  /** True once the customer has actually landed here via a genuine Supabase password-recovery
-   *  link — set from the `PASSWORD_RECOVERY` auth event Supabase's client fires when it detects
-   *  the recovery tokens in the URL, never from just "a session happens to exist" (which could be
-   *  an unrelated, already-logged-in session in the same browser). ForgotPassword.tsx uses this to
-   *  jump straight to "set a new password" instead of asking for their email again. */
+  /** True once the customer has actually completed a genuine Supabase password-recovery step —
+   *  set from the `PASSWORD_RECOVERY` auth event Supabase's client fires when it detects recovery
+   *  tokens in the URL (the emailed-link flow) — never from just "a session happens to exist"
+   *  (which could be an unrelated, already-logged-in session in the same browser). ResetPassword.tsx
+   *  gates its actual password form behind this. */
   passwordRecoveryActive: boolean;
   /** Sets the new password for the current (recovery) session, then signs out of every session
    *  for this account via Supabase's own `scope: 'global'` sign-out — a previously-compromised
@@ -137,6 +137,33 @@ export function consumeOAuthReturnPath(): string | null {
   }
 }
 
+/** How long the startup session check waits for `getUser()`'s round trip to Supabase before
+ *  giving up on it — see `getUserWithTimeout` below for why this exists at all. Long enough that
+ *  normal mobile latency (a few seconds on a slow connection) never trips it, short enough that a
+ *  genuinely stalled request can't leave the app's `loading` flag — and every page gated on it
+ *  (Checkout, Profile, My Bookings) — stuck blank for more than a few extra seconds. */
+const GET_USER_TIMEOUT_MS = 8000;
+
+/**
+ * `supabase.auth.getUser()` round-trips to Supabase to validate the stored token; on a stalled
+ * mobile connection that request can hang indefinitely — it never resolves *or* rejects, so a
+ * plain `.catch()` around it (which only runs on rejection) does nothing to save it. `Promise.race`
+ * against a plain timer is used here rather than an `AbortController`: supabase-js's `getUser()`
+ * takes no abort signal, so there's nothing to cancel the underlying request with — the loser of
+ * the race is simply left to resolve on its own and its result is discarded, which is harmless
+ * since nothing downstream ever reads it. On a timeout this resolves to the same shape a real "no
+ * verified user" answer would have, which the caller already treats as "could not confirm this
+ * session" — never as authenticated.
+ */
+function getUserWithTimeout(): Promise<{ user: User | null; timedOut: boolean }> {
+  return Promise.race([
+    supabase.auth.getUser().then(({ data, error }) => ({ user: error ? null : data.user, timedOut: false })),
+    new Promise<{ user: null; timedOut: true }>((resolve) => {
+      setTimeout(() => resolve({ user: null, timedOut: true }), GET_USER_TIMEOUT_MS);
+    }),
+  ]);
+}
+
 function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
@@ -163,8 +190,12 @@ function getDisplayName(user: User | null): string {
   return 'Account';
 }
 
-/** Maps raw Supabase Auth error text to a customer-friendly message. */
-function friendlyAuthError(message: string): string {
+/** Maps raw Supabase Auth error text to a customer-friendly message. Exported so Login.tsx can
+ *  reuse the exact same expired/invalid-link classification for a failed email-confirmation
+ *  redirect (Supabase returns the failure as `error`/`error_description` hash params on that
+ *  redirect, rather than as a thrown error from a function call) instead of duplicating this
+ *  pattern-matching a second time. */
+export function friendlyAuthError(message: string): string {
   const normalized = message.toLowerCase();
   if (normalized.includes('invalid login credentials')) {
     return 'Incorrect email or password.';
@@ -212,6 +243,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [passwordRecoveryActive, setPasswordRecoveryActive] = useState(false);
   /** Synchronous mirror of passwordRecoveryActive for the startup session check — see its use. */
   const recoveryDetectedRef = useRef(false);
+  /**
+   * True from the moment any REAL post-load auth change (sign-in, sign-out, a background token
+   * refresh, etc. — anything except the automatic `INITIAL_SESSION` event onAuthStateChange fires
+   * on registration) lands — see the listener below and the startup check's own use of this. Once
+   * true, the startup check's verification of whatever session existed at PAGE LOAD must never
+   * overwrite `session` again: it can take several seconds (getUser()'s round trip, up to
+   * GET_USER_TIMEOUT_MS), and a customer who explicitly signs in — or out — while it's still in
+   * flight would otherwise have that correct, brand-new session silently reverted back to
+   * whatever stale session was sitting in storage before, with no visible error. This is exactly
+   * how a customer's own explicit, correct login could end up submitting a booking under a
+   * different, stale account's contact details: RentalContext's per-account cart reacts to this
+   * same `user`, and reverting it would load THAT stale account's persisted cart (including its
+   * verificationDocs.fullName/phone) right along with it.
+   */
+  const sessionUpdatedByEventRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -234,41 +280,79 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
         return;
       }
-      const { data: verified, error } = await supabase.auth.getUser();
+      const { user: verifiedUser, timedOut } = await getUserWithTimeout();
       if (cancelled) return;
-      if (error || !verified.user) {
+      if (timedOut) {
+        // Genuinely undetermined, not "invalid" — unlike the branch below (where Supabase itself
+        // authoritatively answered "this token doesn't verify"), a timeout means the check simply
+        // never got an answer in time. Never sign out on this alone (that would actively destroy a
+        // session that may well still be perfectly valid); just stop loading and leave `session`
+        // untouched (null on a fresh load, matching the network-rejection catch below) so the app
+        // renders its normal signed-out state for this load instead of staying blank forever. A
+        // customer whose session really is valid simply re-verifies on their next navigation/reload.
+        console.warn('[AuthContext] Session verification timed out; treating as signed out for this load.');
+        setLoading(false);
+        return;
+      }
+      if (!verifiedUser) {
         // Never sign out on top of a recovery link that landed while this check was in flight.
-        // Arriving at /forgot-password from a reset email with a STALE session already in
+        // Arriving at /reset-password from a reset email with a STALE session already in
         // localStorage races these two paths: this chain starts with the old (invalid) token and
         // would resolve to "sign out", while supabase-js concurrently parses the recovery tokens
         // out of the URL and establishes a brand-new, valid recovery session. Without this guard
         // the late sign-out destroys that fresh session, and the customer gets "Auth session
         // missing" the moment they submit their new password.
-        if (recoveryDetectedRef.current) {
+        //
+        // Same reasoning applies to any other real auth event (see sessionUpdatedByEventRef's own
+        // comment) — a customer who explicitly signed in or out while this stale verification was
+        // still in flight already has the correct, newer state; this check must not undo it.
+        if (recoveryDetectedRef.current || sessionUpdatedByEventRef.current) {
           setLoading(false);
           return;
         }
         await supabase.auth.signOut();
         if (cancelled) return;
         setSession(null);
-      } else {
+      } else if (!sessionUpdatedByEventRef.current) {
+        // Guarded the same way — see sessionUpdatedByEventRef's own comment above. `data.session`
+        // was captured at the very start of this chain, before getUser()'s round trip; committing
+        // it here after a real sign-in/sign-out already happened in the meantime would silently
+        // revert `session` back to whatever was in storage at page load.
         setSession(data.session);
       }
       setLoading(false);
+    }).catch(() => {
+      // getSession()/getUser()/signOut() above can reject outright on a genuine network-layer
+      // failure (not an auth error — those already resolve as {error} and are handled above; this
+      // is a dropped connection, a timeout, anything that throws rather than answers) — previously
+      // nothing caught that, so `loading` stayed true forever and every route gated on it (e.g.
+      // Checkout's `if (authLoading) return null`) rendered blank permanently. Deliberately does
+      // NOT touch `session` here: it's already whatever it was before this attempt (null on a
+      // fresh load), so a failed check safely resolves to "treat as signed out" without this
+      // fabricating or clearing a session that was never actually confirmed either way.
+      if (!cancelled) setLoading(false);
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, newSession) => {
+      // Excludes only the automatic INITIAL_SESSION event fired on registration (which reflects
+      // the exact same page-load session the startup check above is independently verifying, not
+      // a genuine change) — everything else here (SIGNED_IN, SIGNED_OUT, TOKEN_REFRESHED,
+      // USER_UPDATED, PASSWORD_RECOVERY, ...) is a real post-load change and makes this listener's
+      // own session update authoritative from here on. See sessionUpdatedByEventRef's own comment.
+      if (event !== 'INITIAL_SESSION') {
+        sessionUpdatedByEventRef.current = true;
+      }
       setSession(newSession);
       // LATCHED deliberately: PASSWORD_RECOVERY turns it on, and only a sign-out turns it back
       // off. It must NOT be recomputed from each event as `event === 'PASSWORD_RECOVERY'`, because
       // supabase-js keeps firing other events at this same listener afterwards — TOKEN_REFRESHED
       // from the background auto-refresh timer, SIGNED_IN, a repeat INITIAL_SESSION. Any one of
       // those would flip this back to false while the customer was still typing their new
-      // password, and ForgotPassword renders its "Set a New Password" step directly off this flag
-      // — so the form would vanish mid-reset and drop them back on the "enter your email" screen
-      // with their recovery session silently unused. That is the reset-never-completes bug.
+      // password, and ResetPassword.tsx renders its actual password form directly off this flag
+      // — so the form would vanish mid-reset and drop them back on the "invalid/expired link"
+      // state with their recovery session silently unused. That is the reset-never-completes bug.
       //
       // A stray already-logged-in session in the same browser still can't trigger this: nothing
       // but a genuine recovery link makes supabase-js emit PASSWORD_RECOVERY in the first place.
@@ -291,6 +375,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const user = session?.user ?? null;
+  const needsEmailVerification = Boolean(user && !user.email_confirmed_at);
+
   async function signUp(email: string, password: string, fullName: string, phone: string): Promise<AuthResult> {
     // Enforced here, not only in the form, so the rule holds for every caller of this context —
     // this is the single place the customer website actually submits a new account to Supabase.
@@ -303,9 +390,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      // Contact information only — see this function's own doc comment on the interface above.
-      // Never used for SMS/OTP; nothing in this app sends a text message.
-      options: { data: { full_name: fullName, phone } },
+      options: {
+        // Contact information only — see this function's own doc comment on the interface above.
+        // Never used for SMS/OTP; nothing in this app sends a text message.
+        data: { full_name: fullName, phone },
+        // Without this, Supabase falls back to the project's Dashboard-configured Site URL for
+        // the confirmation email's link — and since this Supabase project is shared with the
+        // separate RMS/Admin app, that fallback can land a customer confirming their signup on
+        // the admin app instead of back here. Same customer-origin guard signInWithGoogle and
+        // requestPasswordReset already use, applied to the one auth email call that was missing
+        // it. Always /login (never a deeper path) for the same reason resolveCustomerOrigin's own
+        // callers already use /login — it's the one path guaranteed reachable regardless of SPA
+        // routing/hosting rewrites.
+        emailRedirectTo: `${resolveCustomerOrigin()}/login`,
+      },
     });
 
     if (error) return { error: friendlyAuthError(error.message) };
@@ -335,7 +433,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function resendEmailConfirmation(email: string): Promise<AuthResult> {
-    const { error } = await supabase.auth.resend({ type: 'signup', email });
+    // Same emailRedirectTo reasoning as signUp above — the resend must land the customer back
+    // here too, not wherever the Dashboard's Site URL fallback happens to point.
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: { emailRedirectTo: `${resolveCustomerOrigin()}/login` },
+    });
     if (error) return { error: friendlyAuthError(error.message) };
     return { error: null };
   }
@@ -356,7 +460,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // than redirectPath itself — see this function's own doc comment on the interface above.
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${resolveCustomerOrigin()}/login` },
+      options: {
+        redirectTo: `${resolveCustomerOrigin()}/login`,
+        // Without this, Google silently re-authenticates using whatever Google account session
+        // already exists in this browser — no picker, no confirmation — if the customer (or
+        // anyone else on a shared device) was previously signed into a *different* Google account
+        // there. That's a real, silent way to end up authenticated as an unintended Supabase Auth
+        // identity: two different Google accounts sharing an email history can each become their
+        // own separate Supabase auth.users row, and nothing on this screen would show the mismatch
+        // until a booking under the wrong account turns up. Forcing the chooser every time costs
+        // one extra click but makes "which Google account am I using" an explicit choice instead
+        // of an invisible one.
+        queryParams: { prompt: 'select_account' },
+      },
     });
     if (error) return { error: friendlyAuthError(error.message) };
     return { error: null };
@@ -370,8 +486,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await supabase.auth.resetPasswordForEmail(email, {
         // Same customer-origin rule as the Google flow above — a recovery link must never land a
-        // customer on the RMS/Admin app.
-        redirectTo: `${resolveCustomerOrigin()}/forgot-password`,
+        // customer on the RMS/Admin app. /reset-password (not /forgot-password) — a dedicated
+        // page whose only job is "a recovery session exists, set a new password," so it can never
+        // be confused with the request-a-reset form or any other page's own auth-state logic.
+        // IMPORTANT: this exact URL (or a matching wildcard, e.g. `<origin>/**`) must be present in
+        // the Supabase Dashboard's Authentication -> URL Configuration -> Redirect URLs allowlist.
+        // Supabase silently ignores any redirectTo that isn't on that allowlist and falls back to
+        // the project's Site URL instead — which is the most likely reason a customer clicking the
+        // email link previously landed somewhere else entirely with no reset form in sight.
+        redirectTo: `${resolveCustomerOrigin()}/reset-password`,
       });
     } catch {
       // Ignored — resetPasswordForEmail already resolves the same way regardless of whether the
@@ -381,13 +504,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function resetPassword(newPassword: string): Promise<AuthResult> {
-    // A recovery session is what authorizes this change. Checked explicitly so an expired link (or
-    // one opened in a browser that never established the session) produces an actionable message
-    // instead of Supabase's raw "Auth session missing!" text.
+    // A recovery session (established by the customer clicking the emailed link) is what
+    // authorizes this change — checked explicitly so an expired/already-used link produces an
+    // actionable message instead of Supabase's raw "Auth session missing!" text.
     const { data: sessionData } = await supabase.auth.getSession();
     if (!sessionData.session) {
       return {
-        error: 'Your password reset link has expired or is no longer valid. Please request a new one.',
+        error: 'Your password reset request has expired or is no longer valid. Please request a new one.',
       };
     }
 
@@ -407,41 +530,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: null };
   }
 
-  async function changePassword(currentPassword: string, newPassword: string): Promise<AuthResult> {
-    if (!user?.email) return { error: 'You must be logged in to change your password.' };
-    // Reauthentication step: confirms the customer actually knows their current password before
-    // a change is allowed to proceed, using Supabase's own signInWithPassword — never a custom
-    // check. Signing in again on the same account doesn't disturb the current session; it's simply
-    // Supabase's standard mechanism for "prove you still are who you say you are."
-    const { error: reauthError } = await supabase.auth.signInWithPassword({
-      email: user.email,
-      password: currentPassword,
-    });
-    if (reauthError) return { error: 'Current password is incorrect.' };
+  // useCallback (not a plain function like its siblings above) because, unlike them, it closes
+  // over `user` — without this its identity would change every render regardless of whether `user`
+  // actually did, which would make it a "changed" dependency of the value memo below on every
+  // render and defeat the memoization entirely.
+  const changePassword = useCallback(
+    async (currentPassword: string, newPassword: string): Promise<AuthResult> => {
+      if (!user?.email) return { error: 'You must be logged in to change your password.' };
+      // Reauthentication step: confirms the customer actually knows their current password before
+      // a change is allowed to proceed, using Supabase's own signInWithPassword — never a custom
+      // check. Signing in again on the same account doesn't disturb the current session; it's
+      // simply Supabase's standard mechanism for "prove you still are who you say you are."
+      const { error: reauthError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword,
+      });
+      if (reauthError) return { error: 'Current password is incorrect.' };
 
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    if (error) return { error: friendlyAuthError(error.message) };
-    return { error: null };
-  }
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) return { error: friendlyAuthError(error.message) };
+      return { error: null };
+    },
+    [user],
+  );
 
-  const user = session?.user ?? null;
-  const needsEmailVerification = Boolean(user && !user.email_confirmed_at);
-  const value: AuthContextValue = {
-    user,
-    displayName: getDisplayName(user),
-    loading,
-    needsEmailVerification,
-    signUp,
-    signIn,
-    signInWithGoogle,
-    signOut,
-    resendEmailConfirmation,
-    requestPasswordReset,
-    passwordRecoveryActive,
-    resetPassword,
-    updateProfile,
-    changePassword,
-  };
+  // Memoized so every one of this context's many consumers (nearly every page — Navbar, checkout,
+  // My Bookings, Profile, the route guard in App.tsx) doesn't re-render on a fresh object identity
+  // whenever AuthProvider itself re-renders for a reason unrelated to auth (e.g. its parent
+  // re-rendering). signUp/signIn/signInWithGoogle/signOut/resendEmailConfirmation/
+  // requestPasswordReset/resetPassword/updateProfile close over no per-render value (they only call
+  // supabase.auth directly), so they don't need to be listed here.
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      user,
+      displayName: getDisplayName(user),
+      loading,
+      needsEmailVerification,
+      signUp,
+      signIn,
+      signInWithGoogle,
+      signOut,
+      resendEmailConfirmation,
+      requestPasswordReset,
+      passwordRecoveryActive,
+      resetPassword,
+      updateProfile,
+      changePassword,
+    }),
+    [user, loading, needsEmailVerification, passwordRecoveryActive, changePassword],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

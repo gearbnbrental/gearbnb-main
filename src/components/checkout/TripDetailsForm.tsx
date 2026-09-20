@@ -1,9 +1,9 @@
 ﻿import { useState, type ComponentType } from 'react';
 import { useRental } from '../../context/RentalContext';
+import { TODAY } from '../../utils/duration';
 import type { FulfillmentType } from '../../types/gearbnb';
 import { CheckIcon, MapPinIcon, TruckIcon } from '../icons';
 
-const TODAY = new Date().toISOString().slice(0, 10);
 
 interface FulfillmentOptionConfig {
   value: FulfillmentType;
@@ -63,13 +63,22 @@ export default function TripDetailsForm() {
   }
 
   return (
+    // No card of its own — the white "layer" (border/rounded/shadow on a `bg-surface` panel, same
+    // treatment EventPlan.tsx established) now wraps the *entire* checkout flow as one piece at
+    // the Checkout.tsx page level, not just this section, so Verification/Payment Breakdown sit on
+    // the same panel instead of each needing (or duplicating) their own card. This wrapper only
+    // keeps this section's own horizontal rhythm/padding, matching its siblings inside that shared
+    // card exactly (mx-auto/max-w-2xl are harmless no-ops here since the outer card is already
+    // that width — kept so this still renders correctly if ever used standalone).
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 p-5 sm:p-6">
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold text-ink">Trip Details</h2>
         <p className="text-sm text-ink-muted">Tell us when you need your gear and how you'd like to get it.</p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      {/* grid-cols-2 at every width — same reasoning as Path A/B's own Rental Dates fields: two
+          native date inputs don't need a full-width row each on a phone. */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4">
         <DateField
           label="Rental Start Date"
           value={tripDetails.startDate}

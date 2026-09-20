@@ -41,7 +41,7 @@ export default function AuthRequiredMessage({
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col items-center gap-4 px-5 py-16 text-center sm:px-6">
+    <div className="mx-auto flex w-full max-w-md flex-col items-center gap-4 px-5 py-10 text-center sm:px-6 sm:py-16">
       <span className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-forest text-white">
         <LockIcon className="h-7 w-7" />
       </span>

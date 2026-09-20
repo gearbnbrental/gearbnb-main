@@ -121,14 +121,18 @@ export default function Cart() {
     removeItem,
     setByoGearQuantity,
     setByoAddOnQuantity,
+    setPackageAddOnQuantity,
     toggleKitSelected,
     toggleItemSelected,
     toggleByoGearSelected,
+    togglePackageAddOnSelected,
+    toggleByoAddOnSelected,
     setAllCheckoutSelected,
     dismissRemovedNotice,
     totals,
   } = useRental();
-  const { selectedKits, selectedItems, kitExtras, byoGears, byoAddOns, checkoutSelection, removedItemNames } = cart;
+  const { selectedKits, selectedItems, kitExtras, packageAddOns, byoGears, byoAddOns, checkoutSelection, removedItemNames } =
+    cart;
   const hasSelection = selectedKits.length > 0 || selectedItems.length > 0 || byoGears.length > 0;
 
   const totalEntryCount = selectedKits.length + selectedItems.length + byoGears.length;
@@ -168,7 +172,7 @@ export default function Cart() {
 
   if (!hasSelection) {
     return (
-      <div className="mx-auto flex w-full max-w-2xl flex-col items-center gap-4 px-5 py-20 text-center sm:px-6">
+      <div className="mx-auto flex w-full max-w-2xl flex-col items-center gap-4 px-5 py-12 text-center sm:px-6 sm:py-20">
         {removedNotice && <div className="w-full">{removedNotice}</div>}
         <h1 className="font-serif text-xl font-semibold text-ink">Your Cart is Empty</h1>
         <p className="text-sm text-ink-muted">Add a package or build your own to get started.</p>
@@ -183,10 +187,17 @@ export default function Cart() {
   }
 
   return (
-    <div className="pb-28">
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-5 py-10 sm:px-6">
+    // pb-56 (not pb-28): extra safety margin for the true end of a long cart — this route lifts
+    // the floating Need Help/Back to Top buttons clear of the sticky checkout bar (see
+    // STICKY_FOOTER_ROUTES), but with both visible (BackToTop appears past 480px scrolled,
+    // stacking above Need Help) their combined footprint reaches ~208px above the viewport
+    // bottom, more than pb-28 (112px) cleared. (The Terms & Conditions overlap this was originally
+    // written to describe turned out to need a different fix — see the disclaimer's own comment
+    // above, where it was moved out of the vulnerable position entirely.)
+    <div className="pb-56">
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 px-4 py-5 sm:gap-6 sm:px-6 sm:py-10">
         <div className="flex items-center justify-between">
-          <h1 className="font-serif text-xl font-semibold text-ink">Your Cart</h1>
+          <h1 className="font-serif text-lg font-semibold text-ink sm:text-xl">Your Cart</h1>
           <Link to="/catalog" className="text-sm font-medium text-accent underline underline-offset-2">
             + Add more
           </Link>
@@ -195,9 +206,20 @@ export default function Cart() {
         {removedNotice}
 
         <div className="flex items-start justify-between gap-3">
+          {/* The "Terms & Conditions" disclaimer used to sit alone at the very bottom of the page,
+              right above the sticky checkout bar — for a cart with enough items to fill roughly one
+              phone screen, that position coincides with where the lifted floating Need Help/Back to
+              Top buttons sit on screen (confirmed via a seeded multi-item cart screenshot), covering
+              the link. Moving it up here, beside the checkout-selection disclaimer that already
+              lives at the top of every cart regardless of length, puts it somewhere floating
+              buttons never reach. */}
           <p className="text-xs text-ink-faint">
             Check which items to include in this checkout — an unchecked item stays saved in your cart. Bookings are
-            submitted one package or one Build Your Own selection at a time.
+            submitted one package or one Build Your Own selection at a time. By booking you agree to our{' '}
+            <Link to="/terms" className="font-medium text-accent underline underline-offset-2">
+              Terms &amp; Conditions
+            </Link>
+            .
           </p>
           <button
             type="button"
@@ -218,7 +240,7 @@ export default function Cart() {
               return (
                 <div
                   key={kit.id}
-                  className={`flex flex-col gap-3 rounded-xl border border-line bg-surface p-4 shadow-sm transition-opacity ${isChecked ? '' : 'opacity-60'}`}
+                  className={`flex flex-col gap-3 rounded-xl border border-line bg-surface p-3 shadow-sm transition-opacity sm:p-4 ${isChecked ? '' : 'opacity-60'}`}
                 >
                   <div className="flex flex-wrap items-center gap-3">
                     <CheckboxInput
@@ -238,24 +260,82 @@ export default function Cart() {
                     <RemoveButton itemLabel={kit.name} onConfirm={() => removeKit(kit.id)} />
                   </div>
 
+                  {/* Both extras and add-ons sit on a tinted inset block with a left accent bar,
+                      inside the SAME package card (never a separate nested card) — connected to
+                      the package above it by staying in that one card, distinguished from it by
+                      the tint + border so a customer can tell at a glance "this is extra, not part
+                      of what I already saw priced above." sm:ml-[5.75rem] shifts the whole block
+                      to align under the name/price column instead of the thumbnail, matching the
+                      layout every other sub-line in this card already uses. */}
                   {selectedExtras.length > 0 && (
-                    <ul className="flex flex-col gap-1.5 border-t border-line-soft pt-2 pl-[4.75rem] sm:pl-[5.75rem]">
-                      {selectedExtras.map((extra) => (
-                        <li key={extra.id} className="flex items-center justify-between text-sm text-ink-muted">
-                          <span>{extra.name}</span>
-                          <span className="flex items-center gap-2">
-                            {formatCurrency(extra.price)}
-                            <button
-                              type="button"
-                              onClick={() => removeKitExtra(kit.id, extra.id)}
-                              className="text-xs font-medium text-red-600 hover:underline dark:text-red-400"
+                    <div className="flex flex-col gap-1.5 rounded-lg border-l-2 border-brand-forest/30 bg-surface-muted p-2.5 sm:ml-[5.75rem]">
+                      <ul className="flex flex-col gap-1.5">
+                        {selectedExtras.map((extra) => (
+                          <li key={extra.id} className="flex items-center justify-between text-sm text-ink-muted">
+                            <span className="min-w-0 break-words">{extra.name}</span>
+                            <span className="flex shrink-0 items-center gap-2">
+                              {formatCurrency(extra.price)}
+                              <button
+                                type="button"
+                                onClick={() => removeKitExtra(kit.id, extra.id)}
+                                className="text-xs font-medium text-red-600 hover:underline dark:text-red-400"
+                              >
+                                Remove
+                              </button>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Extra rentable inventory added on top of this package — labelled and priced as
+                      its own lines under an explicit "Optional Add-ons" heading, never merged into
+                      the package's name or price above, so it's always clear these are additional
+                      rentals rather than package contents. Each add-on has its own checkbox,
+                      independent of the package's: unchecking it excludes just that add-on from
+                      this checkout while it stays in the cart (and the package, and every other
+                      add-on, untouched) — a separate, permanent action from Remove below. */}
+                  {(packageAddOns[kit.id] ?? []).length > 0 && (
+                    <div className="flex flex-col gap-1.5 rounded-lg border-l-2 border-brand-forest/30 bg-surface-muted p-2.5 sm:ml-[5.75rem]">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Optional Add-ons</p>
+                      <ul className="flex flex-col gap-1.5">
+                        {(packageAddOns[kit.id] ?? []).map((gear) => {
+                          const addOnKey = byoGearKey(gear);
+                          const isAddOnChecked = (checkoutSelection.packageAddOnKeys[kit.id] ?? []).includes(addOnKey);
+                          return (
+                            <li
+                              key={addOnKey}
+                              className={`flex items-center justify-between gap-2 text-sm text-ink-muted transition-opacity ${isAddOnChecked ? '' : 'opacity-60'}`}
                             >
-                              Remove
-                            </button>
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
+                              <span className="flex min-w-0 items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={isAddOnChecked}
+                                  onChange={() => togglePackageAddOnSelected(kit.id, addOnKey)}
+                                  aria-label={`Include ${gear.name} in this checkout`}
+                                  className="h-3.5 w-3.5 shrink-0 rounded border-line text-accent focus:ring-brand-forest"
+                                />
+                                <span className="min-w-0 break-words">
+                                  {gear.name}
+                                  {gear.quantity > 1 && ` × ${gear.quantity}`}
+                                </span>
+                              </span>
+                              <span className="flex shrink-0 items-center gap-2">
+                                {formatCurrency(getGearKindPrice(gear, cart.tripDetails) * gear.quantity)}
+                                <button
+                                  type="button"
+                                  onClick={() => setPackageAddOnQuantity(kit.id, gear, 0)}
+                                  className="text-xs font-medium text-red-600 hover:underline dark:text-red-400"
+                                >
+                                  Remove
+                                </button>
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
                   )}
                 </div>
               );
@@ -271,7 +351,7 @@ export default function Cart() {
               return (
               <div
                 key={item.id}
-                className={`flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface p-4 shadow-sm transition-opacity ${isChecked ? '' : 'opacity-60'}`}
+                className={`flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface p-3 shadow-sm transition-opacity sm:p-4 ${isChecked ? '' : 'opacity-60'}`}
               >
                 <CheckboxInput
                   checked={isChecked}
@@ -305,7 +385,7 @@ export default function Cart() {
               return (
                 <div
                   key={key}
-                  className={`flex flex-col gap-3 rounded-xl border border-line bg-surface p-4 shadow-sm transition-opacity ${isChecked ? '' : 'opacity-60'}`}
+                  className={`flex flex-col gap-3 rounded-xl border border-line bg-surface p-3 shadow-sm transition-opacity sm:p-4 ${isChecked ? '' : 'opacity-60'}`}
                 >
                   <div className="flex flex-wrap items-center gap-3">
                     <CheckboxInput
@@ -314,8 +394,12 @@ export default function Cart() {
                       label={`Include ${gear.name} in this checkout`}
                     />
                     <Thumbnail src={gear.imageUrl ?? ''} alt={gear.name} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium text-ink">{gear.name}</p>
+                    {/* On phones this column claims the rest of the first line (everything but the
+                        checkbox and thumbnail — 6.5rem), so the quantity control and trash wrap onto
+                        their own line. With a plain min-w-0 it would shrink to nothing instead:
+                        at 375px the gear name was crushed to a single character. */}
+                    <div className="min-w-[calc(100%-6.5rem)] flex-1 sm:min-w-0">
+                      <p className="break-words font-medium text-ink sm:truncate">{gear.name}</p>
                       <p className="text-xs text-ink-faint">Build Your Own &middot; {gear.category}</p>
                       <p className="text-sm font-semibold text-accent">
                         {formatCurrency(unitPrice)} <span className="text-xs font-normal text-ink-muted">each</span>
@@ -331,19 +415,40 @@ export default function Cart() {
                   </div>
 
                   {gear.quantity > 1 && (
-                    <p className="pl-[4.75rem] text-xs text-ink-muted sm:pl-[5.75rem]">
+                    <p className="text-xs text-ink-muted sm:pl-[5.75rem]">
                       Subtotal: {formatCurrency(unitPrice * gear.quantity)}
                     </p>
                   )}
 
                   {selectedAddOns.length > 0 && (
-                    <ul className="flex flex-col gap-2 border-t border-line-soft pt-2 pl-[4.75rem] sm:pl-[5.75rem]">
+                    <ul className="flex flex-col gap-2 border-t border-line-soft pt-2 sm:pl-[5.75rem]">
                       {selectedAddOns.map((addOn) => {
                         const addOnUnitPrice = getGearKindPrice(addOn, cart.tripDetails);
+                        const addOnKey = byoGearKey(addOn);
+                        // Independent of the gear's own checkbox above: unchecking this excludes
+                        // just this add-on from checkout while it (and its quantity) stay in the
+                        // cart — a separate, non-destructive action from the quantity stepper below
+                        // reaching 0, which still permanently removes it.
+                        const isAddOnChecked = (checkoutSelection.byoAddOnKeys[key] ?? []).includes(addOnKey);
                         return (
-                          <li key={byoGearKey(addOn)} className="flex items-center justify-between gap-2 text-sm text-ink-muted">
-                            <span className="min-w-0 truncate">{addOn.name}</span>
-                            <span className="flex shrink-0 items-center gap-2">
+                          // Stacked on phones: name on its own line, price and quantity control
+                          // beneath it. Side by side, a 136px stepper plus the price left the name
+                          // only a few characters before it truncated.
+                          <li
+                            key={addOnKey}
+                            className={`flex flex-col gap-1.5 text-sm text-ink-muted transition-opacity sm:flex-row sm:items-center sm:justify-between sm:gap-2 ${isAddOnChecked ? '' : 'opacity-60'}`}
+                          >
+                            <span className="flex min-w-0 items-center gap-2 sm:truncate">
+                              <input
+                                type="checkbox"
+                                checked={isAddOnChecked}
+                                onChange={() => toggleByoAddOnSelected(key, addOnKey)}
+                                aria-label={`Include ${addOn.name} in this checkout`}
+                                className="h-3.5 w-3.5 shrink-0 rounded border-line text-accent focus:ring-brand-forest"
+                              />
+                              <span className="min-w-0 break-words sm:truncate">{addOn.name}</span>
+                            </span>
+                            <span className="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
                               {formatCurrency(addOnUnitPrice * addOn.quantity)}
                               <QuantityStepper
                                 value={addOn.quantity}
@@ -362,14 +467,6 @@ export default function Cart() {
             })}
           </section>
         )}
-
-        <p className="text-center text-xs text-ink-faint">
-          By booking you agree to our{' '}
-          <Link to="/terms" className="font-medium text-accent underline underline-offset-2">
-            Terms &amp; Conditions
-          </Link>
-          .
-        </p>
       </div>
 
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur">

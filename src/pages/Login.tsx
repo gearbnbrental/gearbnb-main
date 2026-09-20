@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { consumeOAuthReturnPath, useAuth } from '../context/AuthContext';
+import { consumeOAuthReturnPath, friendlyAuthError, useAuth } from '../context/AuthContext';
 import { CheckCircleIcon } from '../components/icons';
 import ConfirmDialog from '../components/ConfirmDialog';
 import PasswordInput from '../components/PasswordInput';
@@ -169,8 +169,12 @@ function GoogleIcon({ className }: { className?: string }) {
  * split (a hero image beside the content) whether that content is the auth form or the
  * already-signed-in state, so the page never jumps between two different layouts. */
 function AuthPageShell({ children }: { children: ReactNode }) {
+  // items-center/min-h only from `sm` up: full-viewport-height vertical centering left roughly
+  // half the screen as blank background above and below the card on a phone — this card just
+  // flows near the top instead, with its own py-8 for breathing room. justify-center (the
+  // card's horizontal centering) stays unconditional at every width.
   return (
-    <div className="flex min-h-[calc(100vh-80px)] items-center justify-center px-5 py-8 sm:px-6">
+    <div className="flex justify-center px-5 py-8 sm:min-h-[calc(100vh-80px)] sm:items-center sm:px-6">
       <div className="w-full max-w-md overflow-hidden rounded-2xl border border-line bg-surface shadow-xl">
         {children}
       </div>
@@ -188,6 +192,48 @@ export default function Login() {
   const authReason = locationState?.reason ?? null;
   const { user, needsEmailVerification, signUp, signIn, signInWithGoogle, signOut, resendEmailConfirmation } =
     useAuth();
+
+  // Captured once, synchronously, on this component's very first render — before Supabase's own
+  // async hash processing (detectSessionInUrl) necessarily finishes consuming it. Supabase's email
+  // confirmation redirect lands here with `type=signup` in the URL hash (the same implicit-flow
+  // mechanism PASSWORD_RECOVERY already relies on elsewhere, via its own distinct
+  // onAuthStateChange event); a failed/expired link instead comes back with `error`/
+  // `error_description` params and never establishes a session at all. Read exactly once: the hash
+  // itself gets cleared by Supabase's own processing shortly after landing, and a stale "you just
+  // verified" screen must never resurface later just because `user` still happens to be truthy on
+  // some unrelated future visit to this same URL. `isLinkExpiredOrInvalid` reuses
+  // AuthContext's own friendlyAuthError classification (the exact same "That link has
+  // expired"/"That link is invalid" text signInWithGoogle/resetPassword failures already produce)
+  // rather than inventing a second way to recognize the same two error shapes — and is
+  // deliberately narrow: any OTHER kind of auth error redirected here (e.g. a failed Google
+  // sign-in) falls straight through to the ordinary form/error handling below, unaffected.
+  const [emailConfirmation, setEmailConfirmation] = useState<{
+    isSignupRedirect: boolean;
+    isLinkExpiredOrInvalid: boolean;
+  }>(() => {
+    if (typeof window === 'undefined') return { isSignupRedirect: false, isLinkExpiredOrInvalid: false };
+    const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const rawError = params.get('error');
+    const friendlyMessage = rawError ? friendlyAuthError(params.get('error_description') ?? rawError) : null;
+    return {
+      isSignupRedirect: params.get('type') === 'signup',
+      isLinkExpiredOrInvalid:
+        friendlyMessage === 'That link has expired. Please request a new one.' ||
+        friendlyMessage === 'That link is invalid. Please request a new one.',
+    };
+  });
+
+  // Dismisses either of the two screens driven by `emailConfirmation` and strips the now-handled
+  // hash params from the visible URL — navigating to the same `/login` route doesn't itself
+  // remount this component (so the state above would otherwise never change on its own), and the
+  // error/type params have already done their one job of getting the customer to the right screen
+  // once; nothing about them should linger in the address bar afterward.
+  function dismissEmailConfirmationScreen() {
+    setEmailConfirmation({ isSignupRedirect: false, isLinkExpiredOrInvalid: false });
+    if (typeof window !== 'undefined' && window.location.hash) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  }
 
   const [mode, setMode] = useState<Mode>(locationState?.mode ?? 'login');
   const [fullName, setFullName] = useState('');
@@ -379,6 +425,32 @@ export default function Login() {
     setEmailResendMessage('Confirmation email resent — check your inbox.');
   }
 
+  // Checked before every other branch — an expired/invalid confirmation link never establishes a
+  // session, so `user` stays null and nothing below would otherwise explain why the customer just
+  // landed on an empty login form right after clicking a link that was supposed to confirm their
+  // account. See emailConfirmation's own doc comment for exactly what this is (and isn't)
+  // triggered by.
+  if (emailConfirmation.isLinkExpiredOrInvalid) {
+    return (
+      <AuthPageShell>
+        <div className="flex flex-col items-center gap-4 p-8 text-center sm:p-10">
+          <h1 className="font-serif text-xl font-semibold text-ink">Verification Link Invalid or Expired</h1>
+          <p className="text-sm text-ink-muted">
+            The verification link is invalid or has expired. Please try signing in — if your email still needs
+            confirming, you can request a new link from there.
+          </p>
+          <button
+            type="button"
+            onClick={dismissEmailConfirmationScreen}
+            className="h-11 rounded-lg bg-brand-forest px-6 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-forest-dark"
+          >
+            Return to Sign In
+          </button>
+        </div>
+      </AuthPageShell>
+    );
+  }
+
   // Shown the moment signUp() reports Supabase requires email confirmation — no session exists
   // yet (checked before every other branch below, all of which assume `user` might be set).
   if (pendingEmailConfirmation) {
@@ -481,6 +553,40 @@ export default function Login() {
             className="text-center text-xs font-medium text-ink-muted underline underline-offset-2"
           >
             Log Out
+          </button>
+        </div>
+      </AuthPageShell>
+    );
+  }
+
+  // A fresh, successful signup-confirmation redirect — Supabase's own hash processing already
+  // established a real session by the time this renders (see AuthContext's onAuthStateChange
+  // listener), so `user` being truthy and email-confirmed here is the actual verified-email state,
+  // never anything this screen decides or fabricates on its own. Checked after
+  // needsEmailVerification (that screen must still win if the session is somehow still
+  // unconfirmed) but before the plain "You're Logged In" fallback below, which this replaces only
+  // for this one specific landing — a customer who visits /login some other time while already
+  // signed in still sees that ordinary screen, unchanged.
+  if (user && !needsEmailVerification && emailConfirmation.isSignupRedirect) {
+    return (
+      <AuthPageShell>
+        <div className="flex flex-col items-center gap-4 p-8 text-center sm:p-10">
+          <CheckCircleIcon className="h-10 w-10 text-accent" />
+          <div className="flex flex-col gap-1.5">
+            <h1 className="font-serif text-xl font-semibold text-ink">Email Verified!</h1>
+            <p className="text-sm text-ink-muted">
+              Your email has been successfully verified. You can now sign in to your GearBnB account.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              dismissEmailConfirmationScreen();
+              navigate(redirectTo, { replace: true });
+            }}
+            className="h-11 w-full rounded-lg bg-brand-forest px-6 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-forest-dark"
+          >
+            Continue to Sign In
           </button>
         </div>
       </AuthPageShell>

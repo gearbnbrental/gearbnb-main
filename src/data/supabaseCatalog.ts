@@ -1,9 +1,9 @@
 import { supabase } from '../supabase';
+import type { RmsCatalogPackage } from '../utils/rmsApi';
 import type { IndividualItem, KitEdition, PackageKit } from '../types/gearbnb';
-import { mockIndividualItems, mockPackages } from './mockData';
 
 /** Raw shape of a row in the `packages` table (RMS Prisma schema, only the columns we use). */
-interface PackageRow {
+export interface PackageRow {
   id: string;
   packageNumber: string;
   name: string;
@@ -14,6 +14,11 @@ interface PackageRow {
    *  Null/0 means no rate has been configured yet (never a reason to invent one here). */
   extraPerDayCentavos: number | null;
   depositCentavos: number;
+  /** Non-nullable on the real schema (Package.basePriceCentavos) — the price this package falls
+   * back to whenever price48hCentavos/price72hCentavos is null, i.e. an admin hasn't configured a
+   * duration-specific override yet. See resolvePackagePricing, which mirrors the exact same
+   * fallback RMS's own customer catalog endpoint applies server-side. */
+  basePriceCentavos: number;
   /** Storage path (within the public "inventory-photos" bucket) of this package's admin-uploaded
    * image, or null when none has been set yet — see resolvePackageImageUrl. */
   imageStoragePath: string | null;
@@ -30,6 +35,22 @@ interface RentableGearRow {
 }
 
 const centavosToPesos = (centavos: number) => centavos / 100;
+
+/**
+ * A real Package row's price48hCentavos/price72hCentavos can be null — an admin hasn't configured
+ * a duration-specific override yet — in which case this falls back to the row's own
+ * basePriceCentavos (never nullable on the real schema), never a fabricated ₱0. Mirrors, field for
+ * field, the exact fallback RMS's own customer catalog service performs server-side
+ * (`pkg.price48hCentavos ?? pkg.basePriceCentavos`, confirmed in src/server/catalog/service.ts) —
+ * not a fallback invented here, just the same real RMS business rule applied to the same raw
+ * columns Main reads directly from Supabase.
+ */
+function resolvePackagePricing(row: PackageRow): { '48h': number; '72h': number } {
+  return {
+    '48h': centavosToPesos(row.price48hCentavos ?? row.basePriceCentavos),
+    '72h': centavosToPesos(row.price72hCentavos ?? row.basePriceCentavos),
+  };
+}
 
 /**
  * Real `packages.description` rows have carried raw internal notes straight through to
@@ -90,7 +111,7 @@ function parseKitNameAndEdition(name: string): { baseName: string; editionLabel:
   return { baseName: name.trim(), editionLabel: null };
 }
 
-function groupPackageRows(rows: PackageRow[]): PackageKit[] {
+export function groupPackageRows(rows: PackageRow[]): PackageKit[] {
   const groups = new Map<string, { baseName: string; entries: { row: PackageRow; editionLabel: string | null }[] }>();
 
   for (const row of rows) {
@@ -113,6 +134,15 @@ function groupPackageRows(rows: PackageRow[]): PackageKit[] {
           // primary/first entry, since a Black and a Khaki edition can have different photos.
           imageUrl: resolvePackageImageUrl(row.imageStoragePath),
           packageNumber: row.packageNumber,
+          // Each edition's OWN price/deposit — never the primary/first entry's, since two editions
+          // of the same kit are independent real Package rows and RMS allows them to be priced
+          // differently (see KitEdition's own doc comment). isOutOfStock starts false here, same as
+          // the kit-level default below; applyPackageSelectability fills in the real per-edition
+          // value from RMS's own canSelect once that fetch resolves.
+          pricing: resolvePackagePricing(row),
+          depositAmount: centavosToPesos(row.depositCentavos),
+          extraPerDayPrice: centavosToPesos(row.extraPerDayCentavos ?? 0),
+          isOutOfStock: false,
         }))
       : undefined;
 
@@ -122,10 +152,7 @@ function groupPackageRows(rows: PackageRow[]): PackageKit[] {
       name: stripGenericBrand(baseName),
       description: sanitizeDescription(primary.description ?? ''),
       depositAmount: centavosToPesos(primary.depositCentavos),
-      pricing: {
-        '48h': centavosToPesos(primary.price48hCentavos ?? 0),
-        '72h': centavosToPesos(primary.price72hCentavos ?? primary.price48hCentavos ?? 0),
-      },
+      pricing: resolvePackagePricing(primary),
       extraPerDayPrice: centavosToPesos(primary.extraPerDayCentavos ?? 0),
       // includedItems, paxRange, capacity, extras, and isOutOfStock have no columns/relations on
       // the real `packages` table yet (see audit notes). Left as honest empty/neutral defaults —
@@ -162,23 +189,31 @@ function mapGearRow(row: RentableGearRow): IndividualItem {
   };
 }
 
+/**
+ * RMS/Supabase is the authoritative source for the real package catalog — this never falls back
+ * to mock/demo data on a failure. A failed or errored fetch throws, so the caller (CatalogContext)
+ * can show a genuine loading/error/empty state instead of silently substituting fictional
+ * packages a customer could select and attempt to book. An empty, successful result (the table
+ * genuinely has zero active packages right now) is NOT an error — it's a legitimate real answer,
+ * returned as `[]` rather than thrown.
+ */
 export async function fetchCatalogPackages(): Promise<PackageKit[]> {
   const { data, error } = await supabase
     .from('packages')
     .select(
-      'id,packageNumber,name,description,price48hCentavos,price72hCentavos,extraPerDayCentavos,depositCentavos,imageStoragePath',
+      'id,packageNumber,name,description,price48hCentavos,price72hCentavos,extraPerDayCentavos,depositCentavos,basePriceCentavos,imageStoragePath',
     )
     .eq('isActive', true)
     .is('deletedAt', null);
 
   if (error) {
-    console.warn('[supabaseCatalog] packages fetch failed, using mock fallback:', error.message);
-    return mockPackages;
+    throw new Error(`[supabaseCatalog] packages fetch failed: ${error.message}`);
   }
-  if (!data || data.length === 0) return mockPackages;
+  if (!data || data.length === 0) return [];
   return groupPackageRows(data as PackageRow[]);
 }
 
+/** Same authoritative-only contract as fetchCatalogPackages above — see its own doc comment. */
 export async function fetchCatalogItems(): Promise<IndividualItem[]> {
   const { data, error } = await supabase
     .from('rentable_gears')
@@ -187,9 +222,40 @@ export async function fetchCatalogItems(): Promise<IndividualItem[]> {
     .is('deletedAt', null);
 
   if (error) {
-    console.warn('[supabaseCatalog] rentable_gears fetch failed, using mock fallback:', error.message);
-    return mockIndividualItems;
+    throw new Error(`[supabaseCatalog] rentable_gears fetch failed: ${error.message}`);
   }
-  if (!data || data.length === 0) return mockIndividualItems;
+  if (!data || data.length === 0) return [];
   return (data as RentableGearRow[]).map(mapGearRow);
+}
+
+/**
+ * Enriches an already-built `PackageKit[]` (from fetchCatalogPackages, sourced from Supabase) with
+ * the one real signal Supabase's own `packages` table has no equivalent for: RMS's own `canSelect`
+ * — whether every component this package needs currently has enough live stock, from the RMS
+ * catalog endpoint (GET /api/customer/catalog/packages, see RmsCatalogPackage's own doc comment).
+ * Matched by `packageNumber`, the one identifier both sources share for the same real Package row —
+ * both a kit's own `packageNumber` (the first/primary edition) and each of its `editions[].
+ * packageNumber` are looked up independently, since two editions of the same kit can have
+ * genuinely different stock (see KitEdition.isOutOfStock's own doc comment). A packageNumber RMS
+ * doesn't currently report (e.g. a transient mismatch between the two sources) is left at its
+ * existing value rather than guessed — this is purely additive, never a reason to mark a package
+ * unselectable Main has no real signal for.
+ */
+export function applyPackageSelectability(kits: PackageKit[], rmsPackages: RmsCatalogPackage[]): PackageKit[] {
+  const canSelectByPackageNumber = new Map(rmsPackages.map((pkg) => [pkg.packageNumber, pkg.canSelect]));
+
+  return kits.map((kit) => {
+    const kitCanSelect = canSelectByPackageNumber.get(kit.packageNumber);
+    return {
+      ...kit,
+      isOutOfStock: kitCanSelect === undefined ? kit.isOutOfStock : !kitCanSelect,
+      editions: kit.editions?.map((edition) => {
+        const editionCanSelect = canSelectByPackageNumber.get(edition.packageNumber);
+        return {
+          ...edition,
+          isOutOfStock: editionCanSelect === undefined ? edition.isOutOfStock : !editionCanSelect,
+        };
+      }),
+    };
+  });
 }

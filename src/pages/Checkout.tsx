@@ -35,7 +35,7 @@ export default function Checkout() {
     const depositNotYetDetermined = submittedBooking.depositCentavos <= 0;
 
     return (
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-5 py-16 sm:px-6">
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-5 py-10 sm:gap-8 sm:px-6 sm:py-16">
         <div className="flex flex-col items-center gap-3 text-center">
           <h1 className="font-serif text-xl font-semibold text-ink">Booking Request Submitted</h1>
           <p className="text-sm font-semibold text-accent">Booking #{submittedBooking.bookingNumber}</p>
@@ -80,20 +80,29 @@ export default function Checkout() {
   }
 
   return (
-    <div className="flex flex-col divide-y divide-line">
+    <div className="mx-auto w-full max-w-2xl px-5 py-6 sm:px-6 sm:py-8">
       {/* Only on the form itself — the post-submission confirmation above deliberately has no back
-          link, since the booking already exists and returning to the cart would imply otherwise. */}
-      <div className="mx-auto w-full max-w-2xl px-5 pt-5 sm:px-6">
-        <BackLink to="/cart" label="Back to Cart" />
-      </div>
-      <TripDetailsForm />
-      <VerificationUpload
-        onSubmit={() =>
-          document.getElementById('payment-breakdown')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        }
-      />
-      <div id="payment-breakdown">
-        <PaymentBreakdown onSubmit={(result) => setSubmittedBooking(result)} />
+          link, since the booking already exists and returning to the cart would imply otherwise.
+          Kept outside the white card below (page-level navigation, not part of the form content),
+          same as every other back link on the site. */}
+      <BackLink to="/cart" label="Back to Cart" />
+
+      {/* One white "layer" behind the whole checkout flow — Trip Details, Verification, and
+          Payment Breakdown together, not just one of them — same card treatment EventPlan.tsx
+          already established (border/rounded/shadow on a `bg-surface` panel) applied to the
+          entire form as a single piece instead of each section sitting directly on the page's
+          bare background. divide-y keeps the same internal separation between sections that
+          existed before, now as hairlines inside one card rather than gaps between bare sections. */}
+      <div className="mt-4 flex w-full flex-col divide-y divide-line rounded-2xl border border-line bg-surface shadow-sm">
+        <TripDetailsForm />
+        <VerificationUpload
+          onSubmit={() =>
+            document.getElementById('payment-breakdown')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }
+        />
+        <div id="payment-breakdown">
+          <PaymentBreakdown onSubmit={(result) => setSubmittedBooking(result)} />
+        </div>
       </div>
     </div>
   );

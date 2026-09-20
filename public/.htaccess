@@ -1,0 +1,22 @@
+# Apache / LiteSpeed (e.g. Hostinger shared hosting). Ignored by hosts that don't read .htaccess.
+# Keep the headers in sync with public/_headers (see the CSP source notes there).
+
+# SPA fallback for react-router's BrowserRouter. Real files and directories are served as-is;
+# anything that looks like a file (has an extension, e.g. a stale /assets/*.js) still gets a real 404.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^index\.html$ - [L]
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteCond %{REQUEST_URI} !\.[A-Za-z0-9]{1,8}$
+  RewriteRule . /index.html [L]
+</IfModule>
+
+<IfModule mod_headers.c>
+  Header always set Strict-Transport-Security "max-age=63072000; includeSubDomains"
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "DENY"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'sha256-Eh7mxHFHl1U0O+0z4mAE43oEAm8k2IlCD9sEeW0mduM='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://hwsjarimtmsovpcbrolj.supabase.co; media-src 'self' blob:; connect-src 'self' https://hwsjarimtmsovpcbrolj.supabase.co https://admin.gearbnbrental.com; frame-src https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+</IfModule>

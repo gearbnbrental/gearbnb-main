@@ -1,0 +1,23 @@
+# Security headers (Netlify / Cloudflare Pages format). Keep in sync with public/.htaccess.
+#
+# CSP sources, all taken from what the built app actually loads:
+#   script-src   'self' + the sha256 of the single inline theme script in index.html
+#                (rewritten automatically at build time by the csp-inline-script-hash plugin in vite.config.ts)
+#   style-src    Google Fonts stylesheet (src/index.css) + 'unsafe-inline' for React style props
+#   font-src     Google Fonts files
+#   img-src      own images, data:/blob: previews of files being uploaded, Supabase Storage
+#                (public package photos and payment-QR images)
+#   media-src    blob: preview of the verification video before upload
+#   connect-src  Supabase (auth, REST, Storage) and the RMS customer API
+#   frame-src    the Google Maps embed on the About Us page
+/*
+  Strict-Transport-Security: max-age=63072000; includeSubDomains
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'sha256-Eh7mxHFHl1U0O+0z4mAE43oEAm8k2IlCD9sEeW0mduM='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://hwsjarimtmsovpcbrolj.supabase.co; media-src 'self' blob:; connect-src 'self' https://hwsjarimtmsovpcbrolj.supabase.co https://admin.gearbnbrental.com; frame-src https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
+
+# Hashed build output never changes for a given filename.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

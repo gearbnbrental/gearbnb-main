@@ -186,7 +186,10 @@ function ProofDropzone({ file, previewUrl, error, disabled, onSelect, onRemove }
         onDragLeave={() => setIsDragActive(false)}
         onDrop={handleDrop}
         className={[
-          'relative flex h-32 flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed p-3 text-center transition-colors',
+          // Same reasoning as DepositProofUpload/VerificationUpload's own dropzones: drag-and-drop
+          // is a desktop-only affordance, so the full h-32 it needs there is unused height on a
+          // phone.
+          'relative flex h-24 flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed p-3 text-center transition-colors sm:h-32',
           disabled ? 'cursor-wait' : 'cursor-pointer',
           error
             ? 'border-red-400 bg-red-50 dark:border-red-500 dark:bg-red-500/10'
@@ -265,6 +268,12 @@ export interface RentalFeeProofUploadProps {
   /** Called after the proof is uploaded and accepted by GearBnB for review — lets the parent
    * optimistically flip its local status to "pending" without a full refetch. */
   onProofSubmitted?: () => void;
+  /** True once the parent booking has reached a terminal status (COMPLETED/CANCELLED) — suppresses
+   * the interactive upload form while still showing whatever historical status this rental fee's
+   * proof already reached (Paid/Pending Review/Rejected), since a terminal booking is read-only
+   * going forward but its history must stay visible. Defaults to false so every existing caller
+   * keeps its exact current behavior. */
+  readOnly?: boolean;
 }
 
 export default function RentalFeeProofUpload({
@@ -275,6 +284,7 @@ export default function RentalFeeProofUpload({
   reviewNote,
   amountClaimedCentavos,
   onProofSubmitted,
+  readOnly = false,
 }: RentalFeeProofUploadProps) {
   const { user } = useAuth();
 
@@ -296,7 +306,11 @@ export default function RentalFeeProofUpload({
 
   const isPending = !isPaid && proofStatus === 'PENDING_REVIEW';
   const isRejected = !isPaid && !isPending && proofStatus === 'REJECTED';
-  const showUploadForm = !isPaid && !isPending;
+  // readOnly never changes isPaid/isPending/isRejected above — those keep rendering their own
+  // read-only notice (PaidStatus/PendingStatus/RejectedNotice below) exactly as before. It only
+  // suppresses the interactive form beneath them, since no new submission is ever possible once
+  // the parent booking is terminal.
+  const showUploadForm = !isPaid && !isPending && !readOnly;
 
   function resetSelection() {
     if (objectUrlRef.current) {
@@ -403,11 +417,13 @@ export default function RentalFeeProofUpload({
     <div className="flex flex-col gap-4">
       {isPaid && <PaidStatus paidCentavos={paidCentavos} />}
       {isPending && <PendingStatus amountClaimedCentavos={amountClaimedCentavos} />}
+      {/* Shown regardless of readOnly — historical fact about what happened to this proof, not an
+          action; must stay visible even once the booking is terminal and no resubmission is
+          offered anymore (see showUploadForm). */}
+      {isRejected && <RejectedNotice reviewNote={reviewNote} />}
 
       {showUploadForm && (
         <>
-          {isRejected && <RejectedNotice reviewNote={reviewNote} />}
-
           <PaymentInstructionsSection purpose="rental fee" />
 
           <div className="flex flex-col gap-3">

@@ -29,18 +29,48 @@ export default function Footer() {
   }
 
   return (
-    <footer className="bg-brand-brown px-5 py-12 sm:px-6">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
-        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-5">
-          <div className="flex flex-col gap-3">
+    // Extra bottom clearance on mobile only: FloatingHelp + BackToTop are both `fixed` to the
+    // viewport's bottom-right corner (see their own components), so they don't push this footer's
+    // own content up the way normal document flow would — without this, the last row of links and
+    // the copyright line would sit directly underneath that floating stack instead of above it.
+    // Sized to clear BackToTop's own top edge (bottom-[5.5rem] + its 2.75rem height) with a small
+    // buffer. Desktop keeps its original py-12 unchanged — the floating stack there is comfortably
+    // clear of the wider footer already.
+    <footer className="relative isolate overflow-hidden bg-brand-brown px-5 pb-36 pt-8 sm:px-6 sm:py-12">
+      {/* A soft radial highlight, not a texture/pattern change — client's "soft background... make
+          it stand out more" request, read as "give the footer some gentle depth rather than a
+          single flat color block," not "redesign it." Same color-mix + radial-gradient idiom
+          AboutUs.tsx's own SectionGlow already establishes elsewhere on the site, just tuned for
+          this dark background (a warm, low-opacity olive highlight reads as a soft glow here,
+          where the light-background version elsewhere on the site wouldn't). Purely decorative
+          (aria-hidden, pointer-events-none): every link, text, and existing layout below is
+          completely unchanged. */}
+      <div
+        className="pointer-events-none absolute inset-0 -z-10 opacity-70"
+        style={{
+          background:
+            'radial-gradient(60% 70% at 85% 0%, color-mix(in srgb, var(--color-brand-olive) 22%, transparent), transparent 70%)',
+        }}
+        aria-hidden="true"
+      />
+      {/* gap-6 below sm (not gap-8): stacked single-column below `sm` (unchanged — still one
+          column, per design, just tighter), this is the one number controlling the space between
+          the grid and the copyright row. */}
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 sm:gap-8">
+        {/* gap-5 below sm (not gap-8): with five groups stacking into a single column below `sm`,
+            this same value repeats FOUR times in a row (between every pair of stacked groups) —
+            it was the single largest contributor to the mobile footer's height, more than the
+            outer section padding or any individual group's own content. */}
+        <div className="grid gap-5 sm:grid-cols-2 sm:gap-8 lg:grid-cols-5">
+          <div className="flex flex-col gap-2 sm:gap-3">
             <div className="flex items-center gap-2">
-              <img src="/brand_assets/GEARBNB_logo.png" alt="" className="h-8 w-8 rounded-full" />
+              <img src="/brand_assets/GEARBNB_logo.png" alt="" className="h-7 w-7 rounded-full sm:h-8 sm:w-8" />
               <span className="font-serif text-base font-bold text-white">GearBnB</span>
             </div>
             <p className="text-sm text-white">Making camping memorable with easy and reliable rentals.</p>
           </div>
 
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-1.5 sm:gap-2">
             <h3 className="text-sm font-semibold text-white">Quick Links</h3>
             <button type="button" onClick={() => navigate('/catalog')} className="w-fit text-left text-sm text-white hover:opacity-80">
               Rent Gear
@@ -52,12 +82,16 @@ export default function Footer() {
             >
               Adventure Bundles
             </button>
-            <button type="button" onClick={() => navigate('/event-plan')} className="w-fit text-left text-sm text-white hover:opacity-80">
+            <button
+              type="button"
+              onClick={() => navigate('/plan-an-event')}
+              className="w-fit text-left text-sm text-white hover:opacity-80"
+            >
               Plan an Event
             </button>
           </div>
 
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-1.5 sm:gap-2">
             <h3 className="text-sm font-semibold text-white">Rental Help</h3>
             {/* Scrolls to the "How To Rent Camping Gear from GearBnB?" section (the process-steps
                 section on the home page) — id retained as "how-renting-works" even though the
@@ -80,7 +114,7 @@ export default function Footer() {
                 gear-care/blog content to point it at instead. */}
           </div>
 
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-1.5 sm:gap-2">
             <h3 className="text-sm font-semibold text-white">Policies</h3>
             <button type="button" onClick={() => navigate('/terms')} className="w-fit text-left text-sm text-white hover:opacity-80">
               Rental Terms
@@ -101,7 +135,7 @@ export default function Footer() {
               icon row here — those already have one clear home in this footer, the copyright
               row's SocialLinks icons below. Messenger is the one platform that row doesn't cover,
               so it gets its own single "Send us a message" link here instead of a duplicated row. */}
-          <div className="flex min-w-0 flex-col gap-3">
+          <div className="flex min-w-0 flex-col gap-2 sm:gap-3">
             <h3 className="text-sm font-semibold text-white">Get in Touch</h3>
             {/* Renders only while CONTACT_EMAIL is actually set (see config/social.ts) — this
                 is the customer-support address only, never the RMS's automated booking sender
@@ -111,7 +145,7 @@ export default function Footer() {
                 href={`mailto:${CONTACT_EMAIL}`}
                 className="flex min-w-0 items-center gap-2.5 text-sm text-white transition-opacity hover:opacity-80"
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10 sm:h-8 sm:w-8">
                   <MailIcon className="h-4 w-4" />
                 </span>
                 <span className="min-w-0 break-words">{CONTACT_EMAIL}</span>
@@ -124,7 +158,7 @@ export default function Footer() {
               aria-label="Send us a message on Messenger (opens in a new tab)"
               className="flex items-center gap-2.5 text-sm text-white transition-opacity hover:opacity-80"
             >
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10 sm:h-8 sm:w-8">
                 <ChatBubbleIcon className="h-4 w-4" />
               </span>
               Send us a message
@@ -132,7 +166,7 @@ export default function Footer() {
           </div>
         </div>
 
-        <div className="flex flex-col items-center justify-between gap-3 border-t border-white/10 pt-6 text-xs text-white sm:flex-row">
+        <div className="flex flex-col items-center justify-between gap-3 border-t border-white/10 pt-4 text-xs text-white sm:flex-row sm:pt-6">
           <span>&copy; 2026 GearBnB. All rights reserved.</span>
           <div className="flex items-center gap-2">
             <SocialLinks className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-white transition-opacity hover:opacity-80" />

@@ -1,7 +1,7 @@
 ﻿import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { BYO_RENTAL_AGREEMENT_URL, TERMS_AND_CONDITIONS_URL } from '../config/legalDocuments';
-import { mockPackages } from '../data/mockData';
+import { useCatalog } from '../context/useCatalog';
 import { formatCurrency } from '../utils/format';
 
 interface TermsSection {
@@ -102,6 +102,15 @@ const GENERAL_TERMS: TermsSection[] = [
 
 export default function Terms() {
   const location = useLocation();
+  // The real, authoritative package list and deposit amounts — same shared catalog source
+  // PathACatalog's own package grid already reads (CatalogContext's `kits`, live Supabase/RMS
+  // data once it resolves, an instant mock placeholder only until it does — see CatalogContext's
+  // own doc comment). Previously this table read the static `mockPackages` array directly,
+  // completely bypassing the live catalog: it always showed the mock fixtures' names/deposits
+  // (including a "Wanderer Kit" that has never existed as a real RMS package) regardless of what
+  // was actually active in the database, and would keep doing so forever, not just during the
+  // brief initial-load window every other catalog-reading page already tolerates.
+  const { kits } = useCatalog();
 
   // React Router navigation (the footer's "Gear Care Tips"/"Deposit & Refunds" links, and any
   // direct #hash visit) doesn't get the browser's native scroll-to-fragment behavior the way a
@@ -163,7 +172,7 @@ export default function Terms() {
               </tr>
             </thead>
             <tbody className="divide-y divide-line-soft">
-              {mockPackages.map((kit) => (
+              {kits.map((kit) => (
                 <tr key={kit.id}>
                   <td className="px-4 py-3 text-ink">{kit.name}</td>
                   <td className="px-4 py-3 text-right font-medium text-ink">{formatCurrency(kit.depositAmount)}</td>
@@ -189,7 +198,14 @@ export default function Terms() {
               {section.bullets.map((bullet) => (
                 <li key={bullet} className="flex gap-3">
                   <span className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-forest" />
-                  <span>{bullet}</span>
+                  {/* min-w-0: a flex item's default min-width is `auto`, not 0 — without it, this
+                      column can't shrink below its content's intrinsic width. break-words on top of
+                      that: one bullet contains "typhoons/earthquakes/floods/landslides" — slashes
+                      aren't a line-break opportunity by default, so that 40-character run stayed a
+                      single unbreakable "word" wider than the available column even once the flex
+                      item itself could shrink, and was still pushing the page past the viewport at
+                      320px, the one width narrow enough for it to matter. */}
+                  <span className="min-w-0 break-words">{bullet}</span>
                 </li>
               ))}
             </ul>

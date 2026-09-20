@@ -1,4 +1,5 @@
-﻿import { useEffect, useState, type FormEvent } from 'react';
+﻿import { usePageMeta } from '../hooks/usePageMeta';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { CheckCircleIcon, CheckIcon } from '../components/icons';
@@ -83,6 +84,10 @@ function Field({ label, required = true, children }: { label: string; required?:
 }
 
 export default function EventPlan() {
+  usePageMeta(
+    'Camping Gear Rental for Events & Team Building | GearBnB',
+    'Plan your team-building or big event with camping gear rental. Get quality camping gear for groups and make your outdoor event hassle-free.',
+  );
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
@@ -203,7 +208,11 @@ export default function EventPlan() {
     ];
 
     return (
-      <div className="mx-auto flex w-full max-w-2xl flex-col items-center gap-6 px-5 py-16 text-center sm:px-6">
+      // Same card treatment as the form state below (see its own comment) — a customer landing
+      // here right after submitting must never see the card suddenly vanish, which would read as
+      // a broken transition rather than "the same page, now showing confirmation."
+      <div className="mx-auto w-full max-w-3xl px-5 py-10 sm:px-6">
+      <div className="flex w-full flex-col items-center gap-6 rounded-2xl border border-line bg-surface p-6 text-center shadow-sm sm:p-10">
         <span className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-forest text-white">
           <CheckCircleIcon className="h-10 w-10" />
         </span>
@@ -262,11 +271,18 @@ export default function EventPlan() {
           </Link>
         </div>
       </div>
+      </div>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mx-auto flex w-full max-w-2xl flex-col gap-6 p-5 sm:p-6">
+    // Wrapped in a distinct card (border/rounded/shadow on a `bg-surface` panel, sitting on the
+    // page's own background) — matching the client's reference image and the same card pattern
+    // already established elsewhere on the site (Login/ForgotPassword/ResetPassword). Previously
+    // this form had no card at all — fields sat directly on the bare page background, which is
+    // the actual structural gap the reference was pointing at, not a wording/field difference.
+    <div className="mx-auto w-full max-w-3xl px-5 py-10 sm:px-6">
+    <form onSubmit={handleSubmit} className="flex w-full flex-col gap-6 rounded-2xl border border-line bg-surface p-6 shadow-sm sm:p-8">
       <div className="flex flex-col gap-1">
         <h1 className="font-serif text-xl font-semibold text-ink">Plan an Event</h1>
         <p className="text-sm text-ink-muted">
@@ -321,7 +337,9 @@ export default function EventPlan() {
         <input required type="text" value={form.eventLocation} onChange={(e) => update('eventLocation', e.target.value)} className={inputClass} />
       </Field>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      {/* grid-cols-2 at every width — same reasoning as Path A/B and Checkout's own Rental
+          Dates fields: two native date inputs don't need a full-width row each on a phone. */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4">
         <Field label="Event Start Date">
           <input required type="date" min={TODAY} value={form.eventStartDate} onChange={(e) => update('eventStartDate', e.target.value)} className={inputClass} />
         </Field>
@@ -424,5 +442,6 @@ export default function EventPlan() {
         onConfirm={performSubmit}
       />
     </form>
+    </div>
   );
 }

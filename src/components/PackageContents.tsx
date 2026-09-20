@@ -4,6 +4,13 @@ import type { PackageKit } from '../types/gearbnb';
 
 interface PackageContentsProps {
   kit: Pick<PackageKit, 'includedItems' | 'description'>;
+  /** Below `sm`, replaces the description + up-to-4-items preview with a single collapsed toggle
+   *  ("What's Included") that reveals the full description and item list on tap. A 2-column mobile
+   *  catalog card has roughly half the width a single-column card had — showing a description
+   *  paragraph plus several list items by default was, on its own, the largest remaining
+   *  contributor to mobile card height. Nothing is removed, just deferred behind one tap; `sm` and
+   *  up render exactly the original behavior, unchanged. */
+  compactOnMobile?: boolean;
 }
 
 /** Above this many rows, the list collapses by default — a package with 7-8 inclusions was making
@@ -25,8 +32,9 @@ const COLLAPSE_THRESHOLD = 4;
  * description doesn't reliably match that shape (an ordinary one-off marketing blurb), it's left
  * completely alone and shown as plain prose, same as before.
  */
-export default function PackageContents({ kit }: PackageContentsProps) {
+export default function PackageContents({ kit, compactOnMobile = false }: PackageContentsProps) {
   const [expanded, setExpanded] = useState(false);
+  const [mobileExpanded, setMobileExpanded] = useState(false);
   const hasStructuredItems = kit.includedItems.length > 0;
   const items = hasStructuredItems
     ? kit.includedItems.map(parseQuantityPrefix)
@@ -39,7 +47,7 @@ export default function PackageContents({ kit }: PackageContentsProps) {
   const isLongList = items.length > COLLAPSE_THRESHOLD;
   const visibleItems = isLongList && !expanded ? items.slice(0, COLLAPSE_THRESHOLD) : items;
 
-  return (
+  const body = (
     <>
       {showDescriptionProse && kit.description && <p className="text-sm text-ink-muted">{kit.description}</p>}
 
@@ -67,6 +75,49 @@ export default function PackageContents({ kit }: PackageContentsProps) {
           )}
         </div>
       )}
+    </>
+  );
+
+  if (!compactOnMobile) return body;
+
+  const hasAnyContent = (showDescriptionProse && Boolean(kit.description)) || items.length > 0;
+  if (!hasAnyContent) return null;
+
+  return (
+    <>
+      {/* Below `sm` only — collapsed by default; see this prop's own doc comment. Tapping shows
+          every item at once (no separate "show all" needed once the customer already opted in). */}
+      <div className="sm:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileExpanded((prev) => !prev)}
+          aria-expanded={mobileExpanded}
+          className="flex items-center gap-1 text-[11px] font-semibold text-accent underline-offset-2 hover:underline"
+        >
+          {mobileExpanded ? 'Hide details' : "What's included"}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className={`h-3 w-3 shrink-0 transition-transform ${mobileExpanded ? 'rotate-180' : ''}`}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" />
+          </svg>
+        </button>
+        {mobileExpanded && (
+          <div className="mt-1.5 flex flex-col gap-1.5">
+            {showDescriptionProse && kit.description && <p className="text-xs text-ink-muted">{kit.description}</p>}
+            {items.length > 0 && (
+              <ul className="flex flex-col gap-1 text-xs text-ink-muted">
+                {items.map((item, index) => (
+                  <li key={`${item.name}-${index}`} className="flex items-baseline gap-1.5">
+                    <span className="w-6 shrink-0 text-right font-medium text-ink [font-variant-numeric:tabular-nums]">
+                      {item.quantity}×
+                    </span>
+                    <span className="min-w-0">{item.name}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
+      <div className="hidden sm:block">{body}</div>
     </>
   );
 }

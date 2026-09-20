@@ -1,15 +1,21 @@
 import type { PaymentMethodKind } from '../utils/rmsApi';
 
 /**
- * Client-provided payment method details, shown to the customer in DepositProofUpload's payment
- * instructions (security deposit). This is the ONLY place these values should live — do not
- * hard-code any of them directly inside a component.
+ * Client-provided payment method details, shown to the customer in PaymentInstructionsSection
+ * (DepositProofUpload.tsx) — the one shared instructions block every payment-proof flow
+ * (security deposit, rental fee, additional charge) reuses. This is the ONLY place these values
+ * should live — do not hard-code any of them directly inside a component.
  */
 export interface PaymentMethodConfig {
   id: string;
   /** Display name shown to the customer, e.g. "GCash". */
   name: string;
-  /** Path/URL to the QR code image, or null while no real QR image has been provided yet. */
+  /** Bundled placeholder QR image — no longer the primary source. The RMS Settings page's own
+   * live-configured QR (GET /api/customer/payment-qr, exposed here as CatalogContext's
+   * `paymentQr`) is authoritative; PaymentInstructionsSection only falls back to this local image
+   * if that fetch genuinely fails, never merely because the live answer is "no QR configured
+   * right now." Kept, rather than removed, exactly for that failure case — see its own comment at
+   * the call site. */
   qrImageUrl: string | null;
   /** Alt text for the QR image — must stay descriptive even before a real image is set. */
   qrImageAlt: string;
@@ -21,10 +27,17 @@ export interface PaymentMethodConfig {
   accountNumberLabel: string;
   /** The account/mobile number a customer sends payment to, as provided by the client. */
   accountNumber: string;
-  /** Which RMS PaymentMethod value this option is recorded as when a customer selects it on the
-   * proof-submission form. RMS has no dedicated "MariBank" value, so a MariBank transfer is
-   * recorded as BANK_TRANSFER — confirmed against prisma/schema.prisma's PaymentMethod enum. */
+  /** Which RMS PaymentMethod value this option is recorded as on the Security Deposit and Rental
+   * Fee proof-submission forms. For MariBank this stays BANK_TRANSFER — those two endpoints have
+   * no dedicated MARIBANK value of their own; see additionalChargeRmsMethod below for the one
+   * endpoint that does. */
   rmsMethod: PaymentMethodKind;
+  /** Overrides `rmsMethod` for the Additional Charge proof-submission form only (see
+   * AdditionalChargeProofDialog.tsx) — that endpoint now has a real, dedicated MARIBANK enum
+   * value on the RMS side, unlike the older Security Deposit/Rental Fee endpoints above, which
+   * still expect a MariBank transfer recorded as BANK_TRANSFER. Absent (falls back to
+   * `rmsMethod`) for any method, like GCash, that isn't affected by this distinction. */
+  additionalChargeRmsMethod?: PaymentMethodKind;
 }
 
 // Account names stay masked exactly as GCash/MariBank themselves print them ("MA***L V.") — never
@@ -50,5 +63,6 @@ export const PAYMENT_METHODS: PaymentMethodConfig[] = [
     accountNumberLabel: 'MariBank Account Number',
     accountNumber: '10917833891',
     rmsMethod: 'BANK_TRANSFER',
+    additionalChargeRmsMethod: 'MARIBANK',
   },
 ];

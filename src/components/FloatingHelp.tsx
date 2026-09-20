@@ -16,7 +16,7 @@ function XMarkIcon({ className }: { className?: string }) {
  * on these, the widget is lifted clear of that bar instead of overlapping its buttons. Exported so
  * BackToTop.tsx — which stacks directly above this widget — lifts by the same amount on the same
  * routes, rather than maintaining a second, potentially-drifting copy of this list. */
-export const STICKY_FOOTER_ROUTES = new Set(['/cart', '/catalog/path-a', '/catalog/path-b']);
+export const STICKY_FOOTER_ROUTES = new Set(['/cart', '/catalog/camping-packages', '/catalog/build-your-own']);
 
 /**
  * Sitewide floating "Need Help?" contact widget — the one general-purpose support CTA, available

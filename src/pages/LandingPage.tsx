@@ -1,12 +1,14 @@
-﻿import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+﻿import { usePageMeta } from '../hooks/usePageMeta';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import CampSetupsGallery from '../components/CampSetupsGallery';
 import { CAMP_SETUP_PHOTOS } from '../config/campSetups';
 import FaqAccordion, { type FaqItem } from '../components/FaqAccordion';
+import ImageLightbox from '../components/ImageLightbox';
 import PathSelectionCards from '../components/PathSelectionCards';
 import SocialIconLink from '../components/SocialIconLink';
 import { ChatBubbleIcon, ChevronIcon, GearPlaceholderIcon } from '../components/icons';
-import { useCatalog } from '../context/CatalogContext';
+import { useCatalog } from '../context/useCatalog';
 import type { IndividualItem, PackageKit } from '../types/gearbnb';
 import { formatCurrency } from '../utils/format';
 import { parsePackageContentsFromText, summarizeIncludedCategories } from '../utils/packageContents';
@@ -100,21 +102,40 @@ const CATALOG_PAGE_SIZE = 8;
 
 function CatalogPreviewCard({ item }: { item: IndividualItem }) {
   const [imageFailed, setImageFailed] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-4 shadow-sm">
+    <div className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-3 shadow-sm sm:gap-3 sm:p-4">
       <div className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-lg bg-surface-strong">
         {imageFailed || !item.imageUrl ? (
           <GearPlaceholderIcon className="h-10 w-10 text-ink-faint" />
         ) : (
-          <img
-            src={item.imageUrl}
-            alt={item.name}
-            onError={() => setImageFailed(true)}
-            className="h-full w-full object-cover"
-          />
+          // This card otherwise has no click behavior of its own (unlike BundleSlide below, which
+          // is deliberately one whole-card button) — nothing to conflict with here.
+          <button
+            type="button"
+            onClick={() => setLightboxOpen(true)}
+            aria-label={`View larger image of ${item.name}`}
+            className="h-full w-full"
+          >
+            <img
+              src={item.imageUrl}
+              alt={item.name}
+              loading="lazy"
+              onError={() => setImageFailed(true)}
+              className="h-full w-full object-cover"
+            />
+          </button>
         )}
       </div>
+      {lightboxOpen && item.imageUrl && (
+        <ImageLightbox
+          images={[{ src: item.imageUrl, alt: item.name }]}
+          index={0}
+          onClose={() => setLightboxOpen(false)}
+          onNavigate={() => {}}
+        />
+      )}
       <div>
         <h3 className="text-sm font-semibold text-ink">{item.name}</h3>
         <p className="text-xs text-ink-faint">{item.category}</p>
@@ -160,6 +181,7 @@ function BundleSlide({ kit, onSelect }: { kit: PackageKit; onSelect: () => void 
           <img
             src={kit.imageUrl}
             alt={kit.name}
+            loading="lazy"
             onError={() => setImageFailed(true)}
             className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
@@ -374,6 +396,10 @@ const FAQ_ITEMS: FaqItem[] = [
 const TRUSTED_BRANDS = ['Black Dog', 'Naturehike', 'Mountainhiker', 'Mobi Garden', 'Vidalido'];
 
 export default function LandingPage() {
+  usePageMeta(
+    'Camping Gear Rental in the Philippines | GearBnB',
+    'Explore camping gear rental in the Philippines, serving Metro Manila, Las Piñas, and nearby cities. Find quality gear and book for your next adventure.',
+  );
   const navigate = useNavigate();
   const location = useLocation();
   const { kits, items } = useCatalog();
@@ -426,12 +452,26 @@ export default function LandingPage() {
         />
         <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-brand-forest/80" />
 
-        {/* MAIN HERO CONTENT — ends after the button row. */}
-        <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center gap-6 px-5 pb-36 pt-24 text-center sm:px-6 sm:pb-24 sm:pt-32">
+        {/* MAIN HERO CONTENT — ends after the button row. gap-4 on mobile (vs desktop's gap-6):
+            the badge/heading/subtext/buttons stack is the same four blocks at every width, so
+            this is the one number controlling the rhythm between all of them — desktop's gap-6
+            carried straight onto a phone was noticeably more air between four stacked lines of
+            text than the tightened heading below needs. */}
+        {/* pb-24 at every width (not a separate, larger mobile value): the floating card below is
+            pinned to this section's bottom edge and shifted down by exactly half its own height
+            (`translate-y-1/2`), so how much of this padding is genuinely "clear" space above the
+            card depends on the card's own height at that width — mobile's shorter stacked card
+            (~158px) needs less clearance than desktop's single-row one (~100px) needed padding for
+            in the first place, so the same 96px works for both without a mobile-only override. */}
+        <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center gap-3 px-5 pb-24 pt-8 text-center sm:gap-6 sm:px-6 sm:pt-32">
           <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white">
             Located in Las Piñas City
           </span>
-          <h1 className="font-serif text-4xl font-bold tracking-tight text-white sm:text-5xl">
+          {/* text-2xl below sm (not text-3xl): at 320-375px, "...the Philippines Made Easy" still
+              wrapped to 3-4 lines even at 30px — one word (Philippines) is long enough that a
+              smaller step was needed to keep this heading from dominating the whole first screen
+              on a short device. Wraps to 2 lines at every width down to 320px at this size. */}
+          <h1 className="font-serif text-2xl font-bold leading-[1.2] tracking-tight text-white sm:text-5xl sm:leading-tight">
             Camping Gears Rental in the Philippines Made Easy
           </h1>
           <p className="max-w-xl text-base text-white">
@@ -447,7 +487,7 @@ export default function LandingPage() {
             </button>
             <button
               type="button"
-              onClick={() => navigate('/event-plan')}
+              onClick={() => navigate('/plan-an-event')}
               className="rounded-lg border border-white/40 bg-transparent px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-white/10"
             >
               Plan An Event
@@ -463,10 +503,14 @@ export default function LandingPage() {
         <div className="absolute inset-x-0 bottom-0 z-20 translate-y-1/2 px-5 sm:px-6">
           <div className="mx-auto w-full max-w-3xl">
             <div className="w-full rounded-2xl border border-line bg-surface p-4 text-left shadow-lg sm:p-5">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
+              {/* gap-3 on mobile (vs desktop's gap-5): this stacks into two blocks below `sm`
+                  (message, then social row) rather than desktop's single side-by-side row, so it
+                  needs a tighter number of its own — desktop's spacing carried onto the stacked
+                  version was the biggest single contributor to this card's mobile height. */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
                 <div className="flex items-center gap-3">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-forest text-white">
-                    <ChatBubbleIcon className="h-4.5 w-4.5" />
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-forest text-white sm:h-10 sm:w-10">
+                    <ChatBubbleIcon className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
                   </span>
                   <div className="flex flex-col gap-0.5">
                     <h2 className="text-sm font-bold text-ink sm:text-base">Not sure what to rent?</h2>
@@ -476,7 +520,7 @@ export default function LandingPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-center gap-4 sm:justify-end sm:border-l sm:border-line-soft sm:pl-5">
+                <div className="flex items-center justify-center gap-3 sm:justify-end sm:gap-4 sm:border-l sm:border-line-soft sm:pl-5">
                   <SocialIconLink platform="messenger" showLabel size="sm" />
                   <SocialIconLink platform="facebook" showLabel size="sm" />
                   <SocialIconLink platform="tiktok" showLabel size="sm" />
@@ -489,7 +533,11 @@ export default function LandingPage() {
 
       {/* Path selection — extra top padding (beyond the section's own py-16 bottom) clears the
        * floating support card above, which straddles down into this section's own top edge. */}
-      <section className="px-5 pb-16 pt-40 sm:px-6 sm:pt-32">
+      {/* pt-24 below sm (not pt-40): same reasoning as the hero's own pb-24 above — this only
+          needs to clear the floating card's downward-protruding half (currently ~79px at mobile's
+          shorter stacked card height) plus a comfortable gap, not a value sized for a much taller
+          card that no longer exists at this width. */}
+      <section className="px-5 pb-10 pt-24 sm:px-6 sm:pb-16 sm:pt-32">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
           <div className="flex flex-col items-center gap-2 text-center">
             <h2 className="font-serif text-2xl font-bold text-ink sm:text-3xl">How Do You Want to Gear Up?</h2>
@@ -504,7 +552,7 @@ export default function LandingPage() {
       {/* How to rent — id targeted by the footer's "How renting works" link; this step-by-step
        * process is the actual "how to rent" content, so the link and id moved here from the path-
        * selection section above (which is about choosing a path, not the rental process itself). */}
-      <section id="how-renting-works" className="bg-page-band px-5 py-16 sm:px-6">
+      <section id="how-renting-works" className="bg-page-band px-5 py-10 sm:px-6 sm:py-16">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-10">
           <div className="flex flex-col items-center gap-2 text-center">
             <h2 className="font-serif text-2xl font-bold text-ink sm:text-3xl">
@@ -553,7 +601,7 @@ export default function LandingPage() {
       </section>
 
       {/* Catalog preview */}
-      <section className="px-5 py-16 sm:px-6">
+      <section className="px-5 py-10 sm:px-6 sm:py-16">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
           <div className="flex flex-col items-center gap-2 text-center">
             <h2 className="font-serif text-2xl font-bold text-ink sm:text-3xl">
@@ -581,7 +629,12 @@ export default function LandingPage() {
             ))}
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {/* grid-cols-2 below sm (not stacked to 1): a single mobile column made each
+              aspect-square product photo span the full card width (~350px) — visually one large
+              dominant image per screen, even though this is a catalog grid rather than one hero
+              image. Two columns roughly halves each photo's rendered size without touching the
+              image files or CatalogPreviewCard's own square crop. */}
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
             {paginatedItems.map((item) => (
               <CatalogPreviewCard key={item.id} item={item} />
             ))}
@@ -627,7 +680,7 @@ export default function LandingPage() {
 
           <button
             type="button"
-            onClick={() => navigate('/catalog/path-b')}
+            onClick={() => navigate('/catalog/build-your-own')}
             className="mx-auto rounded-lg bg-brand-forest px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-forest-dark"
           >
             View All Catalog
@@ -636,9 +689,11 @@ export default function LandingPage() {
       </section>
 
       {/* Why rent with us */}
-      <section className="bg-page-band px-5 py-16 sm:px-6">
+      <section className="bg-page-band px-5 py-10 sm:px-6 sm:py-16">
         <div className="mx-auto grid w-full max-w-5xl gap-10 lg:grid-cols-2 lg:items-center">
-          <div className="relative flex items-center justify-center py-10 lg:py-0">
+          {/* py-6 below sm (was py-10): only scoped to the mobile size step below — the badge
+              itself still gets sm:py-10/lg:py-0 exactly as before from `sm` up. */}
+          <div className="relative flex items-center justify-center py-6 sm:py-10 lg:py-0">
             {/* Soft brand-colored glow instead of a hard-edged card — keeps the logo feeling
              * intentional and grounded without boxing it in. */}
             <div
@@ -648,8 +703,14 @@ export default function LandingPage() {
             {/* The source file is a circular badge with a visible margin of solid white around it
              * inside a square image — a plain rounded-full crop still leaves a white ring behind
              * the badge, so the image is also scaled up until the badge itself fills the circular
-             * frame, cropping the white margin away entirely (no separate transparent asset). */}
-            <div className="h-64 w-64 overflow-hidden rounded-full drop-shadow-2xl sm:h-80 sm:w-80">
+             * frame, cropping the white margin away entirely (no separate transparent asset).
+             * h-44 w-44 below sm (was h-64 w-64): at mobile widths this section stacks the badge
+             * directly above the heading/benefit cards (no side-by-side room yet — that only
+             * starts at `lg`), so its own height was pushing "Why Rent with GearBnB?" and all four
+             * benefit cards down by a full extra 256px+padding before any of that text was ever
+             * visible. sm:h-80 sm:w-80 (from `sm` up, including desktop) is unchanged — already a
+             * balanced side-by-side pairing with the benefit-card grid there. */}
+            <div className="h-44 w-44 overflow-hidden rounded-full drop-shadow-2xl sm:h-80 sm:w-80">
               <img
                 src="/brand_assets/GEARBNB_logo.png"
                 alt="GearBnB"
@@ -683,7 +744,7 @@ export default function LandingPage() {
       </section>
 
       {/* Bundles — id targeted by the footer's "Adventure Bundles" link. */}
-      <section id="adventure-bundles" className="px-5 py-16 sm:px-6">
+      <section id="adventure-bundles" className="px-5 py-10 sm:px-6 sm:py-16">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
           <div className="flex flex-col items-center gap-2 text-center">
             <h2 className="font-serif text-2xl font-bold text-ink sm:text-3xl">
@@ -694,11 +755,11 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <BundleSlider kits={kits} onSelect={() => navigate('/catalog/path-a')} />
+          <BundleSlider kits={kits} onSelect={() => navigate('/catalog/camping-packages')} />
 
           <button
             type="button"
-            onClick={() => navigate('/catalog/path-a')}
+            onClick={() => navigate('/catalog/camping-packages')}
             className="mx-auto rounded-lg border border-line bg-surface px-6 py-3 text-sm font-semibold text-ink shadow-sm transition-colors hover:bg-surface-strong"
           >
             View All Packages
@@ -709,7 +770,7 @@ export default function LandingPage() {
       {/* View Our Camp Setups — the client's actual setup photos (see campSetups.ts). Renders a
        * "Photos coming soon" placeholder instead whenever that list is empty, rather than any
        * invented/stock image. */}
-      <section className="bg-page-band px-5 py-16 sm:px-6">
+      <section className="bg-page-band px-5 py-10 sm:px-6 sm:py-16">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
           <div className="flex flex-col items-center gap-2 text-center">
             <h2 className="font-serif text-2xl font-bold text-ink sm:text-3xl">View Our Camp Setups</h2>
@@ -750,7 +811,7 @@ export default function LandingPage() {
        * section, per the client's requested layout. The FAQ card is deliberately a light surface
        * floating on the dark gradient (same pattern as the hero's own floating support card),
        * rather than trying to restyle FaqAccordion's rows for a dark background. */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-brand-forest via-brand-forest-dark to-brand-navy px-5 py-16 sm:px-6">
+      <section className="relative overflow-hidden bg-gradient-to-br from-brand-forest via-brand-forest-dark to-brand-navy px-5 py-10 sm:px-6 sm:py-16">
         {/* Soft radial glow behind the headline for depth — purely decorative, non-interactive. */}
         <div
           className="pointer-events-none absolute inset-0 opacity-70 [background:radial-gradient(60%_80%_at_50%_0%,color-mix(in_srgb,var(--color-brand-olive)_35%,transparent),transparent_70%)]"
@@ -758,7 +819,7 @@ export default function LandingPage() {
         />
         <div className="relative mx-auto grid w-full max-w-5xl gap-10 lg:grid-cols-2 lg:items-center">
           <div className="flex flex-col items-center gap-5 text-center lg:items-start lg:text-left">
-            <h2 className="font-serif text-3xl font-bold text-white drop-shadow-sm sm:text-4xl">
+            <h2 className="font-serif text-2xl font-bold text-white drop-shadow-sm sm:text-4xl">
               Gear Up for Your Next Adventure
             </h2>
             <p className="text-sm text-white">
