@@ -257,7 +257,7 @@ export default function AboutUs() {
               />
             </div>
             <div className="flex flex-1 flex-col gap-3">
-              <p className="text-sm font-semibold text-ink">Our Brands</p>
+              <p className="text-sm font-semibold text-ink">Brands in Our Rental Collection</p>
               <div className="flex flex-wrap gap-1.5">
                 {BRANDS.map((brand) => (
                   <span
@@ -397,7 +397,7 @@ export default function AboutUs() {
             ))}
           </div>
 
-          <BookYourGearButton />
+          <BookYourGearButton className="self-center" />
         </div>
       </section>
 
