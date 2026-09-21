@@ -1,9 +1,10 @@
-import { useId, useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { ChevronDownIcon } from './icons';
 
 export interface FaqItem {
   question: string;
-  answer: string;
+  /** Plain text, or JSX when an answer needs a link. */
+  answer: ReactNode;
 }
 
 /**

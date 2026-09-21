@@ -94,7 +94,7 @@ const PROCESS_STEPS: ProcessStep[] = [
     icon: <ReceiptIcon className="h-5 w-5" />,
   },
   {
-    title: 'Pick Up / Delivery',
+    title: 'Pick Up / Grab Delivery',
     description: 'Receive your camping gear on your start date.',
     icon: <TruckIcon className="h-5 w-5" />,
   },
@@ -379,12 +379,28 @@ const FEATURES: FeatureCardProps[] = [
 const FAQ_ITEMS: FaqItem[] = [
   {
     question: 'Where are you located?',
-    answer: "We're based in Las Piñas City, Philippines.",
+    answer: (
+      <>
+        <p>
+          We’re based in Talon Uno, Las Piñas City, Philippines. Our exact pickup location and address will be provided
+          once your booking is confirmed. You can also view our location on Google Maps for directions and nearby
+          landmarks.
+        </p>
+        <a
+          href="https://www.google.com/maps/place/GearBnB+Camping+Gears+Rental/@14.4461908,120.9940844,17z/data=!3m1!4b1!4m6!3m5!1s0x3397d3090cbbd26f:0x665f11a5d4c66dde!8m2!3d14.4461908!4d120.9966593!16s%2Fg%2F11z8h467l7?entry=ttu&g_ep=EgoyMDI2MDkxNi4wIKXMDSoASAFQAw%3D%3D"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-2 inline-flex items-center gap-1 font-semibold text-accent transition-colors hover:text-brand-forest-dark"
+        >
+          View Our Location <span aria-hidden="true">&rarr;</span>
+        </a>
+      </>
+    ),
   },
   {
     question: 'Can I customize my own package?',
     answer:
-      'Yes — Build Your Own lets you mix and match individual gear by category to fit your trip exactly, instead of booking a fixed kit.',
+      'Yes. Choosing our Build Your Own option lets you mix and match individual gear by category to fit your trip exactly, instead of booking a fixed kit.',
   },
   {
     question: 'What if I go beyond my rental duration?',
@@ -393,7 +409,8 @@ const FAQ_ITEMS: FaqItem[] = [
   },
   {
     question: 'Do you sell camping gear?',
-    answer: "No, we're a rental service — we don't sell camping gear.",
+    answer:
+      'We don’t sell camping gear. We offer camping gear rentals, including tents, sleeping gear, cooking equipment, and complete camping packages for different types of trips.',
   },
   {
     question: 'Can you help me find a campsite?',
