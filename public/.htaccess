@@ -5,6 +5,13 @@
 # anything that looks like a file (has an extension, e.g. a stale /assets/*.js) still gets a real 404.
 <IfModule mod_rewrite.c>
   RewriteEngine On
+
+  # Canonical host: the RMS API only allows requests from https://gearbnbrental.com (no www), so a
+  # visitor on www.gearbnbrental.com would see the page but never load the catalog. Path and query
+  # string (e.g. Facebook's ?fbclid=) are preserved.
+  RewriteCond %{HTTP_HOST} ^www\.gearbnbrental\.com$ [NC]
+  RewriteRule ^(.*)$ https://gearbnbrental.com/$1 [R=301,L]
+
   RewriteRule ^index\.html$ - [L]
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
