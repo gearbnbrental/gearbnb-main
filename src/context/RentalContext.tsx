@@ -22,6 +22,7 @@ import type {
   VerificationDocs,
   VerificationDocumentKey,
 } from '../types/gearbnb';
+import { expandGearKinds } from '../utils/gearVariants';
 import { useCatalog } from './useCatalog';
 import { useAuth } from './AuthContext';
 
@@ -76,8 +77,10 @@ const initialCartState: CartState = {
 /** Identifies a Build Your Own gear kind (or add-on) the same way the RMS does — there is no
  * client-side id, only this category+brand+model triple. Used both as the React list key and as
  * the key into `byoAddOns`. */
-export function byoGearKey(gear: { category: string; brand: string; model: string | null }): string {
-  return `${gear.category}|${gear.brand}|${gear.model ?? ''}`;
+export function byoGearKey(gear: { category: string; brand: string; model: string | null; color?: string }): string {
+  // A color-pinned line (Black vs Khaki of the same kind) is its own cart line; a line without a
+  // color keeps exactly the key it always had, so carts saved before colors existed still match.
+  return `${gear.category}|${gear.brand}|${gear.model ?? ''}${gear.color ? `|${gear.color}` : ''}`;
 }
 
 /** Guest (not-logged-in) cart storage key — unchanged from before this file supported per-account
@@ -702,7 +705,9 @@ function cartReducer(state: CartState, action: CartAction): CartState {
     case 'REVALIDATE_AGAINST_CATALOG': {
       const kitLookup = buildBookableKitLookup(action.kits);
       const itemLookup = new Map(action.items.map((item) => [item.id, item]));
-      const gearLookup = action.gearKinds ? new Map(action.gearKinds.map((gear) => [byoGearKey(gear), gear])) : null;
+      const gearLookup = action.gearKinds
+        ? new Map(expandGearKinds(action.gearKinds).map((gear) => [byoGearKey(gear), gear]))
+        : null;
 
       const selectedKits = state.selectedKits
         .map((kit) => kitLookup.get(kit.id))

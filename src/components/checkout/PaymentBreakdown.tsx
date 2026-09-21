@@ -263,6 +263,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
         brand: toRmsBrand(gear.brand),
         model: gear.model,
         quantity: gear.quantity,
+        ...(gear.color ? { color: gear.color } : {}),
       }));
   const checkoutAddOns: RmsBookingGearLine[] = hasPackage
     ? []
@@ -531,6 +532,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
               brand: toRmsBrand(gear.brand),
               model: gear.model,
               quantity: gear.quantity,
+              ...(gear.color ? { color: gear.color } : {}),
             }),
           ),
           addOns: byoGears.flatMap((gear) =>

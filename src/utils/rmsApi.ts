@@ -292,6 +292,8 @@ export interface RmsBookingGearLine {
   brand: string;
   model: string | null;
   quantity: number;
+  /** Optional color pin for a Build Your Own gear line ("Black", "Khaki"). Omitted = any color. */
+  color?: string;
 }
 
 /**
@@ -760,6 +762,24 @@ export interface RmsCatalogGearKind {
   imageUrl: string | null;
   freeAccessories: { role: string; name: string }[];
   compatibleAddOns: RmsCatalogAddOn[];
+  /** Only present when this kind's units span more than one color. Prices appear on a variant only
+   *  when they differ from the kind's own. */
+  variants?: RmsCatalogGearVariant[];
+  /** Free-text "Size / Capacity" from the RMS inventory (e.g. "6P"); null/absent when not set. */
+  sizeCapacity?: string | null;
+}
+
+/** One color of a gear kind — matches the RMS's CustomerCatalogGearVariant. */
+export interface RmsCatalogGearVariant {
+  color: string;
+  imageUrl: string | null;
+  quantity: number;
+  availableCount: number;
+  canSelect: boolean;
+  price48hCentavos?: number;
+  price72hCentavos?: number;
+  extraPerDayCentavos?: number;
+  sizeCapacity?: string | null;
 }
 
 /**

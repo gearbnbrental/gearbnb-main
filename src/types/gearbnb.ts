@@ -188,6 +188,31 @@ export interface BookableGearKind {
   imageUrl: string | null;
   freeAccessories: FreeAccessory[];
   compatibleAddOns: BookableAddOn[];
+  /** Present only when the RMS reports this kind's units in more than one color (Black, Khaki...).
+   *  Everything above stays the kind-wide total/default. Absent on single-color/no-color kinds and
+   *  on an RMS that doesn't send colors yet — the catalog then behaves exactly as before. */
+  variants?: BookableGearVariant[];
+  /** The RMS's free-text "Size / Capacity" for this kind (e.g. "6P", "King"), shown on the card
+   *  when present. Absent when the RMS has none or doesn't send it yet. */
+  sizeCapacity?: string | null;
+  /** Set only on a kind resolved to ONE color variant (see resolveGearVariant) — the shape that
+   *  actually goes into the cart and the booking/availability payloads. `variants` is never set
+   *  on such a kind. */
+  color?: string;
+}
+
+/** One color of a Build Your Own gear kind, as reported by the RMS. `pricing`/`extraPerDayPrice`
+ *  are present only when this color's price differs from the kind's own. */
+export interface BookableGearVariant {
+  color: string;
+  imageUrl: string | null;
+  quantity: number;
+  availableCount: number;
+  canSelect: boolean;
+  pricing?: { '48h': number; '72h': number };
+  extraPerDayPrice?: number;
+  /** Only when this color's size/capacity differs from the kind's own. */
+  sizeCapacity?: string | null;
 }
 
 /** A customer's selected quantity of one Build Your Own gear kind — the full kind snapshot plus

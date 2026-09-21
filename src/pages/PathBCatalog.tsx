@@ -17,6 +17,7 @@ import type {
   BookableAddOn,
   BookableAddOnSelection,
   BookableGearKind,
+  BookableGearVariant,
   DurationPresetId,
   TripDetails,
 } from '../types/gearbnb';
@@ -33,15 +34,18 @@ import {
 import { formatCurrency } from '../utils/format';
 import { toRmsBrand, type RmsAvailabilityRequest, type RmsAvailabilityResult } from '../utils/rmsApi';
 import { useAvailabilityCheck } from '../hooks/useAvailabilityCheck';
+import { resolveGearVariant, sizeCapacityToShow } from '../utils/gearVariants';
+import { orderGearKinds } from '../utils/gearOrder';
 
 /** Mirrors the RMS's own customer-safe display-name construction
  * (src/server/availability/service.ts's kindDisplayName) exactly, so an
  * issue's `name` can be matched back to the gear card it's about. `kind.brand`
  * arriving from GET /api/customer/catalog/gear is already "Generic"-stripped
  * server-side, so no additional cleaning is needed here. */
-function kindDisplayName(kind: { category: string; brand: string; model: string | null }): string {
+function kindDisplayName(kind: { category: string; brand: string; model: string | null; color?: string }): string {
   const parts = [kind.brand, kind.model].filter(Boolean);
-  return parts.length > 0 ? parts.join(' ') : kind.category;
+  const base = parts.length > 0 ? parts.join(' ') : kind.category;
+  return kind.color ? `${base} (${kind.color})` : base;
 }
 
 const ITEMS_PAGE_SIZE = 9;
@@ -236,6 +240,11 @@ interface GearCardProps {
   /** Set only when this selected kind came back in the RMS's availability issues for the current
    * dates — never inferred locally. */
   unavailableForDates: boolean;
+  /** Only for a kind the RMS reports in more than one color — the pills that switch which color
+   *  `kind` (already resolved to `selectedColor` by the caller) shows and adds to the cart. */
+  variants?: BookableGearVariant[];
+  selectedColor?: string;
+  onColorChange?: (color: string) => void;
   onQuantityChange: (next: number) => void;
   onAddOnQuantityChange: (addOn: BookableAddOn, next: number) => void;
 }
@@ -249,6 +258,9 @@ function GearCard({
   showUpsell,
   price,
   unavailableForDates,
+  variants,
+  selectedColor,
+  onColorChange,
   onQuantityChange,
   onAddOnQuantityChange,
 }: GearCardProps) {
@@ -337,6 +349,29 @@ function GearCard({
         <h3 className="line-clamp-2 text-xs font-medium leading-snug text-ink sm:text-sm" title={kind.name}>
           {kind.name}
         </h3>
+        {sizeCapacityToShow(kind) && (
+          <p className="text-[11px] text-ink-muted sm:text-xs">Size/Capacity: {sizeCapacityToShow(kind)}</p>
+        )}
+
+        {variants && variants.length > 1 && (
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Color">
+            {variants.map((variant) => (
+              <button
+                key={variant.color}
+                type="button"
+                onClick={() => onColorChange?.(variant.color)}
+                aria-pressed={selectedColor === variant.color}
+                className={`rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors sm:px-3 sm:py-1 sm:text-xs ${
+                  selectedColor === variant.color
+                    ? 'bg-brand-forest text-white'
+                    : 'bg-surface-strong text-ink-muted hover:bg-line'
+                } ${variant.canSelect ? '' : 'line-through opacity-70'}`}
+              >
+                {variant.color}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Stacked below `sm` so the QuantityStepper (a fixed ~136px: two h-9 buttons + a w-12
             input) gets the full width of the card instead of being squeezed beside the price —
@@ -436,7 +471,8 @@ export default function PathBCatalog() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
-  const { gearKinds, gearCatalogState, retryGearCatalog } = useCatalog();
+  const { gearKinds: catalogGearKinds, gearCatalogState, retryGearCatalog } = useCatalog();
+  const gearKinds = useMemo(() => orderGearKinds(catalogGearKinds), [catalogGearKinds]);
   const { cart, totals, updateTripDetails, setByoGearQuantity, setByoAddOnQuantity } = useRental();
   // Restored from any already-saved dates (same reasoning as PathACatalog's own selectedDuration
   // state) so navigating away and back — or simply reloading — doesn't silently drop a duration
@@ -452,6 +488,9 @@ export default function PathBCatalog() {
   const [activeCategory, setActiveCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [itemsPage, setItemsPage] = useState(1);
+  // Which color each multi-color gear kind's card is currently showing, keyed by the kind's own
+  // (color-less) byoGearKey. Unset = default (see the card map below).
+  const [colorChoice, setColorChoice] = useState<Record<string, string>>({});
   const cartItemCount = cart.selectedKits.length + cart.selectedItems.length + cart.byoGears.length;
   const isUnlocked = totals.rentalDurationDays > 0;
   const hasDuration = calculateRentalDurationDays(cart.tripDetails) > 0;
@@ -477,7 +516,13 @@ export default function PathBCatalog() {
     // these can never actually be null.
     const pickupAt = toAvailabilityTimestamp(cart.tripDetails.startDate, cart.tripDetails.preferredTime)!;
     const returnAt = toAvailabilityTimestamp(cart.tripDetails.returnDate, cart.tripDetails.preferredTime)!;
-    const bookingGears = cart.byoGears.map((g) => ({ category: g.category, brand: toRmsBrand(g.brand), model: g.model, quantity: g.quantity }));
+    const bookingGears = cart.byoGears.map((g) => ({
+      category: g.category,
+      brand: toRmsBrand(g.brand),
+      model: g.model,
+      quantity: g.quantity,
+      ...(g.color ? { color: g.color } : {}),
+    }));
     const addOns = Object.values(cart.byoAddOns)
       .flat()
       .map((a) => ({ category: a.category, brand: toRmsBrand(a.brand), model: a.model, quantity: a.quantity }));
@@ -856,12 +901,27 @@ export default function PathBCatalog() {
                     {/* grid-cols-2 below sm (not stacked to 1) — same reasoning as Path A's package
                         grid: a mobile catalog should show several gear cards per viewport. */}
                     <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-3">
-                      {paginatedKinds.map((kind) => {
+                      {paginatedKinds.map((baseKind) => {
+                        const baseKey = byoGearKey(baseKind);
+                        // A multi-color kind shows ONE color at a time: the customer's pick, else
+                        // a color already in their cart, else the first color actually in stock.
+                        // `kind` below is that color resolved to its own image/stock/price/name —
+                        // and its own cart identity — so everything after this is the same code path
+                        // a single-color kind takes.
+                        const variants = baseKind.variants;
+                        const inCartColor = variants?.find((v) => gearSelections.has(byoGearKey({ ...baseKind, color: v.color })))?.color;
+                        const selectedColor = variants
+                          ? (colorChoice[baseKey] ?? inCartColor ?? (variants.find((v) => v.canSelect) ?? variants[0]).color)
+                          : undefined;
+                        const kind = resolveGearVariant(baseKind, selectedColor);
                         const key = byoGearKey(kind);
                         return (
                           <GearCard
                             key={key}
                             kind={kind}
+                            variants={variants}
+                            selectedColor={selectedColor}
+                            onColorChange={(color) => setColorChoice((prev) => ({ ...prev, [baseKey]: color }))}
                             quantity={gearSelections.get(key) ?? 0}
                             addOnSelections={cart.byoAddOns[key] ?? []}
                             tripDetails={cart.tripDetails}

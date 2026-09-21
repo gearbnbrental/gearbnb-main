@@ -1,5 +1,10 @@
-import type { BookableAddOn, BookableGearKind } from '../types/gearbnb';
-import { fetchGearCatalogFromRms, type RmsCatalogAddOn, type RmsCatalogGearKind } from '../utils/rmsApi';
+import type { BookableAddOn, BookableGearKind, BookableGearVariant } from '../types/gearbnb';
+import {
+  fetchGearCatalogFromRms,
+  type RmsCatalogAddOn,
+  type RmsCatalogGearKind,
+  type RmsCatalogGearVariant,
+} from '../utils/rmsApi';
 
 const centavosToPesos = (centavos: number) => centavos / 100;
 
@@ -20,6 +25,29 @@ function mapAddOn(addOn: RmsCatalogAddOn): BookableAddOn {
   };
 }
 
+function mapGearVariant(kind: RmsCatalogGearKind, variant: RmsCatalogGearVariant): BookableGearVariant {
+  const hasOwnPricing = variant.price48hCentavos !== undefined || variant.price72hCentavos !== undefined;
+  return {
+    color: variant.color,
+    imageUrl: variant.imageUrl,
+    quantity: variant.quantity,
+    availableCount: variant.availableCount,
+    canSelect: variant.canSelect,
+    // The RMS only sends a price on a variant when it differs from the kind's, so a missing tier
+    // falls back to the kind's own — never a fabricated ₱0.
+    ...(hasOwnPricing
+      ? {
+          pricing: {
+            '48h': centavosToPesos(variant.price48hCentavos ?? kind.price48hCentavos),
+            '72h': centavosToPesos(variant.price72hCentavos ?? kind.price72hCentavos),
+          },
+        }
+      : {}),
+    ...(variant.extraPerDayCentavos !== undefined ? { extraPerDayPrice: centavosToPesos(variant.extraPerDayCentavos) } : {}),
+    ...(variant.sizeCapacity?.trim() ? { sizeCapacity: variant.sizeCapacity.trim() } : {}),
+  };
+}
+
 function mapGearKind(kind: RmsCatalogGearKind): BookableGearKind {
   return {
     category: kind.category,
@@ -37,6 +65,12 @@ function mapGearKind(kind: RmsCatalogGearKind): BookableGearKind {
     imageUrl: kind.imageUrl,
     freeAccessories: kind.freeAccessories,
     compatibleAddOns: kind.compatibleAddOns.map(mapAddOn),
+    ...(kind.sizeCapacity?.trim() ? { sizeCapacity: kind.sizeCapacity.trim() } : {}),
+    // Only when the RMS actually reported more than one color — an older RMS (or a single-color
+    // kind) leaves this off entirely and the catalog behaves exactly as before.
+    ...(kind.variants && kind.variants.length > 1
+      ? { variants: kind.variants.map((variant) => mapGearVariant(kind, variant)) }
+      : {}),
   };
 }
 
