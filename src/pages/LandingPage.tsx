@@ -9,8 +9,10 @@ import PathSelectionCards from '../components/PathSelectionCards';
 import SocialIconLink from '../components/SocialIconLink';
 import { ChatBubbleIcon, ChevronIcon, GearPlaceholderIcon } from '../components/icons';
 import { useCatalog } from '../context/useCatalog';
-import type { IndividualItem, PackageKit } from '../types/gearbnb';
+import type { BookableGearKind, PackageKit } from '../types/gearbnb';
 import { formatCurrency } from '../utils/format';
+import { orderGearKinds } from '../utils/gearOrder';
+import { sizeCapacityToShow, splitKindsByColor } from '../utils/gearVariants';
 import { parsePackageContentsFromText, summarizeIncludedCategories } from '../utils/packageContents';
 
 function PathsIcon({ className }: { className?: string }) {
@@ -100,14 +102,14 @@ const PROCESS_STEPS: ProcessStep[] = [
 
 const CATALOG_PAGE_SIZE = 8;
 
-function CatalogPreviewCard({ item }: { item: IndividualItem }) {
+function CatalogPreviewCard({ kind }: { kind: BookableGearKind }) {
   const [imageFailed, setImageFailed] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
 
   return (
     <div className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-3 shadow-sm sm:gap-3 sm:p-4">
-      <div className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-lg bg-surface-strong">
-        {imageFailed || !item.imageUrl ? (
+      <div className="relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-lg bg-surface-strong">
+        {imageFailed || !kind.imageUrl ? (
           <GearPlaceholderIcon className="h-10 w-10 text-ink-faint" />
         ) : (
           // This card otherwise has no click behavior of its own (unlike BundleSlide below, which
@@ -115,32 +117,39 @@ function CatalogPreviewCard({ item }: { item: IndividualItem }) {
           <button
             type="button"
             onClick={() => setLightboxOpen(true)}
-            aria-label={`View larger image of ${item.name}`}
+            aria-label={`View larger image of ${kind.name}`}
             className="h-full w-full"
           >
             <img
-              src={item.imageUrl}
-              alt={item.name}
+              src={kind.imageUrl}
+              alt={kind.name}
               loading="lazy"
               onError={() => setImageFailed(true)}
               className="h-full w-full object-cover"
             />
           </button>
         )}
+        {!kind.canSelect && (
+          <span className="absolute rounded-full bg-black/80 px-3 py-1 text-xs font-semibold text-white">Out of Stock</span>
+        )}
       </div>
-      {lightboxOpen && item.imageUrl && (
+      {lightboxOpen && kind.imageUrl && (
         <ImageLightbox
-          images={[{ src: item.imageUrl, alt: item.name }]}
+          images={[{ src: kind.imageUrl, alt: kind.name }]}
           index={0}
           onClose={() => setLightboxOpen(false)}
           onNavigate={() => {}}
         />
       )}
       <div>
-        <h3 className="text-sm font-semibold text-ink">{item.name}</h3>
-        <p className="text-xs text-ink-faint">{item.category}</p>
+        <h3 className="text-sm font-semibold text-ink">{kind.name}</h3>
+        <p className="text-xs text-ink-faint">{kind.category}</p>
+        {sizeCapacityToShow(kind) && <p className="text-xs text-ink-muted">Size/Capacity: {sizeCapacityToShow(kind)}</p>}
       </div>
-      <p className="text-sm font-semibold text-accent">From {formatCurrency(item.pricing['48h'])}</p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-accent">From {formatCurrency(kind.pricing['48h'])}</p>
+        {kind.canSelect && <span className="shrink-0 text-[11px] text-ink-faint">Avail: {kind.availableCount}</span>}
+      </div>
     </div>
   );
 }
@@ -163,6 +172,8 @@ function BundleSlide({ kit, onSelect }: { kit: PackageKit; onSelect: () => void 
   const hasStructuredItems = kit.includedItems.length > 0;
   const descriptionIsInclusionsDump = !hasStructuredItems && parsePackageContentsFromText(kit.description).length > 0;
   const showDescription = Boolean(kit.description) && !descriptionIsInclusionsDump;
+  // Out of stock only when every edition (or the kit itself, if it has none) is unselectable.
+  const outOfStock = kit.editions?.length ? kit.editions.every((edition) => edition.isOutOfStock) : kit.isOutOfStock;
 
   return (
     <button
@@ -172,7 +183,12 @@ function BundleSlide({ kit, onSelect }: { kit: PackageKit; onSelect: () => void 
     >
       {/* Image shown in full, unobstructed — no dark scrim or overlaid text on top of it, since
        * the packages' own promotional artwork already carries plenty of detail worth seeing. */}
-      <div className="aspect-[4/3] w-full overflow-hidden bg-surface-strong">
+      <div className="relative aspect-[4/3] w-full overflow-hidden bg-surface-strong">
+        {outOfStock && (
+          <span className="absolute right-2 top-2 z-10 rounded-full bg-black/80 px-3 py-1 text-xs font-semibold text-white">
+            Out of Stock
+          </span>
+        )}
         {imageFailed || !kit.imageUrl ? (
           <div className="flex h-full w-full items-center justify-center">
             <GearPlaceholderIcon className="h-12 w-12 text-ink-faint" />
@@ -402,16 +418,19 @@ export default function LandingPage() {
   );
   const navigate = useNavigate();
   const location = useLocation();
-  const { kits, items } = useCatalog();
+  const { kits, gearKinds: catalogGearKinds, gearCatalogState, retryGearCatalog } = useCatalog();
+  // Every color of a multi-color kind gets its own card here (the Build Your Own page switches
+  // between them with pills instead).
+  const gearKinds = useMemo(() => orderGearKinds(splitKindsByColor(catalogGearKinds)), [catalogGearKinds]);
   const categories = useMemo(() => {
-    const unique = Array.from(new Set(items.map((item) => item.category)));
+    const unique = Array.from(new Set(gearKinds.map((kind) => kind.category)));
     return ['All', ...unique];
-  }, [items]);
+  }, [gearKinds]);
   const [activeCategory, setActiveCategory] = useState('All');
   const [catalogPage, setCatalogPage] = useState(1);
 
-  const visibleItems: IndividualItem[] =
-    activeCategory === 'All' ? items : items.filter((item) => item.category === activeCategory);
+  const visibleItems: BookableGearKind[] =
+    activeCategory === 'All' ? gearKinds : gearKinds.filter((kind) => kind.category === activeCategory);
 
   const catalogPageCount = Math.max(1, Math.ceil(visibleItems.length / CATALOG_PAGE_SIZE));
   const paginatedItems = visibleItems.slice(
@@ -545,7 +564,7 @@ export default function LandingPage() {
               Two ways to rent, both fully covered by our verification and split-payment protections.
             </p>
           </div>
-          <PathSelectionCards />
+          <PathSelectionCards roomyOnMobile />
         </div>
       </section>
 
@@ -635,10 +654,24 @@ export default function LandingPage() {
               image. Two columns roughly halves each photo's rendered size without touching the
               image files or CatalogPreviewCard's own square crop. */}
           <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-            {paginatedItems.map((item) => (
-              <CatalogPreviewCard key={item.id} item={item} />
+            {paginatedItems.map((kind) => (
+              <CatalogPreviewCard key={`${kind.category}|${kind.brand}|${kind.model ?? ''}|${kind.color ?? ''}`} kind={kind} />
             ))}
           </div>
+
+          {gearCatalogState === 'loading' && <p className="text-center text-sm text-ink-muted">Loading gear…</p>}
+          {gearCatalogState === 'error' && (
+            <div className="flex flex-col items-center gap-2 text-center">
+              <p className="text-sm text-ink-muted">We couldn't load the gear catalog right now.</p>
+              <button
+                type="button"
+                onClick={retryGearCatalog}
+                className="rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink hover:bg-surface-strong"
+              >
+                Try Again
+              </button>
+            </div>
+          )}
 
           {catalogPageCount > 1 && (
             <div className="flex items-center justify-center gap-2">

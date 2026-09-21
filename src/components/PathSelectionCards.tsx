@@ -10,6 +10,9 @@ interface PathCardProps {
   description: string;
   cta: string;
   image: string;
+  /** Homepage-only: below `sm`, gives the card room to show its full text instead of the compact
+   *  2-column version. Has no effect from `sm` up. */
+  roomyOnMobile?: boolean;
 }
 
 /**
@@ -19,7 +22,7 @@ interface PathCardProps {
  * on the CTA pins it to the bottom of both cards so the two buttons always align with each other
  * even when the text above them doesn't take up equal space.
  */
-function PathCard({ to, title, subtitle, description, cta, image }: PathCardProps) {
+function PathCard({ to, title, subtitle, description, cta, image, roomyOnMobile = false }: PathCardProps) {
   return (
     <Link
       to={to}
@@ -32,7 +35,11 @@ function PathCard({ to, title, subtitle, description, cta, image }: PathCardProp
           16:9 was still noticeably taller than it needed to be for a comparison card; square keeps
           the photo recognizable while giving title/subtitle/CTA more of the column's own height.
           sm:aspect-[16/10] keeps the desktop crop exactly as it was. */}
-      <div className="flex aspect-square w-full items-center justify-center overflow-hidden bg-surface-strong sm:aspect-[16/10]">
+      <div
+        className={`flex w-full items-center justify-center overflow-hidden bg-surface-strong sm:aspect-[16/10] ${
+          roomyOnMobile ? 'aspect-[4/3]' : 'aspect-square'
+        }`}
+      >
         {image ? (
           <img
             src={image}
@@ -44,14 +51,24 @@ function PathCard({ to, title, subtitle, description, cta, image }: PathCardProp
           <GearPlaceholderIcon className="h-12 w-12 text-ink-faint" />
         )}
       </div>
-      <div className="flex flex-1 flex-col gap-1 p-2.5 sm:gap-2 sm:p-7">
-        <h3 className="font-serif text-sm font-bold leading-snug text-ink sm:text-2xl">{title}</h3>
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-accent sm:text-sm">{subtitle}</p>
+      <div className={`flex flex-1 flex-col sm:gap-2 sm:p-7 ${roomyOnMobile ? 'gap-1.5 p-3' : 'gap-1 p-2.5'}`}>
+        <h3 className={`font-serif font-bold leading-snug text-ink sm:text-2xl ${roomyOnMobile ? 'text-base' : 'text-sm'}`}>{title}</h3>
+        <p
+          className={`font-semibold uppercase tracking-wide text-accent sm:text-sm ${roomyOnMobile ? 'text-[11px]' : 'text-[10px]'}`}
+        >
+          {subtitle}
+        </p>
         {/* line-clamp-1 below sm (was line-clamp-2): a 2-column comparison card has roughly half
             the width a single stacked card did, so even 2 lines of body text pushed the CTA below
             the fold of a card that's supposed to read at a glance. Untouched (full text, no clamp)
             from sm up, where there's room for it. */}
-        <p className="line-clamp-1 text-xs text-ink-muted sm:line-clamp-none sm:text-base">{description}</p>
+        <p
+          className={`text-ink-muted sm:line-clamp-none sm:text-base ${
+            roomyOnMobile ? 'text-xs leading-snug' : 'line-clamp-1 text-xs'
+          }`}
+        >
+          {description}
+        </p>
         {/* The CTA text sits on a solid dark-green oblong "pill" rather than in a filled
             rectangular button — still a decorative layer, per the client's request, not a new
             control. The ellipse is aria-hidden and purely visual; the Link wrapping this whole
@@ -71,7 +88,7 @@ function PathCard({ to, title, subtitle, description, cta, image }: PathCardProp
             the arrow for the pill to visually cover it. Flipping only the outer span to white
             without this change would have left a white arrow floating on the plain page
             background outside the pill, invisible against it. */}
-        <span className="mt-auto flex items-center pt-1.5 sm:pt-4">
+        <span className={`mt-auto flex items-center sm:justify-start sm:pt-4 ${roomyOnMobile ? 'justify-start pb-3 pl-2.5 pt-4' : 'pt-1.5'}`}>
           <span className="relative inline-flex items-center gap-1.5 sm:gap-2">
             <span
               aria-hidden="true"
@@ -86,7 +103,7 @@ function PathCard({ to, title, subtitle, description, cta, image }: PathCardProp
   );
 }
 
-export default function PathSelectionCards() {
+export default function PathSelectionCards({ roomyOnMobile = false }: { roomyOnMobile?: boolean }) {
   return (
     // grid-cols-2 at every width (not stacked below sm): this is a direct comparison between
     // exactly two choices — stacking them means only one is ever visible without scrolling, which
@@ -97,21 +114,23 @@ export default function PathSelectionCards() {
         to="/catalog/camping-packages"
         title="Choose a Package"
         subtitle="Pre-Selected Kits"
-        description="Not sure what gear you need? We've put together ready-to-rent kits with quality gear, so you can spend less time researching and more time planning your trip."
+        description="Not sure what gear you need? Choose from our ready-to-rent kits and spend less time researching, more time planning your trip."
         cta="Explore Packages"
         // The client's actual "Choose Package" photo — same optimized file already registered in
         // the Camp Setups gallery (see campSetups.ts's 'choose-package-camp-setup' entry).
         image="/images/camp-setups/choose-package-camp-setup.jpg"
+        roomyOnMobile={roomyOnMobile}
       />
       <PathCard
         to="/catalog/build-your-own"
         title="Build Your Own Kit"
-        subtitle="Fully Custom"
+        subtitle="Fully Customized"
         description="Pick your rental duration, then mix and match individual gear by category to fit your trip exactly."
         cta="Start Building"
         // The client's actual "BYO" photo — same file already registered in the Camp Setups
         // gallery as 'byo-camp-setup'.
         image="/images/camp-setups/byo-camp-setup.jpg"
+        roomyOnMobile={roomyOnMobile}
       />
     </div>
   );
