@@ -1,4 +1,5 @@
 import { usePageMeta } from '../hooks/usePageMeta';
+import { PAGE_META } from '../config/pageMeta';
 import LegalLayout, {
   LegalContact,
   LegalList,
@@ -520,7 +521,7 @@ const SECTIONS: LegalSection[] = [
 ];
 
 export default function PrivacyPolicy() {
-  usePageMeta('Privacy Policy | GearBnB', 'How GearBnB collects, uses, stores, shares and protects your personal data.');
+  usePageMeta(PAGE_META.privacy.title, PAGE_META.privacy.description);
 
   return (
     <LegalLayout

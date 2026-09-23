@@ -1,11 +1,9 @@
 import { usePageMeta } from '../hooks/usePageMeta';
+import { PAGE_META } from '../config/pageMeta';
 import PathSelectionCards from '../components/PathSelectionCards';
 
 export default function CatalogChooser() {
-  usePageMeta(
-    'Camping Kits for Rent in Metro Manila | GearBnB',
-    'Browse and rent camping gears in Metro Manila. Explore our selection of quality outdoor equipment and find the perfect gear for your next adventure.',
-  );
+  usePageMeta(PAGE_META.catalog.title, PAGE_META.catalog.description);
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-5 py-16 sm:px-6">
       <div className="flex flex-col items-center gap-2 text-center">

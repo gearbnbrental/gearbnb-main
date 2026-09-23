@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { usePageMeta } from '../hooks/usePageMeta';
+import { PAGE_META } from '../config/pageMeta';
 import LegalLayout, {
   LegalContact,
   LegalList,
@@ -351,7 +352,7 @@ const SECTIONS: LegalSection[] = [
 ];
 
 export default function TermsOfService() {
-  usePageMeta('Terms of Service | GearBnB', 'The terms for using gearbnbrental.com and renting camping gear from GearBnB.');
+  usePageMeta(PAGE_META.terms.title, PAGE_META.terms.description);
 
   return (
     <LegalLayout

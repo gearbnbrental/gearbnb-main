@@ -1,4 +1,5 @@
 ﻿import { usePageMeta } from '../hooks/usePageMeta';
+import { PAGE_META } from '../config/pageMeta';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -84,10 +85,7 @@ function Field({ label, required = true, children }: { label: string; required?:
 }
 
 export default function EventPlan() {
-  usePageMeta(
-    'Camping Gear Rental for Events & Team Building | GearBnB',
-    'Plan your team-building or big event with camping gear rental. Get quality camping gear for groups and make your outdoor event hassle-free.',
-  );
+  usePageMeta(PAGE_META.events.title, PAGE_META.events.description);
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
