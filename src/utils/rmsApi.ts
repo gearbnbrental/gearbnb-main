@@ -744,6 +744,9 @@ export interface RmsCatalogAddOn {
   extraPerDayCentavos: number;
   maxQuantity: number;
   availableCount: number;
+  /** Free-text, staff-written description (e.g. how many poles come in one add-on); absent when
+   *  nothing's been written yet. */
+  description?: string | null;
 }
 
 /** Matches the RMS's CustomerCatalogGearKind exactly. No id field — a kind is identified by its
@@ -767,6 +770,14 @@ export interface RmsCatalogGearKind {
   variants?: RmsCatalogGearVariant[];
   /** Free-text "Size / Capacity" from the RMS inventory (e.g. "6P"); null/absent when not set. */
   sizeCapacity?: string | null;
+  /** The kind's color when all its units share one ("Black"/"Khaki"); absent when units span more
+   *  than one color (see `variants`) or none is recorded. */
+  color?: string | null;
+  /** Free-text, staff-written description; present only when at least one unit has one filled in
+   *  (see the RMS's own "if units disagree, omit" rule). */
+  description?: string | null;
+  /** Every distinct photo URL across this kind's units, in RMS order. Absent/empty when none. */
+  images?: string[];
 }
 
 /** One color of a gear kind — matches the RMS's CustomerCatalogGearVariant. */
@@ -780,6 +791,8 @@ export interface RmsCatalogGearVariant {
   price72hCentavos?: number;
   extraPerDayCentavos?: number;
   sizeCapacity?: string | null;
+  description?: string | null;
+  images?: string[];
 }
 
 /**

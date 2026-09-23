@@ -1,5 +1,5 @@
-﻿import type { ComponentType } from 'react';
-import { useNavigate } from 'react-router-dom';
+﻿import type { ComponentType, ReactNode } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import FaqAccordion, { type FaqItem } from '../components/FaqAccordion';
 import {
   CheckCircleIcon,
@@ -10,8 +10,9 @@ import {
   ShieldCheckIcon,
   TruckIcon,
 } from '../components/icons';
-import { MESSENGER_URL } from '../config/social';
+import { MESSENGER_URL, TIKTOK_URL } from '../config/social';
 import { usePageMeta } from '../hooks/usePageMeta';
+import { PAGE_META } from '../config/pageMeta';
 
 /**
  * /about-us — content sourced verbatim from the client's "ABOUT US PAGE.docx" (headings,
@@ -55,12 +56,32 @@ function SectionGlow({ variant, corner }: { variant: 'forest' | 'olive'; corner:
 
 const BRANDS = ['Naturehike', 'Blackdog', 'Vidalido', 'Mobi Garden', 'Mountainhiker'];
 
-const BENEFITS = [
+const BENEFITS: ReactNode[] = [
   'Personal camping gear recommendations',
   'Setup and disassembly guidance',
   'Beginner-friendly explanations',
-  "Well-maintained and hygienic gear you're able to trust",
-  '24/7 support through Messenger and TikTok',
+  <>
+    <Link to="/catalog/build-your-own" className="underline underline-offset-2 hover:text-accent">
+      Well-maintained and hygienic gear
+    </Link>{' '}
+    you're able to trust
+  </>,
+  <>
+    24/7 support through{' '}
+    <a href={MESSENGER_URL} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-accent">
+      Messenger
+    </a>{' '}
+    and{' '}
+    <a href={TIKTOK_URL} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-accent">
+      TikTok
+    </a>
+  </>,
+  <>
+    Complete camping equipment rental{' '}
+    <Link to="/plan-an-event" className="underline underline-offset-2 hover:text-accent">
+      for retreats, team buildings, and group events
+    </Link>
+  </>,
 ];
 
 interface ProcessStep {
@@ -159,10 +180,7 @@ function BookYourGearButton({ className = '' }: { className?: string }) {
 }
 
 export default function AboutUs() {
-  usePageMeta(
-    'Camping Gear Rental in Las Piñas, Metro Manila | GearBnB',
-    'Discover Gearbnb, your camping gear rental in Las Piñas, Metro Manila. Learn about our mission and find reliable gear for your next outdoor adventure.',
-  );
+  usePageMeta(PAGE_META.about.title, PAGE_META.about.description);
 
   return (
     <div className="flex flex-col">
@@ -208,8 +226,11 @@ export default function AboutUs() {
               Camping Gear Rental Serving Las Piñas and Nearby Cities
             </h2>
             <p className="text-sm text-ink-muted sm:text-base">
-              Rent camping gear from trusted outdoor brands, including Naturehike, Blackdog, Vidalido, Mobi Garden,
-              Mountainhiker and many more.
+              <Link to="/catalog" className="underline underline-offset-2 hover:text-accent">
+                Rent camping gear
+              </Link>{' '}
+              from trusted outdoor brands, including Naturehike, Blackdog, Vidalido, Mobi Garden, Mountainhiker and
+              many more.
             </p>
             <div className="flex flex-col gap-2">
               <p className="text-sm font-medium text-ink">Searching for camping gear for rent near me? We serve:</p>
@@ -332,8 +353,8 @@ export default function AboutUs() {
             </div>
 
             <ul className="flex flex-col gap-2.5 text-left">
-              {BENEFITS.map((benefit) => (
-                <li key={benefit} className="flex items-start gap-2.5 text-sm text-ink">
+              {BENEFITS.map((benefit, index) => (
+                <li key={index} className="flex items-start gap-2.5 text-sm text-ink">
                   <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
                   {benefit}
                 </li>

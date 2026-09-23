@@ -27,6 +27,11 @@ export function resolveGearVariant(kind: BookableGearKind, color: string | undef
     pricing: variant.pricing ?? kind.pricing,
     extraPerDayPrice: variant.extraPerDayPrice ?? kind.extraPerDayPrice,
     sizeCapacity: variant.sizeCapacity ?? kind.sizeCapacity,
+    // Deliberately NEVER falls back to the kind's own description/images — each color's gallery
+    // and description are its own, not shared (a Black tent and a Khaki tent look different in
+    // person). Absent here just means that color has none yet, not "use the kind's."
+    description: variant.description,
+    images: variant.images,
   };
 }
 

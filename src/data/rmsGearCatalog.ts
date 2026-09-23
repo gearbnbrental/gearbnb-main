@@ -22,6 +22,7 @@ function mapAddOn(addOn: RmsCatalogAddOn): BookableAddOn {
     extraPerDayPrice: centavosToPesos(addOn.extraPerDayCentavos),
     maxQuantity: addOn.maxQuantity,
     availableCount: addOn.availableCount,
+    ...(addOn.description?.trim() ? { description: addOn.description.trim() } : {}),
   };
 }
 
@@ -45,6 +46,8 @@ function mapGearVariant(kind: RmsCatalogGearKind, variant: RmsCatalogGearVariant
       : {}),
     ...(variant.extraPerDayCentavos !== undefined ? { extraPerDayPrice: centavosToPesos(variant.extraPerDayCentavos) } : {}),
     ...(variant.sizeCapacity?.trim() ? { sizeCapacity: variant.sizeCapacity.trim() } : {}),
+    ...(variant.description?.trim() ? { description: variant.description.trim() } : {}),
+    ...(variant.images && variant.images.length > 0 ? { images: variant.images } : {}),
   };
 }
 
@@ -66,6 +69,9 @@ function mapGearKind(kind: RmsCatalogGearKind): BookableGearKind {
     freeAccessories: kind.freeAccessories,
     compatibleAddOns: kind.compatibleAddOns.map(mapAddOn),
     ...(kind.sizeCapacity?.trim() ? { sizeCapacity: kind.sizeCapacity.trim() } : {}),
+    ...(kind.color?.trim() ? { kindColor: kind.color.trim() } : {}),
+    ...(kind.description?.trim() ? { description: kind.description.trim() } : {}),
+    ...(kind.images && kind.images.length > 0 ? { images: kind.images } : {}),
     // Only when the RMS actually reported more than one color — an older RMS (or a single-color
     // kind) leaves this off entirely and the catalog behaves exactly as before.
     ...(kind.variants && kind.variants.length > 1

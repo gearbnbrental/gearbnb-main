@@ -1,10 +1,13 @@
 ﻿import { usePageMeta } from '../hooks/usePageMeta';
+import { PAGE_META } from '../config/pageMeta';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import BackLink from '../components/BackLink';
 import FilterPill from '../components/FilterPill';
 import { ChevronIcon, GearPlaceholderIcon } from '../components/icons';
 import ImageLightbox from '../components/ImageLightbox';
+import GearDetailsDialog from '../components/GearDetailsDialog';
+import { addOnAsGearKind } from '../utils/addOnAsKind';
 import { useAuth } from '../context/AuthContext';
 import { useCatalog } from '../context/useCatalog';
 import {
@@ -17,7 +20,6 @@ import type {
   BookableAddOn,
   BookableAddOnSelection,
   BookableGearKind,
-  BookableGearVariant,
   DurationPresetId,
   TripDetails,
 } from '../types/gearbnb';
@@ -35,6 +37,8 @@ import { formatCurrency } from '../utils/format';
 import { toRmsBrand, type RmsAvailabilityRequest, type RmsAvailabilityResult } from '../utils/rmsApi';
 import { useAvailabilityCheck } from '../hooks/useAvailabilityCheck';
 import { resolveGearVariant, sizeCapacityToShow } from '../utils/gearVariants';
+import ColorSwitch from '../components/ColorSwitch';
+import { filterGearByColor, gearColorOptions, supportsColorFilter } from '../utils/colorFilter';
 import { orderGearKinds } from '../utils/gearOrder';
 
 /** Mirrors the RMS's own customer-safe display-name construction
@@ -95,6 +99,12 @@ export interface QuantityStepperProps {
   disabled?: boolean;
   ariaLabel: string;
   onChange: (next: number) => void;
+  /** Below `sm` only, shrinks the +/- buttons and input a step down (32px, was 36px) — `sm` and
+   *  up is always full size, unchanged. For a secondary control nested inside an already-selected
+   *  card (e.g. AddOnRow's own compatible-add-on quantity, itself nested one level deeper than a
+   *  gear kind's own card), never the primary "add this to your cart" tap target, which stays
+   *  full size at every width. */
+  compact?: boolean;
 }
 
 /**
@@ -107,7 +117,7 @@ export interface QuantityStepperProps {
  * checkAvailability/createBookingFromCustomerPortal), so this client-side cap is never the actual
  * security boundary against overselling.
  */
-export function QuantityStepper({ value, max, disabled, ariaLabel, onChange }: QuantityStepperProps) {
+export function QuantityStepper({ value, max, disabled, ariaLabel, onChange, compact = false }: QuantityStepperProps) {
   const [draft, setDraft] = useState(String(value));
   const [error, setError] = useState<string | null>(null);
 
@@ -145,7 +155,9 @@ export function QuantityStepper({ value, max, disabled, ariaLabel, onChange }: Q
           disabled={disabled || value <= 0}
           onClick={() => onChange(value - 1)}
           aria-label={`Decrease ${ariaLabel}`}
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-line text-ink-muted transition-colors hover:bg-surface-strong disabled:cursor-not-allowed disabled:opacity-40"
+          className={`flex items-center justify-center rounded-full border border-line text-ink-muted transition-colors hover:bg-surface-strong disabled:cursor-not-allowed disabled:opacity-40 ${
+            compact ? 'h-8 w-8 sm:h-9 sm:w-9' : 'h-9 w-9'
+          }`}
         >
           −
         </button>
@@ -163,14 +175,18 @@ export function QuantityStepper({ value, max, disabled, ariaLabel, onChange }: Q
           onKeyDown={(e) => {
             if (e.key === 'Enter') e.currentTarget.blur();
           }}
-          className="w-12 rounded-md border border-line bg-surface py-1 text-center text-sm font-semibold text-ink outline-none transition-colors focus:border-brand-forest focus:ring-2 focus:ring-brand-forest/20 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          className={`rounded-md border border-line bg-surface py-1 text-center font-semibold text-ink outline-none transition-colors focus:border-brand-forest focus:ring-2 focus:ring-brand-forest/20 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ${
+            compact ? 'w-8 text-xs sm:w-12 sm:text-sm' : 'w-12 text-sm'
+          }`}
         />
         <button
           type="button"
           disabled={disabled || value >= max}
           onClick={() => onChange(value + 1)}
           aria-label={`Increase ${ariaLabel}`}
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-line text-ink-muted transition-colors hover:bg-surface-strong disabled:cursor-not-allowed disabled:opacity-40"
+          className={`flex items-center justify-center rounded-full border border-line text-ink-muted transition-colors hover:bg-surface-strong disabled:cursor-not-allowed disabled:opacity-40 ${
+            compact ? 'h-8 w-8 sm:h-9 sm:w-9' : 'h-9 w-9'
+          }`}
         >
           +
         </button>
@@ -190,11 +206,19 @@ interface AddOnRowProps {
   hasDuration: boolean;
   price: number | null;
   showUpsell: boolean;
+  /** True once the customer has already opted into the 72h tier — shows this add-on's own
+   *  per-extra-day rate underneath its price, the mirror case of `showUpsell` (48h -> nudge toward
+   *  72h; 72h -> show what going even longer costs). */
+  showExtraDayRate: boolean;
   onChange: (next: number) => void;
 }
 
-function AddOnRow({ addOn, quantity, hasDuration, price, showUpsell, onChange }: AddOnRowProps) {
+// Exported so GearDetailsDialog's own "Optional Add-ons" section (a kind's compatible add-ons,
+// shown inside the "View Details" popup too, not only on the card) reuses this exact row rather
+// than a second copy — mirrors QuantityStepper's own cross-file export just below.
+export function AddOnRow({ addOn, quantity, hasDuration, price, showUpsell, showExtraDayRate, onChange }: AddOnRowProps) {
   const max = Math.min(addOn.maxQuantity, addOn.availableCount);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   return (
     // Stacked below `sm` for the same reason as GearCard's own price/stepper row above — this row
     // sits nested one level deeper (inside a selected card's "Optional Add-ons" list), so its
@@ -203,6 +227,15 @@ function AddOnRow({ addOn, quantity, hasDuration, price, showUpsell, onChange }:
     <div className="flex flex-col items-start gap-2 rounded-xl bg-surface-muted p-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:p-3">
       <div className="min-w-0">
         <p className="break-words text-xs font-medium text-ink sm:text-sm">{addOn.name}</p>
+        {/* Reuses the same "View Details" popup a gear kind gets — see addOnAsGearKind's own doc
+            comment for why an add-on has no photo/free-accessories/nested-add-ons of its own. */}
+        <button
+          type="button"
+          onClick={() => setDetailsOpen(true)}
+          className="text-[11px] font-medium text-accent underline underline-offset-2"
+        >
+          View Details
+        </button>
         <p className="text-[11px] text-ink-muted sm:text-xs">
           {hasDuration && price !== null
             ? `${formatCurrency(price)} each`
@@ -213,17 +246,31 @@ function AddOnRow({ addOn, quantity, hasDuration, price, showUpsell, onChange }:
             Add {formatCurrency(getSeventyTwoHourUpsellDelta(addOn.pricing))} each to rent for 72h instead
           </p>
         )}
+        {showExtraDayRate && addOn.extraPerDayPrice > 0 && (
+          <p className="hidden text-xs font-medium text-ink-muted sm:block">
+            +{formatCurrency(addOn.extraPerDayPrice)} each per extra day
+          </p>
+        )}
         {quantity > 1 && hasDuration && price !== null && (
           <p className="text-[11px] text-ink-muted sm:text-xs">Subtotal: {formatCurrency(price * quantity)}</p>
         )}
       </div>
       {max > 0 ? (
-        <div className="flex flex-col items-end gap-1">
-          <span className="text-[11px] text-ink-faint">Available: {max}</span>
-          <QuantityStepper value={quantity} max={max} ariaLabel={addOn.name} onChange={onChange} />
+        // Below `sm` only: "Avail: N" (shorter label — this row is nested one level deeper than
+        // GearCard's own, inside an already-narrow mobile card, and "Available:" alone overflowed
+        // past the card edge) and the stepper share one line, with `compact` shrinking its buttons
+        // to make room. `sm` and up reverts to the original stacked layout at full size — this was
+        // never asked for beyond mobile, and desktop had room for it as it was.
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5 sm:flex-nowrap sm:flex-col sm:items-end sm:justify-start sm:gap-1">
+          <span className="text-[11px] text-ink-faint sm:hidden">Avail: {max}</span>
+          <span className="hidden text-xs text-ink-faint sm:block">Available: {max}</span>
+          <QuantityStepper value={quantity} max={max} ariaLabel={addOn.name} onChange={onChange} compact />
         </div>
       ) : (
         <span className="text-xs font-medium text-ink-faint">Unavailable</span>
+      )}
+      {detailsOpen && (
+        <GearDetailsDialog kind={addOnAsGearKind(addOn)} quantity={quantity} onQuantityChange={onChange} onClose={() => setDetailsOpen(false)} />
       )}
     </div>
   );
@@ -236,15 +283,12 @@ interface GearCardProps {
   tripDetails: TripDetails;
   hasDuration: boolean;
   showUpsell: boolean;
+  /** Mirrors AddOnRow's own prop of the same name — see its doc comment. */
+  showExtraDayRate: boolean;
   price: number | null;
   /** Set only when this selected kind came back in the RMS's availability issues for the current
    * dates — never inferred locally. */
   unavailableForDates: boolean;
-  /** Only for a kind the RMS reports in more than one color — the pills that switch which color
-   *  `kind` (already resolved to `selectedColor` by the caller) shows and adds to the cart. */
-  variants?: BookableGearVariant[];
-  selectedColor?: string;
-  onColorChange?: (color: string) => void;
   onQuantityChange: (next: number) => void;
   onAddOnQuantityChange: (addOn: BookableAddOn, next: number) => void;
 }
@@ -256,16 +300,15 @@ function GearCard({
   tripDetails,
   hasDuration,
   showUpsell,
+  showExtraDayRate,
   price,
   unavailableForDates,
-  variants,
-  selectedColor,
-  onColorChange,
   onQuantityChange,
   onAddOnQuantityChange,
 }: GearCardProps) {
   const [imageFailed, setImageFailed] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const addOnQuantities = new Map(addOnSelections.map((a) => [`${a.category}|${a.brand}|${a.model ?? ''}`, a.quantity]));
   const isSelected = quantity > 0;
 
@@ -352,26 +395,16 @@ function GearCard({
         {sizeCapacityToShow(kind) && (
           <p className="text-[11px] text-ink-muted sm:text-xs">Size/Capacity: {sizeCapacityToShow(kind)}</p>
         )}
-
-        {variants && variants.length > 1 && (
-          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Color">
-            {variants.map((variant) => (
-              <button
-                key={variant.color}
-                type="button"
-                onClick={() => onColorChange?.(variant.color)}
-                aria-pressed={selectedColor === variant.color}
-                className={`rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors sm:px-3 sm:py-1 sm:text-xs ${
-                  selectedColor === variant.color
-                    ? 'bg-brand-forest text-white'
-                    : 'bg-surface-strong text-ink-muted hover:bg-line'
-                } ${variant.canSelect ? '' : 'line-through opacity-70'}`}
-              >
-                {variant.color}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* Trial: opens the new details popup (gallery, description, FAQ) — see GearDetailsDialog's
+            own doc comment. A plain text link, not styled as a button, so it reads as secondary to
+            the card's own quantity control below. */}
+        <button
+          type="button"
+          onClick={() => setDetailsOpen(true)}
+          className="self-start text-[11px] font-medium text-accent underline underline-offset-2 sm:text-xs"
+        >
+          View Details
+        </button>
 
         {/* Stacked below `sm` so the QuantityStepper (a fixed ~136px: two h-9 buttons + a w-12
             input) gets the full width of the card instead of being squeezed beside the price —
@@ -379,7 +412,18 @@ function GearCard({
             room for barely 2-3px of price text once a gear kind was actually selected. Side by
             side again once the card is wide enough — mirrors PathACatalog's own PackageAddOnsSection
             card, which already uses this exact pattern for the identical reason. */}
-        <div className="mt-auto flex flex-col items-start gap-1.5 pt-1 sm:flex-row sm:items-end sm:justify-between sm:gap-2 sm:pt-2">
+        {/* Below `sm` only: row (price left, control right) while unselected, same as `sm` and up
+            always is — column only once selected, when the control becomes the full ~136px
+            QuantityStepper (two buttons + an input) that a ~146px mobile card column genuinely has
+            no room to sit beside (see that control's own comment). The plain round "+" button is
+            small enough to share a row even at mobile width, which is what makes room to finally
+            show the 72h-upsell/extra-day-rate hints below on mobile too — see those paragraphs'
+            own `hidden` toggle. */}
+        <div
+          className={`mt-auto flex gap-1.5 pt-1 sm:flex-row sm:items-end sm:justify-between sm:gap-2 sm:pt-2 ${
+            isSelected ? 'flex-col items-start' : 'flex-row items-center justify-between'
+          }`}
+        >
           <div className="min-w-0">
             <p className="text-sm font-bold leading-tight text-accent sm:text-lg">
               {hasDuration && price !== null
@@ -387,8 +431,13 @@ function GearCard({
                 : `${formatCurrency(kind.pricing['48h'])}–${formatCurrency(kind.pricing['72h'])}`}
             </p>
             {showUpsell && (
-              <p className="hidden text-[11px] font-medium text-accent sm:block">
+              <p className={`text-[11px] font-medium text-accent sm:block ${isSelected ? 'hidden' : ''}`}>
                 +{formatCurrency(getSeventyTwoHourUpsellDelta(kind.pricing))} for 72h
+              </p>
+            )}
+            {showExtraDayRate && kind.extraPerDayPrice > 0 && (
+              <p className={`text-[11px] font-medium text-ink-muted sm:block ${isSelected ? 'hidden' : ''}`}>
+                +{formatCurrency(kind.extraPerDayPrice)} per extra day
               </p>
             )}
             {quantity > 1 && hasDuration && price !== null && (
@@ -411,19 +460,19 @@ function GearCard({
               // unavailableForDates is only ever computed for already-selected kinds (see the
               // availability effect below, which only checks cart.byoGears) — an unselected kind
               // reaching this branch is always still governed by the static canSelect snapshot.
-              // h-9 w-9 at every width (not a smaller mobile size): this is the one tap target
-              // that actually adds gear to the cart, and it shrank to h-7 (28px) in an earlier
-              // compaction pass — noticeably harder to hit accurately on a real phone, and smaller
-              // than the h-9 QuantityStepper buttons this same control turns into once quantity >
-              // 0. Matching QuantityStepper's own size keeps the tap target consistent whether the
-              // card is showing "+" or the full stepper.
+              // h-9 w-9 from `sm` up, matching the QuantityStepper buttons this same control turns
+              // into once quantity > 0. Below `sm` it's h-8 (32px) — smaller than that, but
+              // deliberately NOT the h-7 (28px) an earlier compaction pass already tried and
+              // reverted for being noticeably harder to hit accurately on a real phone; 32px is the
+              // smallest step down that still makes room, on mobile, for the price row to sit
+              // beside it instead of below it (see the row's own comment above).
               <button
                 type="button"
                 onClick={() => onQuantityChange(1)}
                 aria-label={`Add ${kind.name} to cart`}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-forest text-white shadow-sm transition-transform hover:bg-brand-forest-dark active:scale-90"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-forest text-white shadow-sm transition-transform hover:bg-brand-forest-dark active:scale-90 sm:h-9 sm:w-9"
               >
-                <PlusIcon className="h-4 w-4" />
+                <PlusIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </button>
             )
           ) : (
@@ -444,6 +493,7 @@ function GearCard({
                   hasDuration={hasDuration}
                   price={hasDuration ? getGearKindPrice(addOn, tripDetails) : null}
                   showUpsell={showUpsell}
+                  showExtraDayRate={showExtraDayRate}
                   onChange={(next) => onAddOnQuantityChange(addOn, next)}
                 />
               );
@@ -459,15 +509,28 @@ function GearCard({
           onNavigate={() => {}}
         />
       )}
+      {detailsOpen && (
+        <GearDetailsDialog
+          kind={kind}
+          quantity={quantity}
+          onQuantityChange={onQuantityChange}
+          onClose={() => setDetailsOpen(false)}
+          addOnsSection={{
+            addOnQuantities,
+            getPrice: (addOn) => (hasDuration ? getGearKindPrice(addOn, tripDetails) : null),
+            hasDuration,
+            showUpsell,
+            showExtraDayRate,
+            onAddOnQuantityChange,
+          }}
+        />
+      )}
     </div>
   );
 }
 
 export default function PathBCatalog() {
-  usePageMeta(
-    'Camping Gear Rental in Metro Manila | GearBnB',
-    'Customize your adventure with camping gear rental in Metro Manila. Pick the gear you need, build your own package, and enjoy the outdoors your way.',
-  );
+  usePageMeta(PAGE_META.buildYourOwn.title, PAGE_META.buildYourOwn.description);
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
@@ -485,12 +548,15 @@ export default function PathBCatalog() {
   const [extraDays, setExtraDays] = useState(() =>
     extraDaysFromDates(cart.tripDetails.startDate, cart.tripDetails.returnDate),
   );
-  const [activeCategory, setActiveCategory] = useState('All');
+  // The customer's own category pick; null until they pick one (see `activeCategory` below for the
+  // default). There is no "All" view on this page.
+  const [chosenCategory, setChosenCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [itemsPage, setItemsPage] = useState(1);
-  // Which color each multi-color gear kind's card is currently showing, keyed by the kind's own
-  // (color-less) byoGearKey. Unset = default (see the card map below).
-  const [colorChoice, setColorChoice] = useState<Record<string, string>>({});
+  // The one page-wide color the customer picked (Black/Khaki) — applies to every multi-color gear
+  // kind shown, so it doesn't have to be chosen product by product. null = the default (see
+  // `activeColor` below).
+  const [chosenColor, setChosenColor] = useState<string | null>(null);
   const cartItemCount = cart.selectedKits.length + cart.selectedItems.length + cart.byoGears.length;
   const isUnlocked = totals.rentalDurationDays > 0;
   const hasDuration = calculateRentalDurationDays(cart.tripDetails) > 0;
@@ -558,28 +624,48 @@ export default function PathBCatalog() {
     return new Set(byoAvailability.issues.map((i) => i.name));
   }, [byoAvailability]);
 
-  const categories = useMemo(() => {
-    const unique = Array.from(new Set(gearKinds.map((kind) => kind.category)));
-    return ['All', ...unique];
-  }, [gearKinds]);
+  const categories = useMemo(() => Array.from(new Set(gearKinds.map((kind) => kind.category))), [gearKinds]);
+  // Opens on Tent (the first category, since tents are listed first) unless the customer picked
+  // another one — falls back to whatever category exists first if there are no tents.
+  const activeCategory =
+    chosenCategory && categories.includes(chosenCategory)
+      ? chosenCategory
+      : (categories.find((category) => category.toLowerCase() === 'tent') ?? categories[0] ?? '');
 
   const normalizedSearch = searchQuery.trim().toLowerCase();
-  const categoryFilteredKinds =
-    activeCategory === 'All' ? gearKinds : gearKinds.filter((kind) => kind.category === activeCategory);
+  // With no "All" pill, a search looks across every category (otherwise a search for "chair" while
+  // Tent is showing would find nothing); with no search, the active category is what's shown.
   const filteredKinds = normalizedSearch
-    ? categoryFilteredKinds.filter((kind) =>
+    ? gearKinds.filter((kind) =>
         [kind.name, kind.brand, kind.category].some((field) => field.toLowerCase().includes(normalizedSearch)),
       )
-    : categoryFilteredKinds;
+    : gearKinds.filter((kind) => kind.category === activeCategory);
+
+  // The colors offered by whatever is on screen right now (Tent, Bed, Table, Chair...) — the switch
+  // only appears when at least two exist, so categories without color options show no switch.
+  // Only Tent/Bed/Table/Chair take part (see supportsColorFilter) — other categories, such as Other
+  // Gear Essentials, never contribute a color option and are never filtered by it.
+  const colorOptions = useMemo(() => gearColorOptions(filteredKinds.filter(supportsColorFilter)), [filteredKinds]);
+  const activeColor =
+    colorOptions.length > 1
+      ? chosenColor && colorOptions.includes(chosenColor)
+        ? chosenColor
+        : colorOptions[0]
+      : undefined;
+  // Strict: only gear that really comes in the chosen color. Gear whose color the RMS doesn't
+  // report at all is kept (see filterGearByColor).
+  const displayKinds = activeColor
+    ? filteredKinds.filter((kind) => !supportsColorFilter(kind) || filterGearByColor([kind], activeColor).length > 0)
+    : filteredKinds;
 
   // Whenever the visible set changes shape (a new search or category), the old page number no
   // longer means the same thing — back to page 1 rather than risk landing on a page past the end.
   useEffect(() => {
     setItemsPage(1);
-  }, [activeCategory, normalizedSearch]);
+  }, [activeCategory, normalizedSearch, activeColor]);
 
-  const itemsPageCount = Math.max(1, Math.ceil(filteredKinds.length / ITEMS_PAGE_SIZE));
-  const paginatedKinds = filteredKinds.slice(
+  const itemsPageCount = Math.max(1, Math.ceil(displayKinds.length / ITEMS_PAGE_SIZE));
+  const paginatedKinds = displayKinds.slice(
     (itemsPage - 1) * ITEMS_PAGE_SIZE,
     itemsPage * ITEMS_PAGE_SIZE,
   );
@@ -879,9 +965,12 @@ export default function PathBCatalog() {
                     <button
                       key={category}
                       type="button"
-                      onClick={() => setActiveCategory(category)}
+                      onClick={() => {
+                        setChosenCategory(category);
+                        setSearchQuery('');
+                      }}
                       className={`h-8 shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-medium transition-colors sm:h-9 sm:px-4 sm:text-sm ${
-                        activeCategory === category
+                        !normalizedSearch && activeCategory === category
                           ? 'bg-brand-forest text-white'
                           : 'bg-surface-strong text-ink-muted hover:bg-line'
                       }`}
@@ -891,10 +980,13 @@ export default function PathBCatalog() {
                   ))}
                 </div>
 
-                {filteredKinds.length === 0 ? (
+                {/* One color switch for the whole page (shown only where the current category has
+                    multi-color gear — Tent, Bed, Table, Chair) instead of a switch on every product. */}
+                {activeColor && <ColorSwitch colors={colorOptions} active={activeColor} onChange={setChosenColor} />}
+
+                {displayKinds.length === 0 ? (
                   <p className="rounded-xl border border-line bg-surface-muted p-6 text-center text-sm text-ink-muted">
-                    No gear matches "{searchQuery.trim()}"{activeCategory !== 'All' ? ` in ${activeCategory}` : ''}.
-                    Try a different search or category.
+                    No gear matches "{searchQuery.trim()}". Try a different search or category.
                   </p>
                 ) : (
                   <>
@@ -902,31 +994,21 @@ export default function PathBCatalog() {
                         grid: a mobile catalog should show several gear cards per viewport. */}
                     <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-3">
                       {paginatedKinds.map((baseKind) => {
-                        const baseKey = byoGearKey(baseKind);
-                        // A multi-color kind shows ONE color at a time: the customer's pick, else
-                        // a color already in their cart, else the first color actually in stock.
-                        // `kind` below is that color resolved to its own image/stock/price/name —
-                        // and its own cart identity — so everything after this is the same code path
-                        // a single-color kind takes.
-                        const variants = baseKind.variants;
-                        const inCartColor = variants?.find((v) => gearSelections.has(byoGearKey({ ...baseKind, color: v.color })))?.color;
-                        const selectedColor = variants
-                          ? (colorChoice[baseKey] ?? inCartColor ?? (variants.find((v) => v.canSelect) ?? variants[0]).color)
-                          : undefined;
-                        const kind = resolveGearVariant(baseKind, selectedColor);
+                        // `kind` is the page-wide color resolved to that color's own image, stock,
+                        // price and name — and its own cart identity. Single-color gear passes
+                        // through unchanged.
+                        const kind = resolveGearVariant(baseKind, supportsColorFilter(baseKind) ? activeColor : undefined);
                         const key = byoGearKey(kind);
                         return (
                           <GearCard
                             key={key}
                             kind={kind}
-                            variants={variants}
-                            selectedColor={selectedColor}
-                            onColorChange={(color) => setColorChoice((prev) => ({ ...prev, [baseKey]: color }))}
                             quantity={gearSelections.get(key) ?? 0}
                             addOnSelections={cart.byoAddOns[key] ?? []}
                             tripDetails={cart.tripDetails}
                             hasDuration={hasDuration}
                             showUpsell={selectedPreset === '48h'}
+                            showExtraDayRate={selectedPreset === '72h'}
                             price={hasDuration ? getGearKindPrice(kind, cart.tripDetails) : null}
                             unavailableForDates={unavailableNames.has(kindDisplayName(kind))}
                             onQuantityChange={(next) => {

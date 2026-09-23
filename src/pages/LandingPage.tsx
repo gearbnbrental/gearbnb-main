@@ -1,6 +1,7 @@
 ﻿import { usePageMeta } from '../hooks/usePageMeta';
+import { PAGE_META } from '../config/pageMeta';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import CampSetupsGallery from '../components/CampSetupsGallery';
 import { CAMP_SETUP_PHOTOS } from '../config/campSetups';
 import FaqAccordion, { type FaqItem } from '../components/FaqAccordion';
@@ -429,10 +430,7 @@ const FAQ_ITEMS: FaqItem[] = [
 const TRUSTED_BRANDS = ['Black Dog', 'Naturehike', 'Mountainhiker', 'Mobi Garden', 'Vidalido'];
 
 export default function LandingPage() {
-  usePageMeta(
-    'Camping Gear Rental in the Philippines | GearBnB',
-    'Explore camping gear rental in the Philippines, serving Metro Manila, Las Piñas, and nearby cities. Find quality gear and book for your next adventure.',
-  );
+  usePageMeta(PAGE_META.home.title, PAGE_META.home.description);
   const navigate = useNavigate();
   const location = useLocation();
   const { kits, gearKinds: catalogGearKinds, gearCatalogState, retryGearCatalog } = useCatalog();
@@ -511,7 +509,8 @@ export default function LandingPage() {
             Camping Gears Rental in the Philippines Made Easy
           </h1>
           <p className="max-w-xl text-base text-white">
-            Great camping trips start with the right gear, and we&rsquo;ve got it ready for you.
+            Great camping trips start with the right gear, and you deserve a reliable camping gear rental in the
+            Philippines.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
             <button
@@ -873,8 +872,21 @@ export default function LandingPage() {
               Gear Up for Your Next Adventure
             </h2>
             <p className="text-sm text-white">
-              Make your next camping trip easier with GearBnB. Get the gear you need and enjoy more time outdoors,
-              making memories that last.
+              Make your next camping trip easier with{' '}
+              <Link to="/about-us" className="underline underline-offset-2 hover:text-white/80">
+                GearBnB
+              </Link>
+              . We are proudly located in{' '}
+              <a
+                href="https://www.google.com/maps/place/GearBnB+Camping+Gears+Rental/@14.4461908,120.9966593,17z/data=!3m1!4b1!4m6!3m5!1s0x3397d3090cbbd26f:0x665f11a5d4c66dde!8m2!3d14.4461908!4d120.9966593!16s%2Fg%2F11z8h467l7?entry=ttu&g_ep=EgoyMDI2MDkxNi4wIKXMDSoASAFQAw%3D%3D"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2 hover:text-white/80"
+              >
+                Las Piñas City
+              </a>{' '}
+              and serves nearby cities in Metro Manila, Calabarzon, and surrounding areas. Get the gear you need and
+              enjoy more time outdoors, making memories that last.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3 lg:justify-start">
               <button

@@ -1,6 +1,6 @@
 import { supabase } from '../supabase';
 import type { RmsCatalogPackage } from '../utils/rmsApi';
-import type { IndividualItem, KitEdition, PackageKit } from '../types/gearbnb';
+import type { IndividualItem, KitEdition, PackageComponent, PackageKit } from '../types/gearbnb';
 
 /** Raw shape of a row in the `packages` table (RMS Prisma schema, only the columns we use). */
 export interface PackageRow {
@@ -142,6 +142,7 @@ export function groupPackageRows(rows: PackageRow[]): PackageKit[] {
           pricing: resolvePackagePricing(row),
           depositAmount: centavosToPesos(row.depositCentavos),
           extraPerDayPrice: centavosToPesos(row.extraPerDayCentavos ?? 0),
+          description: sanitizeDescription(row.description ?? ''),
           isOutOfStock: false,
         }))
       : undefined;
@@ -242,18 +243,26 @@ export async function fetchCatalogItems(): Promise<IndividualItem[]> {
  * unselectable Main has no real signal for.
  */
 export function applyPackageSelectability(kits: PackageKit[], rmsPackages: RmsCatalogPackage[]): PackageKit[] {
-  const canSelectByPackageNumber = new Map(rmsPackages.map((pkg) => [pkg.packageNumber, pkg.canSelect]));
+  const rmsPackageByNumber = new Map(rmsPackages.map((pkg) => [pkg.packageNumber, pkg]));
+
+  // Bare pass-through — RmsCatalogPackageComponent and PackageComponent are already the exact
+  // same shape; this only exists so a future field on one side doesn't silently leak onto the
+  // other without a deliberate decision.
+  const toPackageComponents = (components: RmsCatalogPackage['components']): PackageComponent[] =>
+    components.map((c) => ({ category: c.category, brand: c.brand, model: c.model, name: c.name, quantity: c.quantity, availableCount: c.availableCount }));
 
   return kits.map((kit) => {
-    const kitCanSelect = canSelectByPackageNumber.get(kit.packageNumber);
+    const rmsPackage = rmsPackageByNumber.get(kit.packageNumber);
     return {
       ...kit,
-      isOutOfStock: kitCanSelect === undefined ? kit.isOutOfStock : !kitCanSelect,
+      isOutOfStock: rmsPackage === undefined ? kit.isOutOfStock : !rmsPackage.canSelect,
+      components: rmsPackage ? toPackageComponents(rmsPackage.components) : kit.components,
       editions: kit.editions?.map((edition) => {
-        const editionCanSelect = canSelectByPackageNumber.get(edition.packageNumber);
+        const rmsEdition = rmsPackageByNumber.get(edition.packageNumber);
         return {
           ...edition,
-          isOutOfStock: editionCanSelect === undefined ? edition.isOutOfStock : !editionCanSelect,
+          isOutOfStock: rmsEdition === undefined ? edition.isOutOfStock : !rmsEdition.canSelect,
+          components: rmsEdition ? toPackageComponents(rmsEdition.components) : edition.components,
         };
       }),
     };

@@ -1,6 +1,7 @@
 import { createContext, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { applyPackageSelectability, fetchCatalogItems, fetchCatalogPackages } from '../data/supabaseCatalog';
 import { fetchBookableGearCatalog } from '../data/rmsGearCatalog';
+import { orderPackageKits } from '../utils/gearOrder';
 import { fetchPackageCatalogFromRms, fetchPaymentQrConfig, type RmsPaymentQrConfig } from '../utils/rmsApi';
 import type { BookableGearKind, IndividualItem, PackageKit } from '../types/gearbnb';
 import { useAuth } from './AuthContext';
@@ -125,7 +126,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         }
 
         if (cancelled) return;
-        setKits(kitsWithSelectability);
+        setKits(orderPackageKits(kitsWithSelectability));
         setItems(itemData);
         setCatalogState('ready');
         setReady(true);

@@ -1,12 +1,18 @@
 ﻿import { usePageMeta } from '../hooks/usePageMeta';
+import { PAGE_META } from '../config/pageMeta';
 import { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { MESSENGER_URL } from '../config/social';
 import { ArrowRightIcon, CampfireIcon, ChevronDownIcon, GearPlaceholderIcon } from '../components/icons';
 import BackLink from '../components/BackLink';
+import ColorSwitch from '../components/ColorSwitch';
+import GearDetailsDialog from '../components/GearDetailsDialog';
+import PackageDetailsDialog from '../components/PackageDetailsDialog';
+import { filterPackagesByColor, packageColorOptions } from '../utils/colorFilter';
 import FilterPill from '../components/FilterPill';
+import { sortGearKindsWithinCategories } from '../utils/gearOrder';
 import ImageLightbox from '../components/ImageLightbox';
-import PackageContents from '../components/PackageContents';
+import { splitBestForLine } from '../utils/bestForLine';
 import { QuantityStepper } from './PathBCatalog';
 import SocialIconLink from '../components/SocialIconLink';
 import { useAuth } from '../context/AuthContext';
@@ -88,20 +94,26 @@ interface PackageCardProps {
   kit: PackageKit;
   dateRange: DateRange | null;
   selectedDuration: PackageDuration | null;
+  /** The page-wide color the customer picked ("Black"/"Khaki"), if the page offers one — decides
+   *  which edition of a multi-color kit this card shows and adds to the cart. */
+  color?: string;
 }
 
-function PackageCard({ kit, dateRange, selectedDuration }: PackageCardProps) {
+function PackageCard({ kit, dateRange, selectedDuration, color }: PackageCardProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
   const { cart, addKit, removeKit, addKitExtra, removeKitExtra } = useRental();
-  const [selectedEditionId, setSelectedEditionId] = useState(kit.editions?.[0]?.id);
   const [imageFailed, setImageFailed] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   // The specific edition chosen (if any) becomes the cart item's real identity — this is what
   // gets submitted as the booking's package_id, so "Khaki" must never silently save as "Black".
-  const selectedEdition = kit.editions?.find((edition) => edition.id === selectedEditionId);
+  // The edition matching the page-wide color; a kit with no such edition (or only one edition)
+  // falls back to its first one.
+  const selectedEdition =
+    kit.editions?.find((edition) => color && edition.label.toLowerCase() === color.toLowerCase()) ?? kit.editions?.[0];
   const effectiveId = selectedEdition?.id ?? kit.id;
   // The RMS's own Package.packageNumber for whichever edition is actually selected — never the
   // Supabase row id — matching exactly what booking submission would send for this same selection.
@@ -144,6 +156,21 @@ function PackageCard({ kit, dateRange, selectedDuration }: PackageCardProps) {
   const effectivePricing = selectedEdition?.pricing ?? kit.pricing;
   const effectiveDepositAmount = selectedEdition?.depositAmount ?? kit.depositAmount;
   const effectiveIsOutOfStock = (selectedEdition ?? kit).isOutOfStock ?? false;
+  // Each edition is its own real Package row with its own description — never the parent kit's
+  // once an edition is selected, same reasoning as effectivePricing above. A kit with no editions
+  // (or before one is picked) falls back to the kit's own description, unchanged from before.
+  const effectiveDescription = selectedEdition?.description ?? kit.description;
+  // Same "edition's own value, never the parent kit's" reasoning as effectivePricing/
+  // effectiveDepositAmount above — see this file's own extraPerDayPrice comment near the 72h
+  // duration control for why 0 (never an invented rate) is the right fallback.
+  const effectiveExtraPerDayPrice = selectedEdition?.extraPerDayPrice ?? kit.extraPerDayPrice ?? 0;
+  // Same "edition's own, never the parent kit's" reasoning — a Black and a Khaki edition are
+  // distinct real Package rows and can genuinely include different components.
+  const effectiveComponents = selectedEdition?.components ?? kit.components;
+  // The card's own compact "who is this for" line — see splitBestForLine's own doc comment for the
+  // exact "Best for ..." first-line convention this reads. null (no such line yet) shows nothing
+  // here; it never falls back to guessed content.
+  const { bestFor } = splitBestForLine(effectiveDescription);
   const price = selectedDuration ? effectivePricing[selectedDuration] : null;
 
   // Real, date-scoped availability — checked against the RMS's actual inventory/assignment data,
@@ -214,6 +241,7 @@ function PackageCard({ kit, dateRange, selectedDuration }: PackageCardProps) {
         depositAmount: selectedEdition.depositAmount,
         extraPerDayPrice: selectedEdition.extraPerDayPrice,
         isOutOfStock: selectedEdition.isOutOfStock,
+        description: selectedEdition.description,
         editions: undefined,
       });
     } else {
@@ -268,24 +296,24 @@ function PackageCard({ kit, dateRange, selectedDuration }: PackageCardProps) {
             onNavigate={() => {}}
           />
         )}
-
-        {kit.editions && (
-          <div className="flex gap-1.5 sm:gap-2">
-            {kit.editions.map((edition) => (
-              <button
-                key={edition.id}
-                type="button"
-                onClick={() => setSelectedEditionId(edition.id)}
-                className={`rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors sm:px-3 sm:py-1 sm:text-xs ${
-                  selectedEditionId === edition.id
-                    ? 'bg-brand-forest text-white'
-                    : 'bg-surface-strong text-ink-muted hover:bg-line'
-                }`}
-              >
-                {edition.label}
-              </button>
-            ))}
-          </div>
+        {detailsOpen && (
+          <PackageDetailsDialog
+            name={selectedEdition ? `${kit.name} (${selectedEdition.label})` : kit.name}
+            imageUrl={displayImage}
+            description={effectiveDescription}
+            includedItems={kit.includedItems}
+            components={effectiveComponents}
+            paxRange={kit.paxRange}
+            pricing={effectivePricing}
+            depositAmount={effectiveDepositAmount}
+            isOutOfStock={effectiveIsOutOfStock}
+            isSelected={isSelected}
+            onToggleSelected={() => {
+              if (isSelected) handleRemove();
+              else handleAdd();
+            }}
+            onClose={() => setDetailsOpen(false)}
+          />
         )}
 
         <div className="flex items-start justify-between gap-1.5 sm:gap-2">
@@ -303,7 +331,20 @@ function PackageCard({ kit, dateRange, selectedDuration }: PackageCardProps) {
             )}
           </div>
         </div>
-        <PackageContents kit={kit} compactOnMobile />
+        {/* "What's Included" moved out of the card entirely — it now lives only inside the "View
+            Details" popup (PackageDetailsDialog). This slot shows the package's own "Best for ..."
+            tagline instead, when one has been written (see splitBestForLine's own doc comment for
+            the exact convention) — nothing here, never a fabricated placeholder, when it hasn't. */}
+        {bestFor && <p className="-mt-1 text-xs font-medium text-accent sm:-mt-2 sm:text-sm">Best for {bestFor}</p>}
+        {/* Trial: opens the package's own "View Details" popup (Best For line, full description,
+            FAQ, and everything that used to show inline here). */}
+        <button
+          type="button"
+          onClick={() => setDetailsOpen(true)}
+          className="self-start text-[11px] font-medium text-accent underline underline-offset-2 sm:text-xs"
+        >
+          View Details
+        </button>
 
         {isSelected && kit.extras && kit.extras.length > 0 && (
           <div className="flex flex-col gap-1.5 rounded-lg bg-surface-muted p-2 sm:gap-2 sm:p-3">
@@ -336,18 +377,25 @@ function PackageCard({ kit, dateRange, selectedDuration }: PackageCardProps) {
 
       <div className="mt-2.5 flex flex-col gap-2 sm:mt-5 sm:gap-3">
         <div className="flex items-center justify-between border-t border-line-soft pt-2 sm:pt-3">
-          <div>
+          {/* This row is already side-by-side (price left, deposit right) at every width — unlike
+              the BYO gear card, there's no button sharing this row to squeeze against, so the
+              72h-upsell/extra-day-rate hints below only ever needed `min-w-0` to wrap safely, never
+              hiding on mobile. */}
+          <div className="min-w-0">
             <p className="text-[10px] uppercase tracking-wide text-ink-faint sm:text-xs">Package Price</p>
             <p className="text-sm font-bold text-ink sm:text-lg">
               {price !== null ? formatCurrency(price) : `${formatCurrency(effectivePricing['48h'])}–${formatCurrency(effectivePricing['72h'])}`}
             </p>
             {selectedDuration === '48h' && !effectiveIsOutOfStock && (
-              <p className="hidden text-xs font-medium text-accent sm:block">
+              <p className="text-xs font-medium text-accent">
                 Add {formatCurrency(getSeventyTwoHourUpsellDelta(effectivePricing))} to rent for 72h instead
               </p>
             )}
+            {selectedDuration === '72h' && !effectiveIsOutOfStock && effectiveExtraPerDayPrice > 0 && (
+              <p className="text-xs font-medium text-ink-muted">+{formatCurrency(effectiveExtraPerDayPrice)} per extra day</p>
+            )}
           </div>
-          <div className="text-right">
+          <div className="shrink-0 text-right">
             <p className="text-[10px] uppercase tracking-wide text-ink-faint sm:text-xs">Deposit</p>
             <p className="text-xs font-semibold text-ink sm:text-sm">{formatCurrency(effectiveDepositAmount)}</p>
           </div>
@@ -532,6 +580,7 @@ function PackageAddOnCard({
   onQuantityChange: (next: number) => void;
 }) {
   const [imageFailed, setImageFailed] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const isSelected = quantity > 0;
 
   return (
@@ -586,6 +635,13 @@ function PackageAddOnCard({
         <h3 className="line-clamp-2 break-words text-sm font-medium leading-snug text-ink" title={kind.name}>
           {kind.name}
         </h3>
+        <button
+          type="button"
+          onClick={() => setDetailsOpen(true)}
+          className="self-start text-[11px] font-medium text-accent underline underline-offset-2"
+        >
+          View Details
+        </button>
 
         {/* Stacked below `lg` so the quantity control gets the full width of the details column
             instead of being squeezed beside the price; side by side once the card is a wide square tile. */}
@@ -614,6 +670,9 @@ function PackageAddOnCard({
           )}
         </div>
       </div>
+      {detailsOpen && (
+        <GearDetailsDialog kind={kind} quantity={quantity} onQuantityChange={onQuantityChange} onClose={() => setDetailsOpen(false)} />
+      )}
     </div>
   );
 }
@@ -646,11 +705,14 @@ function PackageAddOnsSection({ kitId, kitName }: { kitId: string; kitName: stri
   const selectedItemCount = selected.reduce((sum, gear) => sum + gear.quantity, 0);
   const hasDuration = Boolean(cart.tripDetails.startDate && cart.tripDetails.returnDate);
 
-  // Same category grouping the BYO catalog uses, in the catalog's own order — never a category
-  // list invented or re-sorted here.
+  // Same category grouping the BYO catalog uses, in the catalog's own order — the categories
+  // themselves are never re-sorted or invented here. Kinds WITHIN a category are sorted the same
+  // way BYO's own catalog is (smallest-to-largest for Beds/Tables/Cooking, Ultra-light > Moon >
+  // Kermit for Chairs, ...) — see sortGearKindsWithinCategories's own doc comment for why that
+  // never touches category order/position, only the order of kinds inside each one.
   const grouped = useMemo(() => {
     const groups = new Map<string, BookableGearKind[]>();
-    for (const kind of gearKinds) {
+    for (const kind of sortGearKindsWithinCategories(gearKinds)) {
       const existing = groups.get(kind.category);
       if (existing) existing.push(kind);
       else groups.set(kind.category, [kind]);
@@ -845,10 +907,7 @@ function PackageAddOnsSection({ kitId, kitName }: { kitId: string; kitName: stri
 }
 
 export default function PathACatalog() {
-  usePageMeta(
-    'Camping Gear for Rent in Metro Manila | GearBnB',
-    'Choose camping gear for rent in Metro Manila and find ready-to-go packages for solo trips, couples, and groups. Book your gear and get outdoors!',
-  );
+  usePageMeta(PAGE_META.packages.title, PAGE_META.packages.description);
   const { kits, catalogState, retryCatalog } = useCatalog();
   const { cart, totals, updateTripDetails } = useRental();
   const [searchQuery, setSearchQuery] = useState('');
@@ -905,6 +964,14 @@ export default function PathACatalog() {
       [kit.name, kit.description].some((field) => field.toLowerCase().includes(normalizedSearch)),
     );
   }, [kits, hasValidGuestCount, parsedGuestCount, normalizedSearch]);
+
+  // The one color switch for the whole page (Black/Khaki), built from every package edition's color.
+  const [chosenColor, setChosenColor] = useState<string | null>(null);
+  const colorOptions = useMemo(() => packageColorOptions(visibleKits), [visibleKits]);
+  const activeColor =
+    colorOptions.length > 1 ? (chosenColor && colorOptions.includes(chosenColor) ? chosenColor : colorOptions[0]) : undefined;
+  // Strict: a package is shown only if it comes in the chosen color.
+  const displayKits = activeColor ? filterPackagesByColor(visibleKits, activeColor) : visibleKits;
 
   function handleDurationSelect(preset: PackageDuration) {
     setSelectedDuration(preset);
@@ -1189,7 +1256,7 @@ export default function PathACatalog() {
         )}
 
         {catalogState === 'ready' && kits.length > 0 && (
-          visibleKits.length === 0 ? (
+          displayKits.length === 0 ? (
             <p className="rounded-xl border border-line bg-surface-muted p-6 text-center text-sm text-ink-muted">
               No packages match {normalizedSearch ? `"${searchQuery.trim()}"` : 'this guest count'}. Try a different
               search or guest count.
@@ -1198,11 +1265,20 @@ export default function PathACatalog() {
             // grid-cols-2 below sm (not stacked to 1): a mobile catalog should show several package
             // cards per viewport, not one giant card at a time — see PackageCard's own p-2.5/
             // aspect-square comments for how its content was compacted to actually fit that width.
-            <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-3">
-              {visibleKits.map((kit) => (
-                <PackageCard key={kit.id} kit={kit} dateRange={dateRange} selectedDuration={selectedDuration} />
-              ))}
-            </div>
+            <>
+              {activeColor && <ColorSwitch colors={colorOptions} active={activeColor} onChange={setChosenColor} />}
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-3">
+                {displayKits.map((kit) => (
+                  <PackageCard
+                    key={kit.id}
+                    kit={kit}
+                    dateRange={dateRange}
+                    selectedDuration={selectedDuration}
+                    color={activeColor}
+                  />
+                ))}
+              </div>
+            </>
           )
         )}
 

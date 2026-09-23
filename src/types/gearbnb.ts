@@ -47,12 +47,37 @@ export interface KitEdition {
   depositAmount: number;
   /** This edition's own authoritative per-extra-day rate — see `PackageKit.extraPerDayPrice`. */
   extraPerDayPrice?: number;
+  /** This edition's OWN description — each edition is a distinct real Package row with its own
+   *  `description` column, so a Black and a Khaki edition can read completely differently (not
+   *  just a different photo/price). Never borrowed from the primary/first entry. */
+  description: string;
   /**
    * True when RMS reports this specific edition as currently unselectable (its own component
    * stock, via the RMS catalog's `canSelect` — see `PackageKit.isOutOfStock`'s own doc comment).
    * Two editions of the same kit can disagree (Black in stock, Khaki isn't).
    */
   isOutOfStock?: boolean;
+  /** This edition's OWN real component list — see PackageKit.components' own doc comment. */
+  components?: PackageComponent[];
+}
+
+/**
+ * One real, structured line of what a package actually includes — the RMS's own
+ * category+brand+model+quantity for a required component, resolved against its live inventory
+ * (never a client-side guess). This is deliberately NOT the same thing as `PackageKit.description`
+ * sometimes being typed as a run-on inclusions list (see parsePackageContentsFromText) — that's a
+ * best-effort GUESS at structure inside free text; this is the RMS's own real answer, and is what
+ * lets a "What's Included" row safely link to that component's own real product details (see
+ * matchComponentToGearKind) — a text guess never could, reliably.
+ */
+export interface PackageComponent {
+  category: string;
+  brand: string;
+  model: string | null;
+  /** Null on the rare component whose kind has no current live-priced inventory at all. */
+  name: string | null;
+  quantity: number;
+  availableCount: number;
 }
 
 /** A bundled equipment package (e.g. "Nomad Kit") available for rent. */
@@ -103,6 +128,10 @@ export interface PackageKit {
    * `canSelect`: the authoritative, date-aware gate is the availability check re-run at submission.
    */
   isOutOfStock?: boolean;
+  /** This kit's own real component list, from the RMS's package catalog (see PackageComponent's
+   *  own doc comment) — absent until applyPackageSelectability's fetch resolves, same "advisory,
+   *  filled in later" timing as isOutOfStock above. */
+  components?: PackageComponent[];
 }
 
 /** A single piece of gear that can be rented on its own. */
@@ -165,6 +194,9 @@ export interface BookableAddOn {
   extraPerDayPrice: number;
   maxQuantity: number;
   availableCount: number;
+  /** The RMS's own staff-written note for this add-on (e.g. "2pcs Canopy Poles Per Set") — absent
+   *  when nothing's been written yet. Same convention as BookableGearKind.description. */
+  description?: string;
 }
 
 /** One selectable Build Your Own gear kind, sourced entirely from the RMS's live inventory
@@ -195,6 +227,19 @@ export interface BookableGearKind {
   /** The RMS's free-text "Size / Capacity" for this kind (e.g. "6P", "King"), shown on the card
    *  when present. Absent when the RMS has none or doesn't send it yet. */
   sizeCapacity?: string | null;
+  /** The one color of a single-color kind, when the RMS reports it (e.g. a table that only exists in
+   *  Khaki). Used only to filter by the page's color switch — never part of the cart line's
+   *  identity or the booking payload (unlike `color`, which is set on a resolved variant). */
+  kindColor?: string;
+  /** The RMS's own staff-written description for this kind (or, on a resolved color, that color's
+   *  own description — see resolveGearVariant) — absent when nothing has been written yet. Never
+   *  shown as a fallback for anything; an absent description just means the details view has none
+   *  to show. */
+  description?: string;
+  /** Every "in person" photo of this kind (or, on a resolved color, that color's own set) — the
+   *  gallery a details view shows, in RMS order. `imageUrl` above stays the one default/card photo
+   *  either way. Absent/empty when the RMS has none beyond the default. */
+  images?: string[];
   /** Set only on a kind resolved to ONE color variant (see resolveGearVariant) — the shape that
    *  actually goes into the cart and the booking/availability payloads. `variants` is never set
    *  on such a kind. */
@@ -213,6 +258,11 @@ export interface BookableGearVariant {
   extraPerDayPrice?: number;
   /** Only when this color's size/capacity differs from the kind's own. */
   sizeCapacity?: string | null;
+  /** This color's OWN description — never the kind's or another color's (Black and Khaki of the
+   *  same kind can read completely differently). */
+  description?: string;
+  /** This color's OWN gallery — never shared with another color. */
+  images?: string[];
 }
 
 /** A customer's selected quantity of one Build Your Own gear kind — the full kind snapshot plus
