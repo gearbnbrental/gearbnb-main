@@ -4,6 +4,7 @@ import { formatCurrency } from '../utils/format';
 import { sizeCapacityToShow } from '../utils/gearVariants';
 import { splitBestForLine } from '../utils/bestForLine';
 import { ID_VERIFICATION_FAQ, type FaqEntry } from '../utils/productFaq';
+import GalleryNav, { useSwipe } from './GalleryNav';
 import FormattedDescription from './FormattedDescription';
 import { GearPlaceholderIcon } from './icons';
 import ImageLightbox, { type LightboxImage } from './ImageLightbox';
@@ -88,12 +89,16 @@ export default function GearDetailsDialog({ kind, quantity, onQuantityChange, on
   const [activeIndex, setActiveIndex] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
+  const swipe = useSwipe(
+    () => setActiveIndex((i) => (i - 1 + gallery.length) % gallery.length),
+    () => setActiveIndex((i) => (i + 1) % gallery.length),
+  );
   // Popup only, never the compact card: Size/Capacity is dropped from the header here because the
   // formatted description below (when there is one) already shows it as its own bolded "Capacity:"
   // line — see FormattedDescription. "Best for ..." (same convention as packages — see
   // splitBestForLine's own doc comment) takes that spot instead. `rest` (not the raw description)
   // is what actually renders below, so that first line is never shown twice.
-  const { bestFor, rest: descriptionBody } = splitBestForLine(kind.description ?? '');
+  const { lead, bestFor, rest: descriptionBody } = splitBestForLine(kind.description ?? '');
   const faqEntries = buildFaqEntries(kind);
   const isSelected = quantity > 0;
 
@@ -124,7 +129,10 @@ export default function GearDetailsDialog({ kind, quantity, onQuantityChange, on
               never cropped, up to a height cap so a very tall photo still fits the popup. The
               placeholder (no real photo yet) gets its own modest fixed height instead — there's
               nothing to size it against. */}
-          <div className="relative flex max-h-[65vh] w-full items-center justify-center overflow-hidden bg-surface-strong">
+          <div
+            {...swipe}
+            className="relative flex max-h-[65vh] w-full items-center justify-center overflow-hidden bg-surface-strong"
+          >
             {gallery.length === 0 || imageFailed ? (
               <div className="flex h-56 w-full items-center justify-center">
                 <GearPlaceholderIcon className="h-14 w-14 text-ink-faint" />
@@ -144,6 +152,7 @@ export default function GearDetailsDialog({ kind, quantity, onQuantityChange, on
                 />
               </button>
             )}
+            {!imageFailed && <GalleryNav count={gallery.length} index={activeIndex} onChange={setActiveIndex} />}
             {!kind.canSelect && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/45">
                 <span className="rounded-full bg-black/80 px-3 py-1 text-xs font-semibold text-white">Out of Stock</span>
@@ -183,17 +192,17 @@ export default function GearDetailsDialog({ kind, quantity, onQuantityChange, on
           <div className="flex flex-col gap-1">
             <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">{kind.category}</p>
             <h2 className="font-serif text-xl font-bold text-ink sm:text-2xl">{kind.name}</h2>
-            {bestFor && <p className="-mt-1 text-sm font-semibold text-accent">Best for {bestFor}</p>}
+            {bestFor && <p className="-mt-1 text-sm font-semibold text-accent">Best {lead} {bestFor}</p>}
           </div>
 
           {descriptionBody && <FormattedDescription text={descriptionBody} />}
 
           {kind.freeAccessories.length > 0 && (
             <div className="flex flex-col gap-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Included Free</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Included</p>
               <ul className="flex flex-col gap-1 text-sm text-ink">
                 {kind.freeAccessories.map((accessory) => (
-                  <li key={accessory.name}>🎁 {accessory.name}</li>
+                  <li key={accessory.name}>🎁 Free use of {accessory.name}</li>
                 ))}
               </ul>
             </div>

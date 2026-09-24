@@ -167,10 +167,12 @@ function PackageCard({ kit, dateRange, selectedDuration, color }: PackageCardPro
   // Same "edition's own, never the parent kit's" reasoning — a Black and a Khaki edition are
   // distinct real Package rows and can genuinely include different components.
   const effectiveComponents = selectedEdition?.components ?? kit.components;
+  // Same reasoning — a package gallery is per real Package row too, not shared across editions.
+  const effectiveImages = selectedEdition?.images ?? kit.images;
   // The card's own compact "who is this for" line — see splitBestForLine's own doc comment for the
   // exact "Best for ..." first-line convention this reads. null (no such line yet) shows nothing
   // here; it never falls back to guessed content.
-  const { bestFor } = splitBestForLine(effectiveDescription);
+  const { lead, bestFor } = splitBestForLine(effectiveDescription);
   const price = selectedDuration ? effectivePricing[selectedDuration] : null;
 
   // Real, date-scoped availability — checked against the RMS's actual inventory/assignment data,
@@ -300,6 +302,7 @@ function PackageCard({ kit, dateRange, selectedDuration, color }: PackageCardPro
           <PackageDetailsDialog
             name={selectedEdition ? `${kit.name} (${selectedEdition.label})` : kit.name}
             imageUrl={displayImage}
+            images={effectiveImages}
             description={effectiveDescription}
             includedItems={kit.includedItems}
             components={effectiveComponents}
@@ -335,7 +338,7 @@ function PackageCard({ kit, dateRange, selectedDuration, color }: PackageCardPro
             Details" popup (PackageDetailsDialog). This slot shows the package's own "Best for ..."
             tagline instead, when one has been written (see splitBestForLine's own doc comment for
             the exact convention) — nothing here, never a fabricated placeholder, when it hasn't. */}
-        {bestFor && <p className="-mt-1 text-xs font-medium text-accent sm:-mt-2 sm:text-sm">Best for {bestFor}</p>}
+        {bestFor && <p className="-mt-1 text-xs font-medium text-accent sm:-mt-2 sm:text-sm">Best {lead} {bestFor}</p>}
         {/* Trial: opens the package's own "View Details" popup (Best For line, full description,
             FAQ, and everything that used to show inline here). */}
         <button
@@ -802,7 +805,13 @@ function PackageAddOnsSection({ kitId, kitName }: { kitId: string; kitName: stri
             <div
               role="group"
               aria-label="Filter add-ons by category"
-              className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0"
+              // A partially-visible pill sliced mid-word at an edge read as broken, not
+              // "scrollable" — this fades BOTH edges to transparent below `sm` instead (the left
+              // edge cuts the exact same way once the row has been scrolled right), so a partial
+              // pill on either side looks like an intentional "swipe for more" hint rather than a
+              // glitch. Only below `sm`, where this row actually scrolls; it wraps (nothing to
+              // fade) from `sm` up.
+              className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [mask-image:linear-gradient(to_right,transparent_0%,black_8%,black_92%,transparent_100%)] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0 sm:[mask-image:none]"
             >
               {[ALL_ADD_ON_CATEGORIES, ...categories].map((category) => {
                 const active = effectiveCategory === category;

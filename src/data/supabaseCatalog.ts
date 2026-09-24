@@ -257,12 +257,14 @@ export function applyPackageSelectability(kits: PackageKit[], rmsPackages: RmsCa
       ...kit,
       isOutOfStock: rmsPackage === undefined ? kit.isOutOfStock : !rmsPackage.canSelect,
       components: rmsPackage ? toPackageComponents(rmsPackage.components) : kit.components,
+      images: rmsPackage?.images && rmsPackage.images.length > 0 ? rmsPackage.images : kit.images,
       editions: kit.editions?.map((edition) => {
         const rmsEdition = rmsPackageByNumber.get(edition.packageNumber);
         return {
           ...edition,
           isOutOfStock: rmsEdition === undefined ? edition.isOutOfStock : !rmsEdition.canSelect,
           components: rmsEdition ? toPackageComponents(rmsEdition.components) : edition.components,
+          images: rmsEdition?.images && rmsEdition.images.length > 0 ? rmsEdition.images : edition.images,
         };
       }),
     };

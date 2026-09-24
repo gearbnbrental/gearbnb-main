@@ -59,6 +59,8 @@ export interface KitEdition {
   isOutOfStock?: boolean;
   /** This edition's OWN real component list — see PackageKit.components' own doc comment. */
   components?: PackageComponent[];
+  /** This edition's OWN real photo gallery — see PackageKit.images' own doc comment. */
+  images?: string[];
 }
 
 /**
@@ -132,6 +134,11 @@ export interface PackageKit {
    *  own doc comment) — absent until applyPackageSelectability's fetch resolves, same "advisory,
    *  filled in later" timing as isOutOfStock above. */
   components?: PackageComponent[];
+  /** This kit's own real photo gallery, from the RMS's package catalog — absent for any package
+   *  staff haven't uploaded extra photos for yet, in which case `imageUrl` alone (the one photo
+   *  from Supabase) is still shown, exactly as before this existed. Same "filled in later" timing
+   *  as `components` above. */
+  images?: string[];
 }
 
 /** A single piece of gear that can be rented on its own. */
@@ -197,6 +204,8 @@ export interface BookableAddOn {
   /** The RMS's own staff-written note for this add-on (e.g. "2pcs Canopy Poles Per Set") — absent
    *  when nothing's been written yet. Same convention as BookableGearKind.description. */
   description?: string;
+  imageUrl?: string | null;
+  images?: string[];
 }
 
 /** One selectable Build Your Own gear kind, sourced entirely from the RMS's live inventory

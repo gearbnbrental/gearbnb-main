@@ -351,7 +351,7 @@ function GearCard({
 
         {kind.freeAccessories.length > 0 && (
           <span className="absolute left-2 top-2 rounded-full bg-brand-forest px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
-            🎁 Free {kind.freeAccessories.map((a) => a.name).join(' & ')}
+            🎁 Free use of {kind.freeAccessories.map((a) => a.name).join(' & ')}
           </span>
         )}
 
@@ -959,7 +959,9 @@ export default function PathBCatalog() {
                 <div
                   role="group"
                   aria-label="Filter gear by category"
-                  className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0"
+                  // Same fade as PathACatalog's own add-on category row — both edges, since the
+                  // left one cuts the same way once the row's been scrolled right.
+                  className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [mask-image:linear-gradient(to_right,transparent_0%,black_8%,black_92%,transparent_100%)] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0 sm:[mask-image:none]"
                 >
                   {categories.map((category) => (
                     <button

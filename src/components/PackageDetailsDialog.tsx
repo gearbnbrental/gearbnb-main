@@ -3,13 +3,24 @@ import { useCatalog } from '../context/useCatalog';
 import type { BookableGearKind, PackageComponent } from '../types/gearbnb';
 import { formatCurrency } from '../utils/format';
 import { splitBestForLine } from '../utils/bestForLine';
-import { matchComponentToGearKind } from '../utils/packageComponents';
+import { classifyComponent, matchComponentToGearKind } from '../utils/packageComponents';
 import { ID_VERIFICATION_FAQ, type FaqEntry } from '../utils/productFaq';
+import GalleryNav, { useSwipe } from './GalleryNav';
 import GearDetailsDialog from './GearDetailsDialog';
 import { GearPlaceholderIcon } from './icons';
-import ImageLightbox from './ImageLightbox';
+import ImageLightbox, { type LightboxImage } from './ImageLightbox';
 import PackageContents from './PackageContents';
 import ProductFaqSection from './ProductFaqSection';
+
+function componentLabel(component: PackageComponent): string {
+  return component.name ?? ([component.brand, component.model].filter(Boolean).join(' ') || component.category);
+}
+
+// Tent first, then bed; everything else keeps the RMS's own order (Array.sort is stable).
+function categoryRank(component: PackageComponent): number {
+  const category = component.category.toLowerCase();
+  return category === 'tent' ? 0 : category === 'bed' ? 1 : 2;
+}
 
 function XMarkIcon({ className }: { className?: string }) {
   return (
@@ -42,6 +53,10 @@ interface PackageDetailsDialogProps {
    *  the cart. Never the raw multi-edition kit. */
   name: string;
   imageUrl: string;
+  /** A real photo gallery for this package/edition, when the RMS has one — see PackageKit.images'
+   *  own doc comment. Undefined/empty falls back to the single `imageUrl`, unchanged from before
+   *  this existed. */
+  images?: string[];
   description: string;
   includedItems: string[];
   /** This package's own real component list (see PackageComponent's own doc comment) — when
@@ -61,16 +76,17 @@ interface PackageDetailsDialogProps {
 
 /**
  * "View Details" popup for a package — mirrors GearDetailsDialog's layout so both products read as
- * one feature, with two real differences: a package's gallery is a single photo, since the RMS has
- * nowhere to store more than one photo per package yet (a real gap, not a display choice — see
- * this feature's own design discussion), and a "Best for ..." tagline pulled from the FIRST LINE of
- * the package's own description when staff have written one (see splitBestForLine's own doc
- * comment for the exact convention). A popup, not a separate page: same no-URL caveat on the
- * FAQPage JSON-LD as GearDetailsDialog — see ProductFaqSection.
+ * one feature: a real photo gallery when the RMS has one for this package (falling back to the
+ * single Supabase photo when it doesn't — most packages, until staff upload more), and a
+ * "Best for ..." tagline pulled from the FIRST LINE of the package's own description when staff
+ * have written one (see splitBestForLine's own doc comment for the exact convention). A popup, not
+ * a separate page: same no-URL caveat on the FAQPage JSON-LD as GearDetailsDialog — see
+ * ProductFaqSection.
  */
 export default function PackageDetailsDialog({
   name,
   imageUrl,
+  images,
   description,
   includedItems,
   components,
@@ -83,15 +99,23 @@ export default function PackageDetailsDialog({
   onClose,
 }: PackageDetailsDialogProps) {
   const { gearKinds } = useCatalog();
+  const gallery: LightboxImage[] = [...(imageUrl ? [imageUrl] : []), ...(images ?? [])]
+    .filter((src, index, all) => all.indexOf(src) === index)
+    .map((src) => ({ src, alt: name }));
+  const [activeIndex, setActiveIndex] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
+  const swipe = useSwipe(
+    () => setActiveIndex((i) => (i - 1 + gallery.length) % gallery.length),
+    () => setActiveIndex((i) => (i + 1) % gallery.length),
+  );
   // Drilled into one included item's own details — see the early return just below. Not a
   // separate popup stacked on top of this one: while set, this dialog shows THAT item's own
   // GearDetailsDialog (in read-only `viewOnly` mode) instead of its own content, so there's only
   // ever one modal shell on screen, and "← Back to Package" (that dialog's own button) returns
   // here by simply clearing this.
   const [viewingComponent, setViewingComponent] = useState<BookableGearKind | null>(null);
-  const { bestFor, rest } = splitBestForLine(description);
+  const { lead, bestFor, rest } = splitBestForLine(description);
   const faqEntries = buildFaqEntries(depositAmount);
 
   useEffect(() => {
@@ -130,8 +154,11 @@ export default function PackageDetailsDialog({
         <div className="relative">
           {/* No forced aspect ratio and no object-cover: the photo shows at its own proportions,
               never cropped, up to a height cap so a very tall photo still fits the popup. */}
-          <div className="relative flex max-h-[65vh] w-full items-center justify-center overflow-hidden bg-surface-strong">
-            {imageFailed || !imageUrl ? (
+          <div
+            {...swipe}
+            className="relative flex max-h-[65vh] w-full items-center justify-center overflow-hidden bg-surface-strong"
+          >
+            {gallery.length === 0 || imageFailed ? (
               <div className="flex h-56 w-full items-center justify-center">
                 <GearPlaceholderIcon className="h-14 w-14 text-ink-faint" />
               </div>
@@ -141,7 +168,12 @@ export default function PackageDetailsDialog({
                     letterboxed space around the uncropped photo with ITS OWN colors instead of a
                     flat, unrelated box. Purely decorative — never the photo a customer is actually
                     looking at, so it's hidden from assistive tech. */}
-                <img src={imageUrl} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover blur-2xl" />
+                <img
+                  src={gallery[activeIndex].src}
+                  alt=""
+                  aria-hidden="true"
+                  className="absolute inset-0 h-full w-full scale-110 object-cover blur-2xl"
+                />
                 <button
                   type="button"
                   onClick={() => setLightboxOpen(true)}
@@ -149,7 +181,7 @@ export default function PackageDetailsDialog({
                   className="relative z-10 w-full"
                 >
                   <img
-                    src={imageUrl}
+                    src={gallery[activeIndex].src}
                     alt={name}
                     onError={() => setImageFailed(true)}
                     className="mx-auto max-h-[65vh] w-full object-contain drop-shadow-lg"
@@ -157,6 +189,7 @@ export default function PackageDetailsDialog({
                 </button>
               </>
             )}
+            {!imageFailed && <GalleryNav count={gallery.length} index={activeIndex} onChange={setActiveIndex} />}
             {isOutOfStock && (
               <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/45">
                 <span className="rounded-full bg-black/80 px-3 py-1 text-xs font-semibold text-white">Out of Stock</span>
@@ -173,39 +206,68 @@ export default function PackageDetailsDialog({
           </button>
         </div>
 
+        {gallery.length > 1 && (
+          <div className="flex gap-2 overflow-x-auto px-4 pt-3">
+            {gallery.map((photo, index) => (
+              <button
+                key={photo.src}
+                type="button"
+                onClick={() => setActiveIndex(index)}
+                aria-label={`Photo ${index + 1} of ${gallery.length}`}
+                aria-current={activeIndex === index}
+                className={`h-14 w-14 shrink-0 overflow-hidden rounded-lg border-2 transition-colors ${
+                  activeIndex === index ? 'border-brand-forest' : 'border-transparent opacity-70 hover:opacity-100'
+                }`}
+              >
+                <img src={photo.src} alt="" className="h-full w-full object-cover" />
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="flex flex-col gap-4 p-5 sm:p-6">
           <div className="flex flex-col gap-1">
             <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Package{paxRange ? ` · ${paxRange}` : ''}</p>
             <h2 className="font-serif text-xl font-bold text-ink sm:text-2xl">{name}</h2>
-            {bestFor && <p className="-mt-1 text-sm font-semibold text-accent">Best for {bestFor}</p>}
+            {bestFor && <p className="-mt-1 text-sm font-semibold text-accent">Best {lead} {bestFor}</p>}
           </div>
 
           {components && components.length > 0 ? (
             <div className="flex flex-col gap-1.5">
               <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">What's Included</p>
               <ul className="flex flex-col gap-1.5 text-sm text-ink-muted">
-                {components.map((component, index) => {
-                  const matched = matchComponentToGearKind(component, gearKinds);
-                  const label = component.name ?? ([component.brand, component.model].filter(Boolean).join(' ') || component.category);
-                  return (
-                    <li key={index} className="flex items-baseline gap-2">
-                      <span className="w-7 shrink-0 text-right font-medium text-ink [font-variant-numeric:tabular-nums]">
-                        {component.quantity}×
-                      </span>
-                      {matched ? (
-                        <button
-                          type="button"
-                          onClick={() => setViewingComponent(matched)}
-                          className="min-w-0 text-left text-accent underline underline-offset-2 hover:text-brand-forest-dark"
-                        >
-                          {label}
-                        </button>
-                      ) : (
-                        <span className="min-w-0">{label}</span>
-                      )}
+                {components
+                  .filter((component) => classifyComponent(component) === 'item')
+                  .sort((a, b) => categoryRank(a) - categoryRank(b))
+                  .map((component, index) => {
+                    const matched = matchComponentToGearKind(component, gearKinds);
+                    return (
+                      <li key={index} className="flex items-baseline gap-2">
+                        <span className="w-7 shrink-0 text-right font-medium text-ink [font-variant-numeric:tabular-nums]">
+                          {component.quantity}×
+                        </span>
+                        {matched ? (
+                          <button
+                            type="button"
+                            onClick={() => setViewingComponent(matched)}
+                            className="min-w-0 text-left text-accent underline underline-offset-2 hover:text-brand-forest-dark"
+                          >
+                            {componentLabel(component)}
+                          </button>
+                        ) : (
+                          <span className="min-w-0">{componentLabel(component)}</span>
+                        )}
+                      </li>
+                    );
+                  })}
+                {components
+                  .filter((component) => classifyComponent(component) === 'gift')
+                  .map((component, index) => (
+                    <li key={`gift-${index}`} className="flex items-baseline gap-2">
+                      <span className="w-7 shrink-0 text-right">🎁</span>
+                      <span className="min-w-0">Free use of {componentLabel(component)}</span>
                     </li>
-                  );
-                })}
+                  ))}
               </ul>
             </div>
           ) : (
@@ -255,8 +317,8 @@ export default function PackageDetailsDialog({
         </div>
       </div>
 
-      {lightboxOpen && imageUrl && (
-        <ImageLightbox images={[{ src: imageUrl, alt: name }]} index={0} onClose={() => setLightboxOpen(false)} onNavigate={() => {}} />
+      {lightboxOpen && gallery.length > 0 && (
+        <ImageLightbox images={gallery} index={activeIndex} onClose={() => setLightboxOpen(false)} onNavigate={setActiveIndex} />
       )}
     </div>
   );

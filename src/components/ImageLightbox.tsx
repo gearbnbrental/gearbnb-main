@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useSwipe } from './GalleryNav';
 
 function XMarkIcon({ className }: { className?: string }) {
   return (
@@ -63,6 +64,11 @@ export default function ImageLightbox({ images, index, onClose, onNavigate }: Im
     };
   }, [index, images.length, onClose, onNavigate]);
 
+  const swipe = useSwipe(
+    () => images.length > 1 && onNavigate((index - 1 + images.length) % images.length),
+    () => images.length > 1 && onNavigate((index + 1) % images.length),
+  );
+
   const image = images[index];
   if (!image) return null;
 
@@ -75,6 +81,7 @@ export default function ImageLightbox({ images, index, onClose, onNavigate }: Im
       aria-modal="true"
       aria-label={image.alt}
       onClick={onClose}
+      {...swipe}
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4 sm:p-8"
     >
       <button type="button" onClick={onClose} aria-label="Close" className={`absolute right-4 top-4 h-10 w-10 ${controlButtonClass}`}>

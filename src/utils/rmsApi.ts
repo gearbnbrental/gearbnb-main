@@ -747,6 +747,8 @@ export interface RmsCatalogAddOn {
   /** Free-text, staff-written description (e.g. how many poles come in one add-on); absent when
    *  nothing's been written yet. */
   description?: string | null;
+  imageUrl?: string | null;
+  images?: string[];
 }
 
 /** Matches the RMS's CustomerCatalogGearKind exactly. No id field — a kind is identified by its
@@ -836,6 +838,10 @@ export interface RmsCatalogPackage {
   extraPerDayCentavos: number;
   depositCentavos: number;
   imageUrl: string | null;
+  /** A real photo gallery for this specific package/edition — absent/empty for any package staff
+   *  haven't uploaded extra photos for yet, in which case `imageUrl` alone is still the one photo
+   *  shown. */
+  images?: string[];
   components: RmsCatalogPackageComponent[];
   canSelect: boolean;
   compatibleAddOns: RmsCatalogAddOn[];

@@ -23,6 +23,8 @@ function mapAddOn(addOn: RmsCatalogAddOn): BookableAddOn {
     maxQuantity: addOn.maxQuantity,
     availableCount: addOn.availableCount,
     ...(addOn.description?.trim() ? { description: addOn.description.trim() } : {}),
+    ...(addOn.imageUrl ? { imageUrl: addOn.imageUrl } : {}),
+    ...(addOn.images && addOn.images.length > 0 ? { images: addOn.images } : {}),
   };
 }
 

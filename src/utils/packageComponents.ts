@@ -28,3 +28,18 @@ export function matchComponentToGearKind(component: PackageComponent, gearKinds:
   }
   return undefined;
 }
+
+export type ComponentDisplay = 'hidden' | 'gift' | 'item';
+
+/**
+ * How a package component is shown in "What's Included": tent pegs/ropes are never listed, bed
+ * sheets and groundsheets are shown as unlinked "🎁 Free ..." gifts (no product page exists for
+ * them), everything else is a normal line item.
+ */
+export function classifyComponent(component: PackageComponent): ComponentDisplay {
+  const category = component.category.toLowerCase();
+  if (category === 'pegs' || category === 'ropes') return 'hidden';
+  const text = `${component.category} ${component.model ?? ''} ${component.name ?? ''}`.toLowerCase();
+  if (category === 'bedsheets' || text.includes('groundsheet') || text.includes('bedsheet')) return 'gift';
+  return 'item';
+}

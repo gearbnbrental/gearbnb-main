@@ -6,7 +6,7 @@
  * second, near-duplicate dialog component. Never used for the add-on's real cart/booking identity
  * — the caller still reads/writes the add-on's own quantity and onChange handler directly; this
  * only reshapes its DISPLAY fields into the same shape GearDetailsDialog already knows how to
- * render. An add-on has no photo, no free accessories and no add-ons of its own, so those are
+ * render. An add-on has no free accessories and no add-ons of its own, so those are
  * honest empty defaults, never fabricated.
  */
 export function addOnAsGearKind(addOn: BookableAddOn): BookableGearKind {
@@ -20,9 +20,10 @@ export function addOnAsGearKind(addOn: BookableAddOn): BookableGearKind {
     quantity: addOn.maxQuantity,
     availableCount: addOn.availableCount,
     canSelect: addOn.availableCount > 0,
-    imageUrl: null,
+    imageUrl: addOn.imageUrl ?? null,
     freeAccessories: [],
     compatibleAddOns: [],
     ...(addOn.description ? { description: addOn.description } : {}),
+    ...(addOn.images && addOn.images.length > 0 ? { images: addOn.images } : {}),
   };
 }
