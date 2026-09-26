@@ -865,6 +865,22 @@ export function fetchPackageCatalogFromRms() {
   return withReadRetry(() => rmsFetch<{ packages: RmsCatalogPackage[] }>('/api/customer/catalog/packages', { requireAuth: false }));
 }
 
+/**
+ * One request answering "which packages are free for these dates?" for every package at once, from
+ * the RMS's date-aware catalog (same per-kind, per-date stock the availability check uses). Only a
+ * hint for showing "available" on many cards without one availability call each. `dateAware` is
+ * true only when the RMS actually applied the dates, so an older RMS that ignores the parameters
+ * is never mistaken for a real answer. Deliberately no automatic retry: any failure just sends the
+ * caller back to the per-package check.
+ */
+export function fetchPackageStockForDates(window: { pickupAt: string; returnAt: string }, signal?: AbortSignal) {
+  const query = new URLSearchParams({ pickupAt: window.pickupAt, returnAt: window.returnAt });
+  return rmsFetch<{ packages: { packageNumber: string; canSelect: boolean }[]; dateAware?: boolean }>(
+    `/api/customer/catalog/packages?${query.toString()}`,
+    { requireAuth: false, signal },
+  );
+}
+
 /** The currently RMS-configured customer-facing payment QR codes, exactly as staff last set them
  * on the RMS Settings page. `null` for a method means no QR is currently configured for it — a
  * real, meaningful "coming soon" answer, never treated as "the fetch didn't happen yet." */

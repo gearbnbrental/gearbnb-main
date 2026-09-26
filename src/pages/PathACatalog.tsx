@@ -21,6 +21,8 @@ import { useCatalog } from '../context/useCatalog';
 import { byoGearKey, getGearKindPrice, useRental } from '../context/RentalContext';
 import type { BookableGearKind, BookableGearSelection, DateRange, DurationPresetId, PackageKit } from '../types/gearbnb';
 import { cartStockUses, subtractStock } from '../utils/packageStock';
+import { decidePackageCheck, type PackageDateStock } from '../utils/packageDateStock';
+import { usePackageDateStock } from '../hooks/usePackageDateStock';
 import {
   DURATION_PRESETS,
   DURATION_PROMO_BADGES,
@@ -98,12 +100,14 @@ interface PackageCardProps {
   kit: PackageKit;
   dateRange: DateRange | null;
   selectedDuration: PackageDuration | null;
+  /** The page-wide "which packages are free for these dates" lookup — see decidePackageCheck. */
+  dateStock: PackageDateStock;
   /** The page-wide color the customer picked ("Black"/"Khaki"), if the page offers one — decides
    *  which edition of a multi-color kit this card shows and adds to the cart. */
   color?: string;
 }
 
-function PackageCard({ kit, dateRange, selectedDuration, color }: PackageCardProps) {
+function PackageCard({ kit, dateRange, selectedDuration, dateStock, color }: PackageCardProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
@@ -190,8 +194,13 @@ function PackageCard({ kit, dateRange, selectedDuration, color }: PackageCardPro
   // chosen yet on THIS visit — see PathACatalog's own page-scoped date-state doc comment) still
   // triggered every visible card's availability check immediately. `null` (nothing to check)
   // covers no dates yet, no duration yet, or an out-of-stock kit.
+  // One shared lookup answers "free for these dates?" for every card at once (a date change used
+  // to fire one availability request per card, which the RMS's per-minute limit could not always
+  // absorb). A card only skips its own check when that lookup positively says available; anything
+  // else, and any package already in the cart, still runs the precise check below.
+  const checkSource = decidePackageCheck(dateStock, effectivePackageCode, isSelected);
   const availabilityRequest: RmsAvailabilityRequest | null = useMemo(() => {
-    if (!dateRange || !selectedDuration || effectiveIsOutOfStock) return null;
+    if (!dateRange || !selectedDuration || effectiveIsOutOfStock || checkSource !== 'own') return null;
     const pickupAt = toAvailabilityTimestamp(dateRange.start, cart.tripDetails.preferredTime);
     const returnAt = toAvailabilityTimestamp(dateRange.end, cart.tripDetails.preferredTime);
     if (!pickupAt || !returnAt) return null;
@@ -202,14 +211,18 @@ function PackageCard({ kit, dateRange, selectedDuration, color }: PackageCardPro
       quantity: gear.quantity,
     }));
     return { pickupAt, returnAt, packageCode: effectivePackageCode, bookingGears };
-  }, [dateRange, selectedDuration, cart.tripDetails.preferredTime, effectiveIsOutOfStock, effectivePackageCode, checkedPackageAddOnGears]);
+  }, [dateRange, selectedDuration, cart.tripDetails.preferredTime, effectiveIsOutOfStock, effectivePackageCode, checkedPackageAddOnGears, checkSource]);
 
   const availabilityCheck = useAvailabilityCheck(availabilityRequest);
   // Maps the shared hook's status onto this card's own local shape. Every non-terminal-looking
   // status has an explicit branch so a card can never be left rendering "Checking availability…"
   // for a check that actually finished.
   const availability: RmsAvailabilityState =
-    availabilityCheck.status === 'idle'
+    checkSource === 'available' && dateRange && selectedDuration
+      ? { status: 'available' }
+      : checkSource === 'checking' && dateRange && selectedDuration
+        ? { status: 'checking' }
+        : availabilityCheck.status === 'idle'
       ? { status: 'idle' }
       : availabilityCheck.status === 'checking'
         ? { status: 'checking' }
@@ -983,6 +996,17 @@ export default function PathACatalog() {
     [pageStartDate, pageReturnDate],
   );
 
+  // The dates every package card asks about, resolved once here so one lookup can serve them all.
+  // Built exactly the way each card builds its own availability request (same timestamps), and null
+  // in the same cases: no dates or no duration chosen yet.
+  const stockWindow = useMemo(() => {
+    if (!dateRange || !selectedDuration) return null;
+    const pickupAt = toAvailabilityTimestamp(dateRange.start, cart.tripDetails.preferredTime);
+    const returnAt = toAvailabilityTimestamp(dateRange.end, cart.tripDetails.preferredTime);
+    return pickupAt && returnAt ? { pickupAt, returnAt } : null;
+  }, [dateRange, selectedDuration, cart.tripDetails.preferredTime]);
+  const packageDateStock = usePackageDateStock(stockWindow);
+
   // Checkout (TripDetailsForm/VerificationUpload) never asks how many people are on the trip — the
   // RMS's booking payload (RmsBookingSubmission) has no such field either — so this is genuinely
   // the only place that information could be collected, not a duplicate of something checkout
@@ -1317,6 +1341,7 @@ export default function PathACatalog() {
                     kit={kit}
                     dateRange={dateRange}
                     selectedDuration={selectedDuration}
+                    dateStock={packageDateStock}
                     color={activeColor}
                   />
                 ))}
