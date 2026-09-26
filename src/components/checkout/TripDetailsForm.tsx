@@ -16,13 +16,13 @@ const FULFILLMENT_OPTIONS: FulfillmentOptionConfig[] = [
   {
     value: 'delivery',
     title: 'Grab Delivery',
-    description: 'You book and pay for your own Grab to your address — GearBnB does not charge a delivery fee.',
+    description: 'You book and pay for your own Grab to your address, GearBnB does not charge a delivery fee.',
     icon: TruckIcon,
   },
   {
     value: 'pickup',
     title: 'Self Pickup',
-    description: 'Collect your gear in person from our location at your convenience — available 24/7.',
+    description: 'Collect your gear in person from our location at your convenience, available 24/7.',
     icon: MapPinIcon,
   },
 ];

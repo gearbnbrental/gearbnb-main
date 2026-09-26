@@ -31,6 +31,7 @@ import {
   type RmsPendingTurnoverNotice,
 } from '../../utils/rmsApi';
 import { clearAvailabilityCache, requestAvailabilityCheck, useAvailabilityCheck } from '../../hooks/useAvailabilityCheck';
+import { cleanGearName } from '../../utils/gearName';
 
 function formatDate(dateStr: string): string | null {
   if (!dateStr) return null;
@@ -193,13 +194,13 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
   const hasAnyKitExtras = Object.values(kitExtras).some((ids) => ids.length > 0);
   const unsupportedReason =
     selectedItems.length > 0
-      ? "Individual gear added the old way isn't supported through online checkout — please remove it from your cart, or use Build Your Own instead."
+      ? "Individual gear added the old way isn't supported through online checkout, please remove it from your cart, or use Build Your Own instead."
       : hasPackage && hasByoGear
-        ? 'Please choose either a Package or Build Your Own for this booking — not both. Remove one before submitting.'
+        ? 'Please choose either a Package or Build Your Own for this booking, not both. Remove one before submitting.'
         : selectedKits.length > 1
-          ? 'Only one package can be booked per online submission right now — please remove extra packages from your cart.'
+          ? 'Only one package can be booked per online submission right now, please remove extra packages from your cart.'
           : hasPackage && hasAnyKitExtras
-            ? "Package add-ons aren't yet supported through online checkout — please remove them from your cart, or contact us directly to add them to your booking."
+            ? "Package add-ons aren't yet supported through online checkout, please remove them from your cart, or contact us directly to add them to your booking."
             : null;
 
   /** RMS-confirmed availability for the customer's actual current checkout selection — never
@@ -394,8 +395,8 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
     if (!isVerificationComplete(verificationDocs, isByoOnly)) {
       setSubmitError(
         isByoOnly
-          ? 'Please complete the Identity Verification section above — all documents, contact details, Terms & Conditions acceptance, and BYO Rental Agreement acceptance are required, then save that section before confirming.'
-          : 'Please complete the Identity Verification section above — all documents, contact details, and Terms & Conditions acceptance are required, then save that section before confirming.',
+          ? 'Please complete the Identity Verification section above, all documents, contact details, Terms & Conditions acceptance, and BYO Rental Agreement acceptance are required, then save that section before confirming.'
+          : 'Please complete the Identity Verification section above, all documents, contact details, and Terms & Conditions acceptance are required, then save that section before confirming.',
       );
       return;
     }
@@ -403,7 +404,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
     // after it was added (e.g. a stale tab) — never let an out-of-stock item through to booking.
     const outOfStockName = selectedKits.find((kit) => kit.isOutOfStock)?.name;
     if (outOfStockName) {
-      setSubmitError(`${outOfStockName} just went out of stock and was removed from availability — please remove it from your cart and try again.`);
+      setSubmitError(`${outOfStockName} just went out of stock and was removed from availability, please remove it from your cart and try again.`);
       return;
     }
     // A second click while a fresh check from the first is still in flight is a no-op, not a
@@ -646,7 +647,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
             isByoOnly
               ? 'GearBnB will determine your security deposit after reviewing your Build Your Own selections.'
               : hasPackageAddOns
-                ? 'Refundable deposit to lock in your reservation. Your final deposit isn’t set yet — see the notice below.'
+                ? 'Refundable deposit to lock in your reservation. Your final deposit isn’t set yet, see the notice below.'
                 : 'Refundable deposit to lock in your reservation.'
           }
         />
@@ -706,7 +707,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
                 (packageAddOns[kit.id] ?? []).map((gear) => (
                   <BreakdownRow
                     key={`${kit.id}::${byoGearKey(gear)}`}
-                    label={gear.name}
+                    label={cleanGearName(gear.name, { keepColor: true })}
                     sublabel={`Add-on${gear.quantity > 1 ? ` · ${gear.quantity}×` : ''}`}
                     feeAmount={getGearKindPrice(gear, tripDetails) * gear.quantity}
                     depositAmount={null}
@@ -717,7 +718,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
               {selectedItems.map((item) => (
                 <BreakdownRow
                   key={item.id}
-                  label={item.name}
+                  label={cleanGearName(item.name, { keepColor: true })}
                   sublabel="Individual Gear"
                   feeAmount={getItemPrice(item, tripDetails)}
                   depositAmount={item.depositAmount}
@@ -731,8 +732,8 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
                   .map((addOn) => (
                     <BreakdownRow
                       key={addOn.id}
-                      label={addOn.name}
-                      sublabel={`${item.name} add-on`}
+                      label={cleanGearName(addOn.name, { keepColor: true })}
+                      sublabel={`${cleanGearName(item.name, { keepColor: true })} add-on`}
                       feeAmount={addOn.price}
                       depositAmount={null}
                     />
@@ -744,7 +745,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
                 return (
                   <BreakdownRow
                     key={key}
-                    label={gear.name}
+                    label={cleanGearName(gear.name, { keepColor: true })}
                     sublabel={`Build Your Own${gear.quantity > 1 ? ` · ${gear.quantity}×` : ''}`}
                     feeAmount={getGearKindPrice(gear, tripDetails) * gear.quantity}
                     depositAmount={null}
@@ -756,8 +757,8 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
                 (byoAddOns[byoGearKey(gear)] ?? []).map((addOn) => (
                   <BreakdownRow
                     key={`${byoGearKey(gear)}::${byoGearKey(addOn)}`}
-                    label={addOn.name}
-                    sublabel={`${gear.name} add-on${addOn.quantity > 1 ? ` · ${addOn.quantity}×` : ''}`}
+                    label={cleanGearName(addOn.name, { keepColor: true })}
+                    sublabel={`${cleanGearName(gear.name, { keepColor: true })} add-on${addOn.quantity > 1 ? ` · ${addOn.quantity}×` : ''}`}
                     feeAmount={getGearKindPrice(addOn, tripDetails) * addOn.quantity}
                     depositAmount={null}
                   />
@@ -768,7 +769,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
                 label={isDelivery ? 'Grab' : 'Pickup'}
                 sublabel={
                   isDelivery
-                    ? 'GearBnB does not charge or arrange this — you book and pay for your own Grab.'
+                    ? 'GearBnB does not charge or arrange this, you book and pay for your own Grab.'
                     : 'No fee for in-store pickup'
                 }
                 feeAmount={isDelivery ? null : 0}
@@ -848,7 +849,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
 
             <dt className="text-ink-muted">Identity Verification</dt>
             <dd className="text-right font-medium text-ink">
-              {isVerificationComplete(verificationDocs, isByoOnly) ? 'Complete' : 'Incomplete — see above'}
+              {isVerificationComplete(verificationDocs, isByoOnly) ? 'Complete' : 'Incomplete, see above'}
             </dd>
 
             <dt className="text-ink-muted">Terms &amp; Conditions</dt>
@@ -897,7 +898,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
             {checkoutAvailability.status === 'unavailable' &&
               'Some selected items are no longer available for these dates. Please review your selection.'}
             {checkoutAvailability.status === 'error' &&
-              "We couldn't confirm availability right now. You can try again, or continue reviewing your booking below — we'll check again when you submit."}
+              "We couldn't confirm availability right now. You can try again, or continue reviewing your booking below, we'll check again when you submit."}
           </p>
 
           {/* Identifies the specific affected item(s) whenever RMS's response includes them — a
@@ -907,7 +908,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
             <ul className="flex flex-col gap-0.5">
               {checkoutAvailability.issues.map((issue) => (
                 <li key={issue.name} className="break-words">
-                  {issue.name} — only {issue.availableCount} available
+                  {cleanGearName(issue.name, { keepColor: true })}, only {issue.availableCount} available
                   {issue.requested > 0 && ` (you asked for ${issue.requested})`}
                 </li>
               ))}
@@ -921,7 +922,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
             <ul className="flex flex-col gap-0.5">
               {checkoutAvailability.pendingTurnover.map((item) => (
                 <li key={item.name} className="break-words">
-                  {item.name} — {item.currentlyReservableCount} of {item.requested} currently reservable
+                  {cleanGearName(item.name, { keepColor: true })}, {item.currentlyReservableCount} of {item.requested} currently reservable
                 </li>
               ))}
             </ul>
@@ -977,7 +978,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
       <ConfirmDialog
         open={showSubmitConfirm}
         title="Submit this booking request?"
-        message="This creates a real booking request with GearBnB — you won't be able to edit your selections here once submitted."
+        message="This creates a real booking request with GearBnB, you won't be able to edit your selections here once submitted."
         confirmLabel="Submit Booking Request"
         onCancel={() => setShowSubmitConfirm(false)}
         onConfirm={performSubmit}

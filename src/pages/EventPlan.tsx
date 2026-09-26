@@ -24,7 +24,7 @@ type EquipmentSelectionMode = 'CUSTOMER_SELECTS' | 'GEARBNB_RECOMMENDS';
 /** Plain-language marker sent in the existing `requestedEquipment` field when the customer asks
  * Gearbnb to recommend equipment instead of listing any themselves — never a fake/invented
  * equipment list, just a clear signal for the admin reading the inquiry. */
-const RECOMMENDATION_REQUESTED_TEXT = 'Equipment preference: Gearbnb recommendation requested — customer asked our team to recommend suitable equipment for this event.';
+const RECOMMENDATION_REQUESTED_TEXT = 'Equipment preference: Gearbnb recommendation requested, customer asked our team to recommend suitable equipment for this event.';
 
 interface FormState {
   customerName: string;
@@ -251,7 +251,7 @@ export default function EventPlan() {
         )}
 
         <p className="text-xs text-ink-faint">
-          This is not a confirmed booking yet — we'll follow up by email or phone with next steps.
+          This is not a confirmed booking yet, we'll follow up by email or phone with next steps.
         </p>
 
         <div className="flex w-full flex-col gap-3 sm:flex-row sm:justify-center">
@@ -285,7 +285,7 @@ export default function EventPlan() {
         <h1 className="font-serif text-xl font-semibold text-ink">Plan an Event</h1>
         <p className="text-sm text-ink-muted">
           Planning a group trip, company outing, or larger event? Tell us what you need and we'll send you a custom
-          quote — this isn't an instant booking, just the start of the conversation.
+          quote, this isn't an instant booking, just the start of the conversation.
         </p>
       </div>
 
@@ -412,7 +412,7 @@ export default function EventPlan() {
           rows={2}
           value={form.specialRequests}
           onChange={(e) => update('specialRequests', e.target.value)}
-          placeholder="Optional — anything else we should know"
+          placeholder="Optional, anything else we should know"
           className={`resize-none ${inputClass}`}
         />
       </Field>
@@ -434,7 +434,7 @@ export default function EventPlan() {
       <ConfirmDialog
         open={showSubmitConfirm}
         title="Submit this event inquiry?"
-        message="This sends your event details to the GearBnB team as a real inquiry — a representative will follow up by email or phone."
+        message="This sends your event details to the GearBnB team as a real inquiry, a representative will follow up by email or phone."
         confirmLabel="Submit Inquiry"
         onCancel={() => setShowSubmitConfirm(false)}
         onConfirm={performSubmit}

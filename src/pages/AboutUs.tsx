@@ -356,7 +356,7 @@ export default function AboutUs() {
               {BENEFITS.map((benefit, index) => (
                 <li key={index} className="flex items-start gap-2.5 text-sm text-ink">
                   <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-                  {benefit}
+                  <span className="min-w-0">{benefit}</span>
                 </li>
               ))}
             </ul>

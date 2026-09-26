@@ -17,7 +17,7 @@ function EmptyGalleryPlaceholder() {
       <GearPlaceholderIcon className="h-10 w-10 text-ink-faint" />
       <p className="text-sm font-medium text-ink">Photos coming soon</p>
       <p className="max-w-sm text-sm text-ink-muted">
-        We&rsquo;re putting together real camp setup photos from our renters — check back soon!
+        We&rsquo;re putting together real camp setup photos from our renters, check back soon!
       </p>
     </div>
   );

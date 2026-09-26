@@ -15,6 +15,7 @@ import { formatCurrency } from '../utils/format';
 import { orderGearKinds } from '../utils/gearOrder';
 import { sizeCapacityToShow, splitKindsByColor } from '../utils/gearVariants';
 import { parsePackageContentsFromText, summarizeIncludedCategories } from '../utils/packageContents';
+import { cleanGearName } from '../utils/gearName';
 
 function PathsIcon({ className }: { className?: string }) {
   return (
@@ -81,7 +82,7 @@ interface ProcessStep {
 const PROCESS_STEPS: ProcessStep[] = [
   {
     title: 'Select Gear',
-    description: 'Choose a bundle (Path A) or build your custom setup (Path B).',
+    description: "Choose between selecting our pre-selected camping packages or build your own setup.",
     icon: <PathsIcon className="h-5 w-5" />,
   },
   {
@@ -143,7 +144,7 @@ function CatalogPreviewCard({ kind }: { kind: BookableGearKind }) {
         />
       )}
       <div>
-        <h3 className="text-sm font-semibold text-ink">{kind.name}</h3>
+        <h3 className="text-sm font-semibold text-ink">{cleanGearName(kind.name)}</h3>
         <p className="text-xs text-ink-faint">{kind.category}</p>
         {sizeCapacityToShow(kind) && <p className="text-xs text-ink-muted">Size/Capacity: {sizeCapacityToShow(kind)}</p>}
       </div>
@@ -420,7 +421,7 @@ const FAQ_ITEMS: FaqItem[] = [
   },
   {
     question: 'How do I get started?',
-    answer: "Browse our packages or build your own kit, pick your dates, and book — we'll guide you through verification and payment from there.",
+    answer: "Browse our packages or build your own kit, pick your dates, and book, we'll guide you through verification and payment from there.",
   },
 ];
 

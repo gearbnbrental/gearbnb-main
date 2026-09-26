@@ -207,7 +207,7 @@ export function friendlyAuthError(message: string): string {
     return 'Too many attempts. Please wait a few minutes before trying again.';
   }
   if (normalized.includes('email not confirmed')) {
-    return 'Please confirm your email before logging in — check your inbox for the confirmation link.';
+    return 'Please confirm your email before logging in, check your inbox for the confirmation link.';
   }
   if (normalized.includes('already registered') || normalized.includes('already exists')) {
     // Deliberately non-committal — never states outright that this exact email has an account

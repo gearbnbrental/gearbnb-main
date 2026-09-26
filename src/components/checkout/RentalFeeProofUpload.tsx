@@ -242,7 +242,7 @@ function ProofDropzone({ file, previewUrl, error, disabled, onSelect, onRemove }
           <>
             <UploadIcon className="h-7 w-7 text-ink-faint" />
             <p className="text-xs font-medium text-ink-muted">Click or drag your receipt/screenshot to upload</p>
-            <p className="text-[11px] text-ink-faint">JPEG, PNG, WebP, or PDF — up to 10MB</p>
+            <p className="text-[11px] text-ink-faint">JPEG, PNG, WebP, or PDF, up to 10MB</p>
           </>
         )}
       </label>
@@ -388,7 +388,7 @@ export default function RentalFeeProofUpload({
 
     if (uploadError) {
       setSubmitting(false);
-      setSubmitError(`Upload failed — ${uploadError.message}`);
+      setSubmitError(`Upload failed, ${uploadError.message}`);
       return;
     }
 

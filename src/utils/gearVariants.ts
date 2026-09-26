@@ -35,6 +35,19 @@ export function resolveGearVariant(kind: BookableGearKind, color: string | undef
   };
 }
 
+/**
+ * For a details view opened without a color chosen (from a package, an FAQ link or a package
+ * add-on): a multi-color kind carries its description and photos per color, none on the kind
+ * itself, so this resolves to `preferredColor` when the kind has it, else its first color.
+ * Kinds without variants pass through unchanged. Display only, never the cart identity.
+ */
+export function withDefaultVariant(kind: BookableGearKind, preferredColor?: string): BookableGearKind {
+  if (!kind.variants || kind.variants.length === 0) return kind;
+  const wanted = preferredColor?.trim().toLowerCase();
+  const variant = kind.variants.find((v) => v.color.toLowerCase() === wanted) ?? kind.variants[0];
+  return resolveGearVariant(kind, variant.color);
+}
+
 /** One entry per color for a multi-color kind (the kind itself is replaced by its colors); kinds
  * without variants pass through unchanged. For display-only lists, such as the homepage preview,
  * that should show every color as its own card. */

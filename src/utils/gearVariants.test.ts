@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { byoGearKey } from '../context/RentalContext';
 import type { BookableGearKind } from '../types/gearbnb';
-import { expandGearKinds, resolveGearVariant, sizeCapacityToShow, splitKindsByColor } from './gearVariants';
+import { expandGearKinds, resolveGearVariant, sizeCapacityToShow, splitKindsByColor, withDefaultVariant } from './gearVariants';
 
 const baseKind: BookableGearKind = {
   category: 'Camping Chair',
@@ -98,5 +98,35 @@ describe('sizeCapacityToShow', () => {
     expect(sizeCapacityToShow({ category: 'Camping Chair', sizeCapacity: 'Large' })).toBeNull();
     expect(sizeCapacityToShow({ category: 'Tent', sizeCapacity: '  ' })).toBeNull();
     expect(sizeCapacityToShow({ category: 'Tent' })).toBeNull();
+  });
+});
+
+describe('withDefaultVariant', () => {
+  const kind = {
+    category: 'Bed',
+    brand: 'Mountainhiker',
+    model: 'King-Sized High Bed (40cm)',
+    name: 'Mountainhiker King-Sized High Bed (40cm)',
+    pricing: { '48h': 1, '72h': 1 },
+    extraPerDayPrice: 0,
+    quantity: 2,
+    availableCount: 2,
+    canSelect: true,
+    imageUrl: null,
+    freeAccessories: [],
+    compatibleAddOns: [],
+    variants: [
+      { color: 'Black', imageUrl: null, quantity: 1, availableCount: 1, canSelect: true, description: 'Best for black' },
+      { color: 'Khaki', imageUrl: null, quantity: 1, availableCount: 1, canSelect: true, description: 'Best for khaki' },
+    ],
+  } as unknown as Parameters<typeof withDefaultVariant>[0];
+
+  it('uses the preferred color when the kind has it', () => {
+    expect(withDefaultVariant(kind, 'khaki').description).toBe('Best for khaki');
+  });
+  it('falls back to the first color, and leaves single-color kinds alone', () => {
+    expect(withDefaultVariant(kind).description).toBe('Best for black');
+    const single = { ...kind, variants: undefined };
+    expect(withDefaultVariant(single)).toBe(single);
   });
 });

@@ -78,6 +78,8 @@ export interface PackageComponent {
   model: string | null;
   /** Null on the rare component whose kind has no current live-priced inventory at all. */
   name: string | null;
+  /** The color the package's unit is ("Black"/"Khaki"), or null when it isn't color-specific. */
+  color?: string | null;
   quantity: number;
   availableCount: number;
 }

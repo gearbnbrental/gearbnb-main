@@ -422,7 +422,7 @@ export default function Login() {
       return;
     }
     setEmailResendAvailableAt(Date.now() + RESEND_COOLDOWN_MS);
-    setEmailResendMessage('Confirmation email resent — check your inbox.');
+    setEmailResendMessage('Confirmation email resent, check your inbox.');
   }
 
   // Checked before every other branch — an expired/invalid confirmation link never establishes a
@@ -436,7 +436,7 @@ export default function Login() {
         <div className="flex flex-col items-center gap-4 p-8 text-center sm:p-10">
           <h1 className="font-serif text-xl font-semibold text-ink">Verification Link Invalid or Expired</h1>
           <p className="text-sm text-ink-muted">
-            The verification link is invalid or has expired. Please try signing in — if your email still needs
+            The verification link is invalid or has expired. Please try signing in, if your email still needs
             confirming, you can request a new link from there.
           </p>
           <button
@@ -523,7 +523,7 @@ export default function Login() {
           <div className="flex flex-col gap-1 text-center">
             <h1 className="font-serif text-xl font-semibold text-ink">Verify your email address</h1>
             <p className="text-sm text-ink-muted">
-              Please confirm <span className="font-medium text-ink">{user.email}</span> before continuing — check
+              Please confirm <span className="font-medium text-ink">{user.email}</span> before continuing, check
               your inbox for the confirmation link, or request a new one below.
             </p>
           </div>

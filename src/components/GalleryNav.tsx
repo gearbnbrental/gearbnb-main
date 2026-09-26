@@ -56,7 +56,7 @@ export default function GalleryNav({ count, index, onChange }: GalleryNavProps) 
       <button type="button" onClick={() => go(index + 1)} aria-label="Next photo" className={`${arrowClass} right-2`}>
         <Chevron direction="right" />
       </button>
-      <span className="absolute left-3 top-3 z-30 rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white">
+      <span className="absolute left-1/2 top-3 z-30 -translate-x-1/2 rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white">
         {index + 1} / {count}
       </span>
       <div className="pointer-events-none absolute bottom-2 left-0 right-0 z-30 flex justify-center gap-1.5">

@@ -12,6 +12,7 @@ import {
 } from '../context/RentalContext';
 import { QuantityStepper } from './PathBCatalog';
 import { formatCurrency } from '../utils/format';
+import { cleanGearName } from '../utils/gearName';
 
 function CheckboxInput({
   checked,
@@ -214,7 +215,7 @@ export default function Cart() {
               lives at the top of every cart regardless of length, puts it somewhere floating
               buttons never reach. */}
           <p className="text-xs text-ink-faint">
-            Check which items to include in this checkout — an unchecked item stays saved in your cart. Bookings are
+            Check which items to include in this checkout, an unchecked item stays saved in your cart. Bookings are
             submitted one package or one Build Your Own selection at a time. By booking you agree to our{' '}
             <Link to="/terms" className="font-medium text-accent underline underline-offset-2">
               Terms &amp; Conditions
@@ -317,7 +318,7 @@ export default function Cart() {
                                   className="h-3.5 w-3.5 shrink-0 rounded border-line text-accent focus:ring-brand-forest"
                                 />
                                 <span className="min-w-0 break-words">
-                                  {gear.name}
+                                  {cleanGearName(gear.name, { keepColor: true })}
                                   {gear.quantity > 1 && ` × ${gear.quantity}`}
                                 </span>
                               </span>
@@ -360,7 +361,7 @@ export default function Cart() {
                 />
                 <Thumbnail src={item.imageUrl} alt={item.name} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-ink">{item.name}</p>
+                  <p className="truncate font-medium text-ink">{cleanGearName(item.name, { keepColor: true })}</p>
                   <p className="text-xs text-ink-faint">Individual Gear</p>
                   <p className="text-sm text-ink-muted">
                     {formatCurrency(getItemPrice(item, cart.tripDetails))} rental &middot;{' '}
@@ -399,7 +400,7 @@ export default function Cart() {
                         their own line. With a plain min-w-0 it would shrink to nothing instead:
                         at 375px the gear name was crushed to a single character. */}
                     <div className="min-w-[calc(100%-6.5rem)] flex-1 sm:min-w-0">
-                      <p className="break-words font-medium text-ink sm:truncate">{gear.name}</p>
+                      <p className="break-words font-medium text-ink sm:truncate">{cleanGearName(gear.name, { keepColor: true })}</p>
                       <p className="text-xs text-ink-faint">Build Your Own &middot; {gear.category}</p>
                       <p className="text-sm font-semibold text-accent">
                         {formatCurrency(unitPrice)} <span className="text-xs font-normal text-ink-muted">each</span>
@@ -408,7 +409,7 @@ export default function Cart() {
                     <QuantityStepper
                       value={gear.quantity}
                       max={gear.availableCount}
-                      ariaLabel={gear.name}
+                      ariaLabel={cleanGearName(gear.name, { keepColor: true })}
                       onChange={(next) => setByoGearQuantity(gear, next)}
                     />
                     <RemoveButton itemLabel={gear.name} onConfirm={() => setByoGearQuantity(gear, 0)} />
@@ -446,7 +447,7 @@ export default function Cart() {
                                 aria-label={`Include ${addOn.name} in this checkout`}
                                 className="h-3.5 w-3.5 shrink-0 rounded border-line text-accent focus:ring-brand-forest"
                               />
-                              <span className="min-w-0 break-words sm:truncate">{addOn.name}</span>
+                              <span className="min-w-0 break-words sm:truncate">{cleanGearName(addOn.name, { keepColor: true })}</span>
                             </span>
                             <span className="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
                               {formatCurrency(addOnUnitPrice * addOn.quantity)}

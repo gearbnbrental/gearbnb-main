@@ -10,7 +10,7 @@ export const mockPackages: PackageKit[] = [
     // booking the wrong real kit.
     packageNumber: 'MOCK-NOMAD-BLACK',
     name: 'Nomad Kit',
-    description: '1–2 Pax Motocamper Set — everything a solo or duo adventurer needs for a lightweight overnight trip.',
+    description: '1–2 Pax Motocamper Set, everything a solo or duo adventurer needs for a lightweight overnight trip.',
     depositAmount: 400,
     pricing: { '48h': 2490, '72h': 2790 },
     paxRange: '1–2 Pax',
@@ -29,14 +29,14 @@ export const mockPackages: PackageKit[] = [
     ],
     unavailableRanges: [{ start: '2026-08-10', end: '2026-08-12' }],
     extras: [
-      { id: 'extra-nomad-plus-kit', name: 'Plus Kit Upgrade — Cooking Set', price: 399, minDurationHours: 0, imageUrl: PLUS_KIT_IMAGE },
+      { id: 'extra-nomad-plus-kit', name: 'Plus Kit Upgrade, Cooking Set', price: 399, minDurationHours: 0, imageUrl: PLUS_KIT_IMAGE },
     ],
   },
   {
     id: 'kit-stargazer',
     packageNumber: 'MOCK-STARGAZER',
     name: 'Stargazer Kit',
-    description: '3–4 Pax Casual Glamper Set — built for clear-sky camping with comfort for a small group.',
+    description: '3–4 Pax Casual Glamper Set, built for clear-sky camping with comfort for a small group.',
     depositAmount: 600,
     pricing: { '48h': 3100, '72h': 3400 },
     paxRange: '3–4 Pax',
@@ -53,14 +53,14 @@ export const mockPackages: PackageKit[] = [
     ],
     imageUrl: '/images/packages/stargazer.png',
     extras: [
-      { id: 'extra-stargazer-plus-kit', name: 'Plus Kit Upgrade — Cooler + Cooking Set', price: 999, minDurationHours: 0, imageUrl: PLUS_KIT_IMAGE },
+      { id: 'extra-stargazer-plus-kit', name: 'Plus Kit Upgrade, Cooler + Cooking Set', price: 999, minDurationHours: 0, imageUrl: PLUS_KIT_IMAGE },
     ],
   },
   {
     id: 'kit-basecamper',
     packageNumber: 'MOCK-BASECAMPER-BLACK',
     name: 'Base Camper Kit',
-    description: '4–6 Pax Full Camper Set — our full basecamp setup for longer stays and bigger groups.',
+    description: '4–6 Pax Full Camper Set, our full basecamp setup for longer stays and bigger groups.',
     depositAmount: 900,
     pricing: { '48h': 5690, '72h': 6210 },
     paxRange: '4–6 Pax',
@@ -81,14 +81,14 @@ export const mockPackages: PackageKit[] = [
       { id: 'kit-basecamper-khaki', label: 'Khaki Edition', imageUrl: '/images/packages/base-camper-khaki.png', packageNumber: 'MOCK-BASECAMPER-KHAKI', pricing: { '48h': 5690, '72h': 6210 }, depositAmount: 900, description: 'A full group setup in khaki.' },
     ],
     extras: [
-      { id: 'extra-basecamper-plus-kit', name: 'Plus Kit Upgrade — Cooler + Cooking Set', price: 999, minDurationHours: 0, imageUrl: PLUS_KIT_IMAGE },
+      { id: 'extra-basecamper-plus-kit', name: 'Plus Kit Upgrade, Cooler + Cooking Set', price: 999, minDurationHours: 0, imageUrl: PLUS_KIT_IMAGE },
     ],
   },
   {
     id: 'kit-traveler',
     packageNumber: 'MOCK-TRAVELER',
     name: 'Traveler Kit',
-    description: '6–8 Pax Casual Glamper Set (Khaki Edition) — spacious enough for the whole crew.',
+    description: '6–8 Pax Casual Glamper Set (Khaki Edition), spacious enough for the whole crew.',
     depositAmount: 1300,
     pricing: { '48h': 7690, '72h': 8490 },
     paxRange: '6–8 Pax',
@@ -105,14 +105,14 @@ export const mockPackages: PackageKit[] = [
     ],
     imageUrl: '/images/packages/traveler.png',
     extras: [
-      { id: 'extra-traveler-plus-kit', name: 'Plus Kit Upgrade — Cooler + Cooking Set', price: 999, minDurationHours: 0, imageUrl: PLUS_KIT_IMAGE },
+      { id: 'extra-traveler-plus-kit', name: 'Plus Kit Upgrade, Cooler + Cooking Set', price: 999, minDurationHours: 0, imageUrl: PLUS_KIT_IMAGE },
     ],
   },
   {
     id: 'kit-outlander',
     packageNumber: 'MOCK-OUTLANDER',
     name: 'Outlander Kit',
-    description: '6–8 Pax Casual Glamper Set (Black Edition) — spacious enough for the whole crew.',
+    description: '6–8 Pax Casual Glamper Set (Black Edition), spacious enough for the whole crew.',
     depositAmount: 1300,
     pricing: { '48h': 7690, '72h': 8490 },
     paxRange: '6–8 Pax',
@@ -129,14 +129,14 @@ export const mockPackages: PackageKit[] = [
     ],
     imageUrl: '/images/packages/outlander.png',
     extras: [
-      { id: 'extra-outlander-plus-kit', name: 'Plus Kit Upgrade — Cooler + Cooking Set', price: 999, minDurationHours: 0, imageUrl: PLUS_KIT_IMAGE },
+      { id: 'extra-outlander-plus-kit', name: 'Plus Kit Upgrade, Cooler + Cooking Set', price: 999, minDurationHours: 0, imageUrl: PLUS_KIT_IMAGE },
     ],
   },
   {
     id: 'kit-wanderer',
     packageNumber: 'MOCK-WANDERER',
     name: 'Wanderer Kit',
-    description: '1–2 Pax Motocamper Set (Khaki Edition) — same loadout as the Nomad Kit, built around the Khaki Mobi Garden Tent.',
+    description: '1–2 Pax Motocamper Set (Khaki Edition), same loadout as the Nomad Kit, built around the Khaki Mobi Garden Tent.',
     // Pricing/deposit reused from the Nomad Kit (same pax range and loadout) as a placeholder —
     // client will provide final numbers via the pricing Excel; not a confirmed real rate.
     depositAmount: 400,

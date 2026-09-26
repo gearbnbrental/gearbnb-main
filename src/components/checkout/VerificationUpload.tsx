@@ -117,7 +117,7 @@ export function isAcceptedFileType(file: File, accept: string): boolean {
 export function wrongFileTypeMessage(expectedKind: ExpectedKind): string {
   switch (expectedKind) {
     case 'video':
-      return 'Please upload a video file (MP4, WebM, or MOV) — a photo won\'t work here.';
+      return 'Please upload a video file (MP4, WebM, or MOV), a photo won\'t work here.';
     case 'image':
       return 'Please upload a JPEG, PNG, WebP, or HEIC image.';
     default:
@@ -369,7 +369,7 @@ export function DocumentDropzone({
                 <span>Uploaded</span>
               </div>
             ) : (
-              <p className="text-xs font-medium text-red-600 dark:text-red-400">Upload failed — try again</p>
+              <p className="text-xs font-medium text-red-600 dark:text-red-400">Upload failed, try again</p>
             )}
             <p className="max-w-full truncate px-2 text-xs text-ink-muted">
               {file.name} · {formatFileSize(file.size)}
@@ -506,7 +506,7 @@ export default function VerificationUpload({ onSubmit }: VerificationUploadProps
 
     setUploading((prev) => ({ ...prev, [key]: false }));
     if (uploadError) {
-      setFileErrors((prev) => ({ ...prev, [key]: `Upload failed — ${uploadError.message}` }));
+      setFileErrors((prev) => ({ ...prev, [key]: `Upload failed, ${uploadError.message}` }));
       return;
     }
     setDocumentSlot(key, { name: file.name, size: file.size, type: file.type, storagePath: path });
@@ -575,7 +575,7 @@ export default function VerificationUpload({ onSubmit }: VerificationUploadProps
         {/* Explains the marker once, up front, rather than leaving a bare asterisk to be guessed
             at. Not aria-hidden — unlike the individual marks, this legend is the explanation. */}
         <p className="text-xs text-ink-faint">
-          <span className="font-semibold text-red-600 dark:text-red-400">*</span> Required — every field below must
+          <span className="font-semibold text-red-600 dark:text-red-400">*</span> Required, every field below must
           be completed before you can submit.
         </p>
       </div>

@@ -1,15 +1,20 @@
-﻿import { useEffect, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import type { BookableAddOn, BookableGearKind } from '../types/gearbnb';
 import { formatCurrency } from '../utils/format';
-import { sizeCapacityToShow } from '../utils/gearVariants';
+import { sizeCapacityToShow, withDefaultVariant } from '../utils/gearVariants';
 import { splitBestForLine } from '../utils/bestForLine';
 import { ID_VERIFICATION_FAQ, type FaqEntry } from '../utils/productFaq';
+import { buildFaqLinkTargets } from '../utils/faqLinks';
+import { productNote } from '../utils/gearNote';
+import { gearSpecificFaq } from '../utils/gearFaq';
+import { useCatalog } from '../context/useCatalog';
 import GalleryNav, { useSwipe } from './GalleryNav';
 import FormattedDescription from './FormattedDescription';
 import { GearPlaceholderIcon } from './icons';
 import ImageLightbox, { type LightboxImage } from './ImageLightbox';
 import ProductFaqSection from './ProductFaqSection';
 import { AddOnRow, QuantityStepper } from '../pages/PathBCatalog';
+import { cleanGearName } from '../utils/gearName';
 
 function XMarkIcon({ className }: { className?: string }) {
   return (
@@ -30,17 +35,21 @@ function XMarkIcon({ className }: { className?: string }) {
 function buildFaqEntries(kind: BookableGearKind): FaqEntry[] {
   const entries: FaqEntry[] = [];
   const capacity = sizeCapacityToShow(kind);
-  if (capacity) {
+  const tentFaq = gearSpecificFaq(kind);
+  if (capacity || tentFaq?.capacityAnswer || tentFaq?.capacityNote) {
     entries.push({
-      question: `How many people does the ${kind.name} fit?`,
-      answer: `The ${kind.name} comfortably fits ${capacity}.`,
+      question: (tentFaq?.capacityQuestion ?? 'How many people does the {name} fit?').replace('{name}', cleanGearName(kind.name)),
+      answer:
+        tentFaq?.capacityAnswer ??
+        [capacity ? `The ${cleanGearName(kind.name)} comfortably fits ${capacity}.` : '', tentFaq?.capacityNote ?? ''].filter(Boolean).join(' '),
     });
   }
+  if (tentFaq) entries.push(...tentFaq.entries);
   entries.push(ID_VERIFICATION_FAQ);
   entries.push({
     question: 'When do I pay the security deposit?',
     answer:
-      'The refundable security deposit is due once your booking is confirmed, separate from the rental fee itself — the exact split is shown at checkout before you pay anything.',
+      'The refundable security deposit is due once your booking is confirmed, separate from the rental fee itself, the exact split is shown at checkout before you pay anything.',
   });
   return entries;
 }
@@ -69,7 +78,7 @@ interface GearDetailsDialogProps {
    *  Gallery, category, name, "Best for", description and the FAQ still show, unchanged. The bottom
    *  full-width button becomes "← Back to Package" (calls `onBack`) instead of "Close" — the small
    *  ✕ in the corner still fully closes everything via the ordinary `onClose`. */
-  viewOnly?: { onBack: () => void };
+  viewOnly?: { onBack: () => void; backLabel?: string };
 }
 
 /**
@@ -100,6 +109,11 @@ export default function GearDetailsDialog({ kind, quantity, onQuantityChange, on
   // is what actually renders below, so that first line is never shown twice.
   const { lead, bestFor, rest: descriptionBody } = splitBestForLine(kind.description ?? '');
   const faqEntries = buildFaqEntries(kind);
+  const { gearKinds } = useCatalog();
+  // An FAQ answer's own product link (e.g. a tent's "which bed fits") opens that product's read-only
+  // view in place of this one, with "Back" returning here, same pattern as a package's items.
+  const [linkedKind, setLinkedKind] = useState<BookableGearKind | null>(null);
+  const faqLinkTargets = useMemo(() => buildFaqLinkTargets(gearKinds, kind), [gearKinds, kind]);
   const isSelected = quantity > 0;
 
   // Esc closes the dialog, same convention as ImageLightbox's own.
@@ -110,6 +124,18 @@ export default function GearDetailsDialog({ kind, quantity, onQuantityChange, on
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [onClose]);
+
+  if (linkedKind) {
+    return (
+      <GearDetailsDialog
+        kind={linkedKind}
+        quantity={0}
+        onQuantityChange={() => {}}
+        onClose={onClose}
+        viewOnly={{ onBack: () => setLinkedKind(null), backLabel: '← Go Back' }}
+      />
+    );
+  }
 
   return (
     <div
@@ -159,6 +185,18 @@ export default function GearDetailsDialog({ kind, quantity, onQuantityChange, on
               </div>
             )}
           </div>
+          {viewOnly && (
+            <button
+              type="button"
+              onClick={viewOnly.onBack}
+              aria-label="Go back"
+              className="absolute left-3 top-3 z-40 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="h-5 w-5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+          )}
           <button
             type="button"
             onClick={onClose}
@@ -191,8 +229,12 @@ export default function GearDetailsDialog({ kind, quantity, onQuantityChange, on
         <div className="flex flex-col gap-4 p-5 sm:p-6">
           <div className="flex flex-col gap-1">
             <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">{kind.category}</p>
-            <h2 className="font-serif text-xl font-bold text-ink sm:text-2xl">{kind.name}</h2>
-            {bestFor && <p className="-mt-1 text-sm font-semibold text-accent">Best {lead} {bestFor}</p>}
+            <h2 className="font-serif text-xl font-bold text-ink sm:text-2xl">{cleanGearName(kind.name)}</h2>
+            {bestFor ? (
+              <p className="-mt-1 text-sm font-semibold text-accent">Best {lead} {bestFor}</p>
+            ) : (
+              productNote(kind) && <p className="-mt-1 text-sm font-semibold text-accent">{productNote(kind)}</p>
+            )}
           </div>
 
           {descriptionBody && <FormattedDescription text={descriptionBody} />}
@@ -217,9 +259,12 @@ export default function GearDetailsDialog({ kind, quantity, onQuantityChange, on
                   {formatCurrency(kind.pricing['48h'])}
                   <span className="text-sm font-normal text-ink-muted"> / 48h</span>
                 </p>
-                <p className="text-xs text-ink-muted">
-                  {formatCurrency(kind.pricing['72h'])} / 72h · +{formatCurrency(kind.extraPerDayPrice)} per extra day
-                </p>
+                {(kind.pricing['72h'] !== kind.pricing['48h'] || kind.extraPerDayPrice > 0) && (
+                  <p className="text-xs text-ink-muted">
+                    {formatCurrency(kind.pricing['72h'])} / 72h
+                    {kind.extraPerDayPrice > 0 && ` · +${formatCurrency(kind.extraPerDayPrice)} per extra day`}
+                  </p>
+                )}
               </div>
               {kind.canSelect ? (
                 <span className="text-xs text-ink-faint">Avail: {kind.availableCount}</span>
@@ -260,7 +305,7 @@ export default function GearDetailsDialog({ kind, quantity, onQuantityChange, on
             </div>
           )}
 
-          <ProductFaqSection entries={faqEntries} />
+          <ProductFaqSection entries={faqEntries} linkTargets={faqLinkTargets} onOpenKind={(next) => setLinkedKind(withDefaultVariant(next, kind.color))} />
 
           {/* A second, unmissable exit — the ✕ over the photo is easy to miss on mobile, where this
               popup is a near-full-height sheet: after scrolling down to read the FAQ, this is the
@@ -271,7 +316,7 @@ export default function GearDetailsDialog({ kind, quantity, onQuantityChange, on
             onClick={viewOnly ? viewOnly.onBack : onClose}
             className="w-full rounded-lg border border-line bg-surface px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-surface-strong"
           >
-            {viewOnly ? '← Back to Package' : 'Close'}
+            {viewOnly ? (viewOnly.backLabel ?? '← Back to Package') : 'Close'}
           </button>
         </div>
       </div>

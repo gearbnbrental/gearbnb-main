@@ -13,7 +13,7 @@ export interface FaqEntry {
 export const ID_VERIFICATION_FAQ: FaqEntry = {
   question: 'Do I need to submit ID verification before I can rent this?',
   answer:
-    'Yes. Every booking requires two valid government IDs, a selfie with one of them, and proof of billing before it can be confirmed — the same verification step for any gear or package you choose.',
+    'Yes. Every booking requires two valid government IDs, a short video selfie holding one of them with a thumbs up, and proof of billing before it can be confirmed, the same verification step for any gear or package you choose.',
 };
 
 /**

@@ -1,4 +1,5 @@
 import { createContext, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { keepIfUnchanged, shouldRefreshCatalog } from '../utils/catalogRefresh';
 import { applyPackageSelectability, fetchCatalogItems, fetchCatalogPackages } from '../data/supabaseCatalog';
 import { fetchBookableGearCatalog } from '../data/rmsGearCatalog';
 import { orderPackageKits } from '../utils/gearOrder';
@@ -120,7 +121,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
           kitsWithSelectability = applyPackageSelectability(kitData, rmsPackages);
         } catch (error) {
           console.warn(
-            '[CatalogContext] package canSelect fetch failed — packages will show as in-stock until the next successful refresh:',
+            '[CatalogContext] package canSelect fetch failed, packages will show as in-stock until the next successful refresh:',
             error,
           );
         }
@@ -194,6 +195,57 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, [authLoading]);
+
+  // Quiet refresh when a customer comes back to a tab that's been open a while, so stock, prices
+  // and out-of-stock flags don't stay frozen at whatever they were when the page first loaded.
+  // Deliberately conservative: it only runs once both catalogs have loaded, never touches
+  // catalogState/gearCatalogState (so no spinner and nothing unmounts), and on ANY failure keeps
+  // exactly what's already on screen. A package refresh whose RMS enrichment fails is dropped
+  // entirely rather than replacing richer data with a plainer copy. Unchanged data keeps the same
+  // reference, so nothing re-renders and no cart re-check runs. When something did change, the
+  // cart re-validates itself against it, exactly as it does after a reload.
+  const catalogsReady = catalogState === 'ready' && gearCatalogState === 'ready';
+  useEffect(() => {
+    if (authLoading || !catalogsReady) return;
+    let cancelled = false;
+    let inFlight = false;
+    let lastLoadedAt = Date.now();
+
+    async function refreshQuietly() {
+      inFlight = true;
+      try {
+        const [kitData, itemData, gearData, rmsPackages] = await Promise.all([
+          fetchCatalogPackages(),
+          fetchCatalogItems(),
+          fetchBookableGearCatalog(),
+          fetchPackageCatalogFromRms(),
+        ]);
+        if (cancelled) return;
+        const nextKits = orderPackageKits(applyPackageSelectability(kitData, rmsPackages.packages));
+        setKits((current) => keepIfUnchanged(current, nextKits));
+        setItems((current) => keepIfUnchanged(current, itemData));
+        setGearKinds((current) => keepIfUnchanged(current, gearData));
+        lastLoadedAt = Date.now();
+      } catch (error) {
+        console.warn('[CatalogContext] quiet catalog refresh failed, keeping the current catalog:', error);
+        lastLoadedAt = Date.now();
+      } finally {
+        inFlight = false;
+      }
+    }
+
+    function handleVisibilityChange() {
+      if (shouldRefreshCatalog(Date.now(), lastLoadedAt, document.visibilityState === 'visible', inFlight)) {
+        void refreshQuietly();
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [authLoading, catalogsReady]);
 
   // useCallback (not a plain function) so this has a stable identity across renders except when
   // gearCatalogState actually changes — otherwise it would recreate a fresh function every render

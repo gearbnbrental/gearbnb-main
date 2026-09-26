@@ -155,7 +155,7 @@ function DocumentReviewRow({ bookingId, title, document, onResubmitted, readOnly
 
     setUploading(false);
     if (uploadError) {
-      setFileError(`Upload failed — ${uploadError.message}`);
+      setFileError(`Upload failed, ${uploadError.message}`);
       return;
     }
     setStoragePath(path);

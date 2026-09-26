@@ -29,7 +29,7 @@ export const ORGANIZATION_JSON_LD = {
   url: SITE_URL,
   logo: SITE_URL + LOGO_PATH,
   image: SITE_URL + OG_IMAGE_PATH,
-  description: 'Camping gear rental in Metro Manila, Philippines — tents, sleeping gear, cooking equipment, and complete camping packages.',
+  description: 'Camping gear rental in Metro Manila, Philippines, tents, sleeping gear, cooking equipment, and complete camping packages.',
   address: {
     '@type': 'PostalAddress',
     addressLocality: 'Talon Uno, Las Piñas City',

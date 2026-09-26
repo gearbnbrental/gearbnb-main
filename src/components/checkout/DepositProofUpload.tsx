@@ -179,7 +179,7 @@ function PendingStatus({
 
         {isShort && (
           <p className="text-xs text-amber-800/80 dark:text-amber-300/80">
-            This submitted amount is still short of the required deposit — GearBnB may ask you to upload updated
+            This submitted amount is still short of the required deposit, GearBnB may ask you to upload updated
             proof showing the full amount paid.
           </p>
         )}
@@ -202,7 +202,7 @@ function ResubmissionGuidance({ requiredCentavos }: { requiredCentavos: number }
         </p>
         <p className="text-sm text-ink-muted">
           Please upload proof showing the full {formatCurrency(requiredCentavos / 100)} security deposit has been
-          paid — not just the additional amount.
+          paid, not just the additional amount.
         </p>
       </div>
     </div>
@@ -229,8 +229,8 @@ function AddOnDepositPendingNotice() {
         <p className="text-sm font-medium text-ink-muted">To Be Determined</p>
         <p className="text-sm text-ink-muted">
           GearBnB staff will review your selected add-ons and confirm any additional deposit
-          required. If one applies, it will be reflected in the Security Deposit amount above —
-          never a separate charge you have to track yourself.
+          required. If one applies, it will be reflected in the Security Deposit amount above,
+never a separate charge you have to track yourself.
         </p>
       </div>
     </div>
@@ -268,7 +268,7 @@ function AddOnDepositDeterminedNotice({
           <dd className="text-right font-semibold text-ink">{formatCurrency(totalCentavos / 100)}</dd>
         </dl>
         <p className="text-sm text-ink-muted">
-          GearBnB reviewed your selected add-ons and included their deposit in the total above — this
+          GearBnB reviewed your selected add-ons and included their deposit in the total above, this
           is part of your one refundable security deposit, never a separate charge to pay on top of it.
         </p>
       </div>
@@ -325,7 +325,7 @@ function RejectedNotice({
       <div className="flex flex-col gap-2">
         <div>
           <p className="text-sm font-semibold text-red-700 dark:text-red-400">
-            Payment Proof Rejected{isShortPayment ? ' — Payment Short' : ''}
+            Payment Proof Rejected{isShortPayment ? ', Payment Short' : ''}
           </p>
           <p className="text-sm text-red-700/90 dark:text-red-400/90">This payment proof needs correction.</p>
         </div>
@@ -353,7 +353,7 @@ function RejectedNotice({
             <p className="text-sm text-red-700/90 dark:text-red-400/90">
               Please pay the remaining {formatCurrency(shortfallCentavos / 100)}, then upload updated proof showing
               the full {formatCurrency(requiredCentavos / 100)} security deposit has been paid. The new proof should
-              show the total security deposit paid so far — not only the additional payment.
+              show the total security deposit paid so far, not only the additional payment.
             </p>
           </>
         )}
@@ -430,7 +430,7 @@ export function PaymentInstructionsSection({
               ) : (
                 <div
                   role="img"
-                  aria-label={`${method.qrImageAlt} — not yet available`}
+                  aria-label={`${method.qrImageAlt}, not yet available`}
                   className="flex h-36 w-36 items-center justify-center rounded-lg border-2 border-dashed border-line p-2 text-center text-xs text-ink-faint"
                 >
                   QR code coming soon
@@ -546,7 +546,7 @@ function ProofDropzone({ file, previewUrl, error, disabled, onSelect, onRemove }
           <>
             <UploadIcon className="h-7 w-7 text-ink-faint" />
             <p className="text-xs font-medium text-ink-muted">Click or drag your receipt/screenshot to upload</p>
-            <p className="text-[11px] text-ink-faint">JPEG, PNG, WebP, or PDF — up to 10MB</p>
+            <p className="text-[11px] text-ink-faint">JPEG, PNG, WebP, or PDF, up to 10MB</p>
           </>
         )}
       </label>
@@ -750,7 +750,7 @@ export default function DepositProofUpload({
 
     if (uploadError) {
       setSubmitting(false);
-      setSubmitError(`Upload failed — ${uploadError.message}`);
+      setSubmitError(`Upload failed, ${uploadError.message}`);
       return;
     }
 
@@ -861,7 +861,7 @@ export default function DepositProofUpload({
                 />
                 <span className="text-xs text-ink-faint">
                   {isRejectedForShortfall
-                    ? `Enter the full ${formatCurrency(requiredCentavos / 100)} security deposit paid so far — not just the new top-up payment.`
+                    ? `Enter the full ${formatCurrency(requiredCentavos / 100)} security deposit paid so far, not just the new top-up payment.`
                     : 'Enter the total security deposit amount you’ve paid so far.'}
                 </span>
               </label>

@@ -201,7 +201,7 @@ interface RmsFetchOptions {
  */
 async function rmsFetch<T>(path: string, options: RmsFetchOptions = {}): Promise<T> {
   if (!RMS_API_URL) {
-    throw new RmsApiError('The booking system is not configured yet — please try again later.', 500, undefined, undefined, {
+    throw new RmsApiError('The booking system is not configured yet, please try again later.', 500, undefined, undefined, {
       code: RMS_NOT_CONFIGURED_CODE,
     });
   }
@@ -817,6 +817,7 @@ export interface RmsCatalogPackageComponent {
   brand: string;
   model: string | null;
   name: string | null;
+  color?: string | null;
   quantity: number;
   availableCount: number;
 }

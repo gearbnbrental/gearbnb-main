@@ -34,6 +34,7 @@ import {
 import { formatCurrency } from '../utils/format';
 import { BUSINESS_TIME_ZONE } from '../utils/duration';
 import { MESSENGER_URL } from '../config/social';
+import { cleanGearName } from '../utils/gearName';
 
 const RENTAL_FEE_STATUS_LABELS: Record<string, string> = {
   PENDING: 'Pending',
@@ -285,8 +286,8 @@ export function getNextStep(booking: RmsMyBooking): NextStep {
         tone: 'danger',
         message:
           correctionCount === 1
-            ? 'Action needed — one of your verification documents needs to be replaced.'
-            : `Action needed — ${correctionCount} verification documents need to be replaced.`,
+            ? 'Action needed, one of your verification documents needs to be replaced.'
+            : `Action needed, ${correctionCount} verification documents need to be replaced.`,
         cta: { label: 'Upload replacement documents', targetId: detailsTargetId },
       };
     }
@@ -295,14 +296,14 @@ export function getNextStep(booking: RmsMyBooking): NextStep {
       const shortfallCentavos = amountClaimedCentavos !== null ? requiredCentavos - amountClaimedCentavos : 0;
       const message =
         shortfallCentavos > 0
-          ? `Your deposit payment was ${formatCurrency(shortfallCentavos / 100)} short — pay the remaining amount, then upload updated proof showing the FULL ${formatCurrency(requiredCentavos / 100)} deposit paid (not just the additional payment).`
-          : 'Your deposit payment proof was rejected — please review and resubmit.';
+          ? `Your deposit payment was ${formatCurrency(shortfallCentavos / 100)} short, pay the remaining amount, then upload updated proof showing the FULL ${formatCurrency(requiredCentavos / 100)} deposit paid (not just the additional payment).`
+          : 'Your deposit payment proof was rejected, please review and resubmit.';
       return { tone: 'danger', message, cta: { label: 'Resubmit deposit proof', targetId: detailsTargetId } };
     }
     if (booking.rentalFee?.proofStatus === 'REJECTED') {
       return {
         tone: 'danger',
-        message: 'Your rental fee payment proof was rejected — please submit a new proof of payment.',
+        message: 'Your rental fee payment proof was rejected, please submit a new proof of payment.',
         cta: { label: 'Resubmit payment proof', targetId: detailsTargetId },
       };
     }
@@ -311,7 +312,7 @@ export function getNextStep(booking: RmsMyBooking): NextStep {
   switch (booking.status) {
     case 'PENDING_REVIEW':
     case 'AWAITING_CUSTOMER_RESPONSE':
-      return { tone: 'info', message: "We're reviewing your verification documents — we'll notify you once they're approved." };
+      return { tone: 'info', message: "We're reviewing your verification documents, we'll notify you once they're approved." };
     case 'PENDING_FOR_INSPECTION': {
       // Driven by RMS's own returnCondition (see getReturnOutcome) — matches getBookingStatusLabel.
       const outcome = getReturnOutcome(booking);
@@ -359,18 +360,18 @@ export function getNextStep(booking: RmsMyBooking): NextStep {
     case 'RENTED':
       return { tone: 'info', message: 'Enjoy your trip! Please return your gear by the return date.' };
     case 'OVERDUE_FOR_RETURN':
-      return { tone: 'danger', message: 'This rental is overdue for return — please return your gear as soon as possible.' };
+      return { tone: 'danger', message: 'This rental is overdue for return, please return your gear as soon as possible.' };
     case 'COMPLETED':
     case 'RETURNED': {
       // The final recorded return condition stays visible on a finished booking.
       const outcome = getReturnOutcome(booking);
       if (outcome === 'issue') {
-        return { tone: 'neutral', message: 'Trip completed — an issue was recorded during the return inspection.' };
+        return { tone: 'neutral', message: 'Trip completed, an issue was recorded during the return inspection.' };
       }
       if (outcome === 'issue_resolved') {
-        return { tone: 'neutral', message: 'Trip completed — an issue was recorded during the return inspection and has been resolved.' };
+        return { tone: 'neutral', message: 'Trip completed, an issue was recorded during the return inspection and has been resolved.' };
       }
-      return { tone: 'neutral', message: 'Trip completed — thanks for booking with GearBnB!' };
+      return { tone: 'neutral', message: 'Trip completed, thanks for booking with GearBnB!' };
     }
     case 'CANCELLED':
       return { tone: 'neutral', message: 'This booking was cancelled.' };
@@ -550,7 +551,7 @@ function BookingProgress({ status, blocked }: { status: string; blocked: boolean
               </span>
               <span className={`pt-0.5 text-sm ${labelClass}`}>
                 {stage.label}
-                {isBlocked && <span className="ml-1.5 text-xs font-medium">— action needed</span>}
+                {isBlocked && <span className="ml-1.5 text-xs font-medium">, action needed</span>}
               </span>
             </li>
           );
@@ -727,7 +728,7 @@ function RentalLineItems({ booking }: { booking: RmsMyBooking }) {
                     readers, so this would otherwise just be read out as stray punctuation. */}
                 {group.additional && <span aria-hidden="true">+ </span>}
                 {item.quantity > 1 ? `${item.quantity}× ` : ''}
-                {item.name}
+                {cleanGearName(item.name, { keepColor: true })}
               </li>
             ))}
           </ul>
@@ -813,7 +814,7 @@ function RentalFeeSummary({
       </dl>
 
       <p className="text-xs text-ink-faint">
-        Payable any time on or before your rental date — cash at pickup is accepted. To pay
+        Payable any time on or before your rental date, cash at pickup is accepted. To pay
         cashlessly, follow the payment instructions below and upload your proof of payment.
       </p>
 
@@ -1045,14 +1046,14 @@ function GearInspectionPanel({ bookingId, reports }: { bookingId: string; report
       <div className="flex items-center gap-2">
         <AlertTriangleIcon className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300" />
         <h3 className="text-sm font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
-          Gear Inspection — Issue Reported
+          Gear Inspection, Issue Reported
         </h3>
       </div>
       <ul className="flex flex-col gap-2">
         {reports.map((report) => (
           <li key={report.damageNumber} className="rounded-lg bg-surface p-3 text-sm shadow-sm">
             <p className="font-medium text-ink">
-              {report.itemName} — {gearIssueLabel(report.severity)}
+              {cleanGearName(report.itemName, { keepColor: true })}, {gearIssueLabel(report.severity)}
             </p>
             <p className="mt-0.5 text-ink-muted">{report.description}</p>
             {/* Only rendered when the RMS has actually recorded a charge (chargeCentavos > 0) —
@@ -1125,7 +1126,7 @@ function ReturnSettlementPanel({
 
       <div className="flex items-center justify-between border-t border-amber-300/60 pt-2.5 dark:border-amber-400/30">
         <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
-          {isFullyCovered ? 'No Additional Balance Due' : 'Additional Amount Due — Return Issue'}
+          {isFullyCovered ? 'No Additional Balance Due' : 'Additional Amount Due, Return Issue'}
         </p>
         {!isFullyCovered && (
           <p className="text-base font-bold text-amber-900 dark:text-amber-200">
@@ -1139,7 +1140,7 @@ function ReturnSettlementPanel({
           amount itself is only ever shown once, in AdditionalChargesPanel further down this card. */}
       {!isFullyCovered && hasAdditionalCharges && (
         <p className="text-xs text-amber-800/80 dark:text-amber-300/80">
-          This is the same amount shown in Additional Charges below — the remaining return-issue
+          This is the same amount shown in Additional Charges below, the remaining return-issue
           amount after your security deposit was applied, not a second, separate charge.
         </p>
       )}
@@ -1890,7 +1891,7 @@ export default function MyBookings() {
             state: {
               from: location.pathname,
               mode: 'login',
-              reason: 'Your session has expired — please log in again to view your bookings.',
+              reason: 'Your session has expired, please log in again to view your bookings.',
             },
           });
           return;
@@ -2233,7 +2234,7 @@ export default function MyBookings() {
 
       {state.kind === 'not_configured' && (
         <p className="rounded-xl border border-line bg-surface-muted p-6 text-center text-sm text-ink-muted">
-          Booking history isn't available yet — check back soon!
+          Booking history isn't available yet, check back soon!
         </p>
       )}
 
@@ -2339,7 +2340,7 @@ export default function MyBookings() {
             <>
               {paymentBookings.length === 0 ? (
                 <p className="rounded-xl border border-line bg-surface-muted p-6 text-center text-sm text-ink-muted">
-                  Nothing pending — you're all paid up.
+                  Nothing pending, you're all paid up.
                 </p>
               ) : (
                 <div className="flex flex-col gap-4">

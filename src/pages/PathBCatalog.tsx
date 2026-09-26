@@ -40,6 +40,9 @@ import { resolveGearVariant, sizeCapacityToShow } from '../utils/gearVariants';
 import ColorSwitch from '../components/ColorSwitch';
 import { filterGearByColor, gearColorOptions, supportsColorFilter } from '../utils/colorFilter';
 import { orderGearKinds } from '../utils/gearOrder';
+import { splitBestForLine } from '../utils/bestForLine';
+import { productNote } from '../utils/gearNote';
+import { cleanGearName } from '../utils/gearName';
 
 /** Mirrors the RMS's own customer-safe display-name construction
  * (src/server/availability/service.ts's kindDisplayName) exactly, so an
@@ -226,7 +229,8 @@ export function AddOnRow({ addOn, quantity, hasDuration, price, showUpsell, show
     // longer add-on name would force the row to overflow rather than wrap.
     <div className="flex flex-col items-start gap-2 rounded-xl bg-surface-muted p-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:p-3">
       <div className="min-w-0">
-        <p className="break-words text-xs font-medium text-ink sm:text-sm">{addOn.name}</p>
+        <p className="break-words text-xs font-medium text-ink sm:text-sm">{cleanGearName(addOn.name)}</p>
+        {productNote(addOn) && <p className="break-words text-[11px] font-medium leading-snug text-accent sm:text-xs">{productNote(addOn)}</p>}
         {/* Reuses the same "View Details" popup a gear kind gets — see addOnAsGearKind's own doc
             comment for why an add-on has no photo/free-accessories/nested-add-ons of its own. */}
         <button
@@ -239,9 +243,11 @@ export function AddOnRow({ addOn, quantity, hasDuration, price, showUpsell, show
         <p className="text-[11px] text-ink-muted sm:text-xs">
           {hasDuration && price !== null
             ? `${formatCurrency(price)} each`
-            : `${formatCurrency(addOn.pricing['48h'])}–${formatCurrency(addOn.pricing['72h'])} each`}
+            : addOn.pricing['48h'] === addOn.pricing['72h']
+              ? `${formatCurrency(addOn.pricing['48h'])} each`
+              : `${formatCurrency(addOn.pricing['48h'])}–${formatCurrency(addOn.pricing['72h'])} each`}
         </p>
-        {showUpsell && (
+        {showUpsell && getSeventyTwoHourUpsellDelta(addOn.pricing) > 0 && (
           <p className="hidden text-xs font-medium text-accent sm:block">
             Add {formatCurrency(getSeventyTwoHourUpsellDelta(addOn.pricing))} each to rent for 72h instead
           </p>
@@ -311,6 +317,7 @@ function GearCard({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const addOnQuantities = new Map(addOnSelections.map((a) => [`${a.category}|${a.brand}|${a.model ?? ''}`, a.quantity]));
   const isSelected = quantity > 0;
+  const cardBestFor = splitBestForLine(kind.description ?? '');
 
   return (
     <div
@@ -389,9 +396,18 @@ function GearCard({
             <span className="shrink-0 text-[10px] text-ink-faint sm:text-[11px]">Avail: {kind.availableCount}</span>
           )}
         </div>
-        <h3 className="line-clamp-2 text-xs font-medium leading-snug text-ink sm:text-sm" title={kind.name}>
-          {kind.name}
+        <h3 className="line-clamp-2 text-xs font-medium leading-snug text-ink sm:text-sm" title={cleanGearName(kind.name)}>
+          {cleanGearName(kind.name)}
         </h3>
+        {cardBestFor.bestFor ? (
+          <p className="-mt-0.5 break-words text-[11px] font-medium leading-snug text-accent sm:text-xs">
+            Best {cardBestFor.lead} {cardBestFor.bestFor}
+          </p>
+        ) : (
+          productNote(kind) && (
+            <p className="-mt-0.5 break-words text-[11px] font-medium leading-snug text-accent sm:text-xs">{productNote(kind)}</p>
+          )
+        )}
         {sizeCapacityToShow(kind) && (
           <p className="text-[11px] text-ink-muted sm:text-xs">Size/Capacity: {sizeCapacityToShow(kind)}</p>
         )}
@@ -428,9 +444,11 @@ function GearCard({
             <p className="text-sm font-bold leading-tight text-accent sm:text-lg">
               {hasDuration && price !== null
                 ? formatCurrency(price)
-                : `${formatCurrency(kind.pricing['48h'])}–${formatCurrency(kind.pricing['72h'])}`}
+                : kind.pricing['48h'] === kind.pricing['72h']
+                  ? formatCurrency(kind.pricing['48h'])
+                  : `${formatCurrency(kind.pricing['48h'])}–${formatCurrency(kind.pricing['72h'])}`}
             </p>
-            {showUpsell && (
+            {showUpsell && getSeventyTwoHourUpsellDelta(kind.pricing) > 0 && (
               <p className={`text-[11px] font-medium text-accent sm:block ${isSelected ? 'hidden' : ''}`}>
                 +{formatCurrency(getSeventyTwoHourUpsellDelta(kind.pricing))} for 72h
               </p>
@@ -732,7 +750,7 @@ export default function PathBCatalog() {
           <h1 className="font-serif text-lg font-semibold text-ink sm:text-xl">Build Your Own</h1>
           <p className="text-sm text-ink-muted">Pick your rental duration first, then mix and match individual gear.</p>
           <p className="text-xs text-ink-faint">
-            Prices shown are estimates from our live catalog — GearBnB confirms final rates when your booking
+            Prices shown are estimates from our live catalog, GearBnB confirms final rates when your booking
             is submitted.{' '}
             <Link to="/terms" className="font-medium text-accent underline underline-offset-2">
               View Terms &amp; Conditions
@@ -870,7 +888,7 @@ export default function PathBCatalog() {
               Some of your selected gear isn't available for these dates
             </p>
             <p className="text-amber-800/90 dark:text-amber-300/90">
-              {byoAvailability.issues.map((issue) => issue.name).join(', ')} — adjust the quantity, remove it, or
+              {byoAvailability.issues.map((issue) => cleanGearName(issue.name, { keepColor: true })).join(', ')}, adjust the quantity, remove it, or
               change your dates before checking out.
             </p>
           </div>
@@ -923,7 +941,7 @@ export default function PathBCatalog() {
 
             {gearCatalogState === 'ready' && gearKinds.length === 0 && (
               <p className="rounded-xl border border-line bg-surface-muted p-6 text-center text-sm text-ink-muted">
-                No gear is available for Build Your Own right now — check back soon!
+                No gear is available for Build Your Own right now, check back soon!
               </p>
             )}
 
@@ -1103,7 +1121,7 @@ export default function PathBCatalog() {
             // checked" null state.
             <span
               className="cursor-not-allowed rounded-lg bg-surface-strong px-5 py-2.5 text-sm font-semibold text-ink-faint"
-              title="We couldn't verify availability — try again above before checking out"
+              title="We couldn't verify availability, try again above before checking out"
             >
               Couldn't check availability
             </span>

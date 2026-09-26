@@ -44,7 +44,7 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-5 py-10 text-center sm:px-6">
         <h1 className="font-serif text-xl font-semibold text-ink">Something went wrong</h1>
         <p className="max-w-sm text-sm text-ink-muted">
-          This page couldn&rsquo;t load properly. This is usually temporary — reloading the page
+          This page couldn&rsquo;t load properly. This is usually temporary, reloading the page
           should fix it.
         </p>
         <button

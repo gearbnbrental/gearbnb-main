@@ -47,7 +47,7 @@ const GENERAL_TERMS: TermsSection[] = [
     bullets: [
       'Normal wear and tear (small dirt marks, sand or dust, light creasing on inflatable beds, minor scuffs from reasonable use) is not charged.',
       'Chargeable conditions include excessive dirt requiring deep cleaning, mud-covered items, burn marks, food/beverage stains, strong odors, improper-packing damage, tears/rips/broken components, and water damage from improper drying.',
-      'Lost tent peg or stake: ₱20.00 per piece. Lost guy rope or tent rope: ₱10.00 per piece — deducted automatically from the deposit.',
+      'Lost tent peg or stake: ₱20.00 per piece. Lost guy rope or tent rope: ₱10.00 per piece, deducted automatically from the deposit.',
       'Other lost, missing, or broken items (tent poles, fan parts, chair/table components, bed pumps, or the item itself) are assessed individually at current retail replacement value or actual repair cost.',
       'A standard cleaning fee of ₱150.00 applies to items returned excessively dirty or requiring deep cleaning.',
       'If total deductions exceed the deposit, the Renter agrees to pay the remaining balance upon assessment.',
@@ -78,7 +78,7 @@ const GENERAL_TERMS: TermsSection[] = [
     bullets: [
       'All delivery and pick-up arrangements must be confirmed at least 24 hours in advance.',
       'Delivery fees, where applicable, are separate from the rental fee and agreed upon prior to the start of the rental.',
-      'The Renter must inspect all items upon receipt and immediately report any discrepancies or pre-existing damage — issues not reported at receipt are assumed to have occurred during the rental period.',
+      'The Renter must inspect all items upon receipt and immediately report any discrepancies or pre-existing damage, issues not reported at receipt are assumed to have occurred during the rental period.',
     ],
   },
   {
@@ -125,7 +125,7 @@ export default function Terms() {
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-10 px-5 py-12 sm:px-6 sm:py-16">
       <div className="flex flex-col gap-2.5 border-b border-line-soft pb-8">
         <h1 className="font-serif text-2xl font-bold leading-tight tracking-tight text-ink sm:text-4xl">
-          Rental Agreement — Terms &amp; Conditions
+          Rental Agreement, Terms &amp; Conditions
         </h1>
         <p className="text-base leading-relaxed text-ink-muted">
           This is a summary of GearBnB's signed camping gear rental agreement. Your finalized copy with booking
@@ -150,14 +150,14 @@ export default function Terms() {
           >
             BYO Rental Agreement
           </a>{' '}
-          instead — the same care, damage, cancellation, and liability terms, but with a security deposit set per
+          instead, the same care, damage, cancellation, and liability terms, but with a security deposit set per
           booking based on the items selected rather than a fixed package amount.
         </p>
       </div>
 
       <section id="deposit" className="flex flex-col gap-4">
         <h2 className="text-xs font-bold uppercase tracking-widest text-accent sm:text-sm">
-          Section 3 — Fully Refundable Security Deposit
+          Section 3, Fully Refundable Security Deposit
         </h2>
         <p className="text-base leading-relaxed text-ink-muted">
           A refundable security deposit is required upon confirmation of every booking, returned in full once all
@@ -185,7 +185,7 @@ export default function Terms() {
 
       <section className="flex flex-col gap-8">
         <h2 className="text-xs font-bold uppercase tracking-widest text-accent sm:text-sm">
-          Section 4 — General Terms and Conditions
+          Section 4, General Terms and Conditions
         </h2>
         {GENERAL_TERMS.map((section) => (
           <div

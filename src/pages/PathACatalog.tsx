@@ -13,12 +13,14 @@ import FilterPill from '../components/FilterPill';
 import { sortGearKindsWithinCategories } from '../utils/gearOrder';
 import ImageLightbox from '../components/ImageLightbox';
 import { splitBestForLine } from '../utils/bestForLine';
+import { sizeCapacityToShow, withDefaultVariant } from '../utils/gearVariants';
 import { QuantityStepper } from './PathBCatalog';
 import SocialIconLink from '../components/SocialIconLink';
 import { useAuth } from '../context/AuthContext';
 import { useCatalog } from '../context/useCatalog';
 import { byoGearKey, getGearKindPrice, useRental } from '../context/RentalContext';
 import type { BookableGearKind, BookableGearSelection, DateRange, DurationPresetId, PackageKit } from '../types/gearbnb';
+import { cartStockUses, subtractStock } from '../utils/packageStock';
 import {
   DURATION_PRESETS,
   DURATION_PROMO_BADGES,
@@ -30,6 +32,7 @@ import {
 import { formatCurrency } from '../utils/format';
 import { toRmsBrand, type RmsAvailabilityIssue, type RmsAvailabilityRequest, type RmsBookingGearLine } from '../utils/rmsApi';
 import { useAvailabilityCheck } from '../hooks/useAvailabilityCheck';
+import { cleanGearName } from '../utils/gearName';
 
 type PackageDuration = Extract<DurationPresetId, '48h' | '72h'>;
 
@@ -421,7 +424,7 @@ function PackageCard({ kit, dateRange, selectedDuration, color }: PackageCardPro
             <ul className="flex flex-col gap-0.5 text-amber-800/90 dark:text-amber-300/90">
               {availability.issues.map((issue) => (
                 <li key={issue.name} className="break-words">
-                  {issue.name} — only {issue.availableCount} available
+                  {cleanGearName(issue.name, { keepColor: true })}, only {issue.availableCount} available
                   {issue.requested > 0 && ` (you asked for ${issue.requested})`}
                 </li>
               ))}
@@ -472,11 +475,11 @@ function PackageCard({ kit, dateRange, selectedDuration, color }: PackageCardPro
           </button>
         ) : availability.status === 'timeout' ? (
           <button type="button" onClick={availabilityCheck.retry} className={`${ACTION_CLASS} transition-colors hover:bg-line`}>
-            Availability check timed out — tap to try again
+            Availability check timed out, tap to try again
           </button>
         ) : availability.status === 'error' ? (
           <button type="button" onClick={availabilityCheck.retry} className={`${ACTION_CLASS} transition-colors hover:bg-line`}>
-            Couldn't check availability — tap to try again
+            Couldn't check availability, tap to try again
           </button>
         ) : availability.status === 'idle' ? (
           <span className={ACTION_CLASS}>
@@ -492,7 +495,7 @@ function PackageCard({ kit, dateRange, selectedDuration, color }: PackageCardPro
             {user ? (
               <>
                 <span className="sm:hidden">Book Now</span>
-                <span className="hidden sm:inline">Available for your dates — Book This Package →</span>
+                <span className="hidden sm:inline">Available for your dates, Book This Package →</span>
               </>
             ) : (
               'Log In to Rent'
@@ -635,9 +638,12 @@ function PackageAddOnCard({
             <span className="shrink-0 text-[11px] text-ink-faint">Available: {kind.availableCount}</span>
           )}
         </div>
-        <h3 className="line-clamp-2 break-words text-sm font-medium leading-snug text-ink" title={kind.name}>
-          {kind.name}
+        <h3 className="line-clamp-2 break-words text-sm font-medium leading-snug text-ink" title={cleanGearName(kind.name)}>
+          {cleanGearName(kind.name)}
         </h3>
+        {sizeCapacityToShow(withDefaultVariant(kind)) && (
+          <p className="text-[11px] text-ink-muted">Size/Capacity: {sizeCapacityToShow(withDefaultVariant(kind))}</p>
+        )}
         <button
           type="button"
           onClick={() => setDetailsOpen(true)}
@@ -653,7 +659,9 @@ function PackageAddOnCard({
             <p className="text-lg font-bold leading-tight text-accent">
               {price !== null
                 ? formatCurrency(price)
-                : `${formatCurrency(kind.pricing['48h'])}–${formatCurrency(kind.pricing['72h'])}`}
+                : kind.pricing['48h'] === kind.pricing['72h']
+                  ? formatCurrency(kind.pricing['48h'])
+                  : `${formatCurrency(kind.pricing['48h'])}–${formatCurrency(kind.pricing['72h'])}`}
             </p>
             {quantity > 1 && price !== null && (
               <p className="text-[11px] text-ink-muted">Subtotal {formatCurrency(price * quantity)}</p>
@@ -674,7 +682,7 @@ function PackageAddOnCard({
         </div>
       </div>
       {detailsOpen && (
-        <GearDetailsDialog kind={kind} quantity={quantity} onQuantityChange={onQuantityChange} onClose={() => setDetailsOpen(false)} />
+        <GearDetailsDialog kind={withDefaultVariant(kind)} quantity={quantity} onQuantityChange={onQuantityChange} onClose={() => setDetailsOpen(false)} />
       )}
     </div>
   );
@@ -695,7 +703,7 @@ function PackageAddOnCard({
  * the booking remains a package booking with extras rather than becoming a Build Your Own one.
  */
 function PackageAddOnsSection({ kitId, kitName }: { kitId: string; kitName: string }) {
-  const { gearKinds, gearCatalogState } = useCatalog();
+  const { gearKinds: catalogGearKinds, gearCatalogState, kits } = useCatalog();
   const { cart, setPackageAddOnQuantity } = useRental();
   const navigate = useNavigate();
   const location = useLocation();
@@ -706,6 +714,26 @@ function PackageAddOnsSection({ kitId, kitName }: { kitId: string; kitName: stri
   const selected = cart.packageAddOns[kitId] ?? [];
   const selectedQuantities = new Map(selected.map((gear) => [byoGearKey(gear), gear.quantity]));
   const selectedItemCount = selected.reduce((sum, gear) => sum + gear.quantity, 0);
+  // Gear already spoken for in the cart (each package's own components, plus any Build Your Own
+  // lines and their add-ons) comes off each kind's stock before that kind is offered as an extra,
+  // so a customer is never shown, and can't add, a unit the package itself will use. A kind left at
+  // 0 is hidden unless it's already in the cart, so it can still be lowered. The availability call
+  // each package card makes on every cart change stays the final say, for dates and anything this
+  // local subtraction can't see.
+  const stockUses = useMemo(() => cartStockUses(kits, cart), [kits, cart]);
+  const { gearKinds, hiddenByPackage } = useMemo(() => {
+    const adjusted = subtractStock(catalogGearKinds, stockUses);
+    const kept: BookableGearKind[] = [];
+    let hidden = 0;
+    adjusted.forEach((kind, index) => {
+      // Hidden only when the cart used up stock that was really there. A kind the RMS already
+      // reports as out of stock still shows (as it always did), and a selected one always stays.
+      const usedUp = kind.availableCount === 0 && catalogGearKinds[index].availableCount > 0;
+      if (usedUp && !selected.some((gear) => byoGearKey(gear) === byoGearKey(kind))) hidden += 1;
+      else kept.push(kind);
+    });
+    return { gearKinds: kept, hiddenByPackage: hidden };
+  }, [catalogGearKinds, stockUses, selected]);
   const hasDuration = Boolean(cart.tripDetails.startDate && cart.tripDetails.returnDate);
 
   // Same category grouping the BYO catalog uses, in the catalog's own order — the categories
@@ -768,9 +796,14 @@ function PackageAddOnsSection({ kitId, kitName }: { kitId: string; kitName: stri
         </div>
         <p className="text-sm text-ink-muted">
           Want to add more gear to your rental? These are extra items rented on top of{' '}
-          <span className="font-medium text-ink">{kitName}</span> — they are not part of the package
+          <span className="font-medium text-ink">{kitName}</span>, they are not part of the package
           contents, and everything starts at 0.
         </p>
+        {hiddenByPackage > 0 && (
+          <p className="text-xs text-ink-faint">
+            Gear that <span className="font-medium">{kitName}</span> already uses isn&rsquo;t offered here once none is left over.
+          </p>
+        )}
       </div>
 
       {gearCatalogState === 'ready' && grouped.length > 0 && (
@@ -1107,7 +1140,7 @@ export default function PathACatalog() {
               <p id="guest-count-hint" className={HELPER_TEXT_CLASS}>
                 {guestCountError
                   ? 'Enter a whole number greater than 0.'
-                  : 'Optional — we’ll show packages sized for your group where that’s known.'}
+                  : 'Optional, we’ll show packages sized for your group where that’s known.'}
               </p>
             </div>
 
@@ -1260,7 +1293,7 @@ export default function PathACatalog() {
 
         {catalogState === 'ready' && kits.length === 0 && (
           <p className="rounded-xl border border-line bg-surface-muted p-6 text-center text-sm text-ink-muted">
-            No packages are available right now — check back soon!
+            No packages are available right now, check back soon!
           </p>
         )}
 

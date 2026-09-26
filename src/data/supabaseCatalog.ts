@@ -249,7 +249,7 @@ export function applyPackageSelectability(kits: PackageKit[], rmsPackages: RmsCa
   // same shape; this only exists so a future field on one side doesn't silently leak onto the
   // other without a deliberate decision.
   const toPackageComponents = (components: RmsCatalogPackage['components']): PackageComponent[] =>
-    components.map((c) => ({ category: c.category, brand: c.brand, model: c.model, name: c.name, quantity: c.quantity, availableCount: c.availableCount }));
+    components.map((c) => ({ category: c.category, brand: c.brand, model: c.model, name: c.name, color: c.color ?? null, quantity: c.quantity, availableCount: c.availableCount }));
 
   return kits.map((kit) => {
     const rmsPackage = rmsPackageByNumber.get(kit.packageNumber);

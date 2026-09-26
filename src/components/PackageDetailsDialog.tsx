@@ -1,9 +1,11 @@
-﻿import { useEffect, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { useCatalog } from '../context/useCatalog';
 import type { BookableGearKind, PackageComponent } from '../types/gearbnb';
 import { formatCurrency } from '../utils/format';
 import { splitBestForLine } from '../utils/bestForLine';
 import { classifyComponent, matchComponentToGearKind } from '../utils/packageComponents';
+import { buildFaqLinkTargets } from '../utils/faqLinks';
+import { packageSpecificFaq } from '../utils/packageFaq';
 import { ID_VERIFICATION_FAQ, type FaqEntry } from '../utils/productFaq';
 import GalleryNav, { useSwipe } from './GalleryNav';
 import GearDetailsDialog from './GearDetailsDialog';
@@ -11,9 +13,11 @@ import { GearPlaceholderIcon } from './icons';
 import ImageLightbox, { type LightboxImage } from './ImageLightbox';
 import PackageContents from './PackageContents';
 import ProductFaqSection from './ProductFaqSection';
+import { cleanGearName } from '../utils/gearName';
+import { withDefaultVariant } from '../utils/gearVariants';
 
 function componentLabel(component: PackageComponent): string {
-  return component.name ?? ([component.brand, component.model].filter(Boolean).join(' ') || component.category);
+  return cleanGearName(component.name ?? ([component.brand, component.model].filter(Boolean).join(' ') || component.category));
 }
 
 // Tent first, then bed; everything else keeps the RMS's own order (Array.sort is stable).
@@ -37,12 +41,13 @@ function XMarkIcon({ className }: { className?: string }) {
  * "what's included" or "who is this for" question: PackageContents and the Best For line just
  * above already answer those visibly, and an FAQ entry earns its place by adding something new.
  */
-function buildFaqEntries(depositAmount: number): FaqEntry[] {
+function buildFaqEntries(packageName: string, depositAmount: number): FaqEntry[] {
   return [
+    ...packageSpecificFaq(packageName),
     ID_VERIFICATION_FAQ,
     {
       question: 'When do I pay the security deposit?',
-      answer: `The refundable ${formatCurrency(depositAmount)} security deposit is due once your booking is confirmed, separate from the rental fee itself.`,
+      answer: `The refundable ${formatCurrency(depositAmount)} security deposit is due once your booking is confirmed, separate from the rental fee itself. If you add extras on top of the package, the deposit may vary depending on your add-ons. In most cases it stays the same unless the order is big.`,
     },
   ];
 }
@@ -115,8 +120,12 @@ export default function PackageDetailsDialog({
   // ever one modal shell on screen, and "← Back to Package" (that dialog's own button) returns
   // here by simply clearing this.
   const [viewingComponent, setViewingComponent] = useState<BookableGearKind | null>(null);
+  // A package's color edition, e.g. "The Base Camper Kit (KHAKI)", so its bed/tent opens in that color.
+  const editionColor = name.match(/\(([^)]+)\)\s*$/)?.[1];
+  const openKind = (kind: BookableGearKind) => setViewingComponent(withDefaultVariant(kind, editionColor));
   const { lead, bestFor, rest } = splitBestForLine(description);
-  const faqEntries = buildFaqEntries(depositAmount);
+  const faqEntries = buildFaqEntries(name, depositAmount);
+  const faqLinkTargets = useMemo(() => buildFaqLinkTargets(gearKinds), [gearKinds]);
 
   useEffect(() => {
     function handleKey(event: KeyboardEvent) {
@@ -249,7 +258,7 @@ export default function PackageDetailsDialog({
                         {matched ? (
                           <button
                             type="button"
-                            onClick={() => setViewingComponent(matched)}
+                            onClick={() => openKind(matched)}
                             className="min-w-0 text-left text-accent underline underline-offset-2 hover:text-brand-forest-dark"
                           >
                             {componentLabel(component)}
@@ -302,7 +311,7 @@ export default function PackageDetailsDialog({
             </button>
           )}
 
-          <ProductFaqSection entries={faqEntries} />
+          <ProductFaqSection entries={faqEntries} linkTargets={faqLinkTargets} onOpenKind={openKind} />
 
           {/* A second, unmissable exit — the ✕ over the photo is easy to miss on mobile, where this
               popup is a near-full-height sheet: after scrolling down to read the FAQ, this is the

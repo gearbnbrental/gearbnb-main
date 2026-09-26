@@ -47,7 +47,7 @@ export default function Checkout() {
             <h2 className="font-serif text-lg font-semibold text-ink">Security Deposit: To Be Determined</h2>
             <p className="text-sm text-ink-muted">
               GearBnB will review your selections and let you know the required security deposit soon. Check My
-              Bookings for updates — there's nothing to pay yet.
+              Bookings for updates, there's nothing to pay yet.
             </p>
           </div>
         ) : (

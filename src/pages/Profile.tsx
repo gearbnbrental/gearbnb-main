@@ -148,7 +148,7 @@ function ProfileContent() {
         <label className="flex flex-col gap-1.5">
           <span className="text-sm font-medium text-ink">Email Address</span>
           <input type="email" value={currentUser.email ?? ''} disabled readOnly className={`${INPUT_CLASS} cursor-not-allowed opacity-60`} />
-          <span className="text-xs text-ink-faint">Email can't be changed here — contact us if you need help with this.</span>
+          <span className="text-xs text-ink-faint">Email can't be changed here, contact us if you need help with this.</span>
         </label>
 
         <label className="flex flex-col gap-1.5">
@@ -209,7 +209,7 @@ function ProfileContent() {
           </>
         ) : (
           <p className="text-sm text-ink-muted">
-            Your account signs in with Google — there's no GearBnB password to change here. Manage your sign-in
+            Your account signs in with Google, there's no GearBnB password to change here. Manage your sign-in
             through your Google Account instead.
           </p>
         )}
