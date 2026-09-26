@@ -32,6 +32,7 @@ import {
 } from '../../utils/rmsApi';
 import { clearAvailabilityCache, requestAvailabilityCheck, useAvailabilityCheck } from '../../hooks/useAvailabilityCheck';
 import { cleanGearName } from '../../utils/gearName';
+import { describeAvailabilityIssue } from '../../utils/availabilityIssue';
 
 function formatDate(dateStr: string): string | null {
   if (!dateStr) return null;
@@ -908,7 +909,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
             <ul className="flex flex-col gap-0.5">
               {checkoutAvailability.issues.map((issue) => (
                 <li key={issue.name} className="break-words">
-                  {cleanGearName(issue.name, { keepColor: true })}, only {issue.availableCount} available
+                  {describeAvailabilityIssue(issue)}
                   {issue.requested > 0 && ` (you asked for ${issue.requested})`}
                 </li>
               ))}

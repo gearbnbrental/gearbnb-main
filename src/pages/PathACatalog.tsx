@@ -33,6 +33,7 @@ import { formatCurrency } from '../utils/format';
 import { toRmsBrand, type RmsAvailabilityIssue, type RmsAvailabilityRequest, type RmsBookingGearLine } from '../utils/rmsApi';
 import { useAvailabilityCheck } from '../hooks/useAvailabilityCheck';
 import { cleanGearName } from '../utils/gearName';
+import { describeAvailabilityIssue } from '../utils/availabilityIssue';
 
 type PackageDuration = Extract<DurationPresetId, '48h' | '72h'>;
 
@@ -424,7 +425,7 @@ function PackageCard({ kit, dateRange, selectedDuration, color }: PackageCardPro
             <ul className="flex flex-col gap-0.5 text-amber-800/90 dark:text-amber-300/90">
               {availability.issues.map((issue) => (
                 <li key={issue.name} className="break-words">
-                  {cleanGearName(issue.name, { keepColor: true })}, only {issue.availableCount} available
+                  {describeAvailabilityIssue(issue)}
                   {issue.requested > 0 && ` (you asked for ${issue.requested})`}
                 </li>
               ))}
