@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /cart
+Disallow: /checkout
+Disallow: /login
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /my-bookings
+Disallow: /profile
+
+Sitemap: https://gearbnbrental.com/sitemap.xml
