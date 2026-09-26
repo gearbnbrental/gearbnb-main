@@ -24,6 +24,7 @@ import type {
 } from '../types/gearbnb';
 import { expandGearKinds } from '../utils/gearVariants';
 import { reconcileGearLine } from '../utils/gearReconcile';
+import { dropStaleTripDates } from '../utils/duration';
 import { useCatalog } from './useCatalog';
 import { useAuth } from './AuthContext';
 
@@ -227,7 +228,7 @@ function loadPersistedCart(storageKey: string): CartState {
     // tampering) — never displayed or trusted, so a signed-out visitor can never see a stale or
     // otherwise-impossible cart badge/count.
     if (storageKey === GUEST_CART_STORAGE_KEY) {
-      return { ...initialCartState, tripDetails: { ...initialTripDetails, ...parsed.tripDetails } };
+      return { ...initialCartState, tripDetails: dropStaleTripDates({ ...initialTripDetails, ...parsed.tripDetails }) };
     }
 
     const selectedKits = Array.isArray(parsed.selectedKits) ? parsed.selectedKits : [];
@@ -267,7 +268,7 @@ function loadPersistedCart(storageKey: string): CartState {
       itemExtras: parsed.itemExtras ?? {},
       byoGears,
       byoAddOns,
-      tripDetails: { ...initialTripDetails, ...parsed.tripDetails },
+      tripDetails: dropStaleTripDates({ ...initialTripDetails, ...parsed.tripDetails }),
       // Only the plain contact fields restore — documents/confirmed/the agreement checkboxes
       // stay at their initial (empty) values exactly as before, so a stale unconfirmed upload
       // reference can never sit in the restored cart. See PersistedCart's own doc comment.

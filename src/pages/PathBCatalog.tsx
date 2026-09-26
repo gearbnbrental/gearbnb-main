@@ -31,6 +31,7 @@ import {
   getDurationRange,
   getSeventyTwoHourUpsellDelta,
   toAvailabilityTimestamp,
+  MAX_BOOKING_DATE,
   TODAY,
 } from '../utils/duration';
 import { formatCurrency } from '../utils/format';
@@ -841,6 +842,7 @@ export default function PathBCatalog() {
                   type="date"
                   value={cart.tripDetails.startDate}
                   min={TODAY}
+                  max={MAX_BOOKING_DATE}
                   disabled={!selectedPreset}
                   onChange={(e) => handleStartDateChange(e.target.value)}
                   className={`${DATE_FIELD_CLASS} disabled:cursor-not-allowed disabled:opacity-60`}

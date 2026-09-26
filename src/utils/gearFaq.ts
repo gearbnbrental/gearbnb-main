@@ -537,7 +537,74 @@ const GAZLITE_LPG_CAN: GearFaq = {
   ],
 };
 
-/** The staff-written FAQ for one Build Your Own tent, bed, table, chair, light, cooler, fan or cooking set, matched on brand + model (so every
+const TARP_CANOPY: GearFaq = {
+  entries: [
+    {
+      question: 'How many people can fit under the canopy?',
+      answer: 'The 3 x 4 m canopy can comfortably fit around 4–6 people with chairs and a table.',
+    },
+    {
+      question: 'Is the canopy waterproof?',
+      answer: 'Yes! It’s waterproof and provides protection from the sun. If it rains, lower one side slightly so the water can easily run off.',
+    },
+    {
+      question: 'What does the titanium glue coating do?',
+      answer: 'It helps block out sunlight and reduce heat, keeping the space underneath more shaded and comfortable during the day.',
+    },
+    {
+      question: 'Can I use this with a tent?',
+      answer:
+        'Yes! You can set it up in front of your tent entrance to create a shaded area for cooking or hanging out. You can also place it over a smaller tent, like our Mobi Garden Tent, for extra shade and a cozier setup.',
+    },
+    {
+      question: 'How do I keep the canopy steady in the wind?',
+      answer:
+        'Make sure all the guy ropes are staked securely and kept tight. If the wind gets stronger, lower the poles to make the canopy more stable. We can also provide setup instructions and tips to help you get it ready.',
+    },
+  ],
+};
+
+const PICNIC_MAT: GearFaq = {
+  entries: [
+    {
+      question: 'Which tents does this mat fit?',
+      answer:
+        'We recommend this mat for our larger tents, especially the Vidalido Vicore Villa and Naturehike Village 13 Lite. The khaki color also pairs nicely with the Vidalido Vicore Villa.',
+    },
+    {
+      question: 'Is this for inside or outside the tent?',
+      answer: 'It works best inside the tent for sitting, lounging, and relaxing. You can also use it outside on grass or sand for picnics.',
+    },
+    {
+      question: 'How do I keep the mat clean?',
+      answer: 'Please take off your shoes before stepping on the mat. Before returning it, shake off any dirt or sand and fold it neatly.',
+    },
+  ],
+};
+
+const WAGON: GearFaq = {
+  entries: [
+    {
+      question: 'What can the wagon carry?',
+      answer:
+        'You can load your cooler, tent bag, sleeping gear, lights, cooking gear, and other camping essentials. It makes moving your gear to and from your campsite much easier.',
+    },
+    {
+      question: 'Does this fit in a sedan?',
+      answer: 'Yes! The wagon folds down to 44 x 20 x 58 cm and weighs 5.4 kg, so it can fit in a sedan trunk.',
+    },
+    {
+      question: 'Does this fit in a motorcycle top box?',
+      answer: 'No. Even when folded, the wagon is 58 cm tall and weighs 5.4 kg. We recommend using a car when renting the wagon.',
+    },
+    {
+      question: 'How do I set up the wagon?',
+      answer: 'Simply unfold the frame until the sides lock into place, pull out the handle, and you\'re ready to load your gear.',
+    },
+  ],
+};
+
+/** The staff-written FAQ for one Build Your Own tent, bed, table, chair, light, cooler, fan, cooking set or accessory, matched on brand + model (so every
  *  color of a kind shares one). Undefined for any other product, which then gets only the generic
  *  FAQ (capacity, ID verification, security deposit), and these entries always sit ON TOP of it. */
 export function gearSpecificFaq(kind: { category: string; brand: string; model: string | null }): GearFaq | undefined {
@@ -566,6 +633,11 @@ export function gearSpecificFaq(kind: { category: string; brand: string; model: 
     if (brand === 'gazlite' && model.includes('portable stove')) return GAZLITE_STOVE;
     if (brand === 'gazlite' && model.includes('lpg can')) return GAZLITE_LPG_CAN;
     if ((brand === '' || brand === 'generic') && model.includes('ultra-light portable stove')) return ULTRALIGHT_STOVE;
+  }
+  if (category === 'other gear essentials') {
+    if (brand === 'blackdog' && model.includes('tarp canopy')) return TARP_CANOPY;
+    if (model.includes('picnic mat')) return PICNIC_MAT;
+    if (brand === 'blackdog' && model === 'wagon') return WAGON;
   }
   if (category === 'cooler') {
     if (brand === 'naturehike' && model.includes('18l')) return NATUREHIKE_COOLER;

@@ -11,6 +11,7 @@ export interface FaqLinkTarget {
 // cleaned name.
 const ALIASES: Record<string, string[]> = {
   'Small Table': ['small camping table'],
+  'Mobi Garden Backpacking Tent': ['Mobi Garden Tent'],
   'Mountainhiker Pinecone Lantern': ['Pinecone Lantern'],
   'Vidalido Vicore Villa Cabin Style': ['Vidalido Vicore Villa', 'Vidalido Vicore Tents', 'Vidalido Vicore Tent'],
 };

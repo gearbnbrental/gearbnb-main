@@ -30,6 +30,7 @@ import {
   getDurationRange,
   getSeventyTwoHourUpsellDelta,
   toAvailabilityTimestamp,
+  MAX_BOOKING_DATE,
   TODAY,
 } from '../utils/duration';
 import { formatCurrency } from '../utils/format';
@@ -1267,6 +1268,7 @@ export default function PathACatalog() {
                   type="date"
                   value={pageStartDate}
                   min={TODAY}
+                  max={MAX_BOOKING_DATE}
                   disabled={!selectedDuration}
                   onChange={(e) => handleStartDateChange(e.target.value)}
                   className={`${DATE_FIELD_CLASS} disabled:cursor-not-allowed disabled:opacity-60`}

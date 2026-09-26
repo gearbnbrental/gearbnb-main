@@ -95,3 +95,19 @@ describe('gearSpecificFaq (stoves and gas)', () => {
     expect(gearSpecificFaq({ category: 'Cooking', brand, model })?.entries).toHaveLength(count);
   });
 });
+
+describe('gearSpecificFaq (accessories)', () => {
+  it.each([
+    ['Blackdog', '3x4 Timeless Tarp Canopy', 5],
+    ['Blackdog', 'Picnic Mat', 3],
+    ['', 'Khaki-Design Picnic Mat', 3],
+    ['Blackdog', 'Wagon', 4],
+  ])('%s %s has %i entries and no capacity question', (brand, model, count) => {
+    const faq = gearSpecificFaq({ category: 'Other Gear Essentials', brand, model });
+    expect(faq?.entries).toHaveLength(count);
+    expect(faq?.capacityAnswer).toBeUndefined();
+  });
+  it('does not attach these to other essentials', () => {
+    expect(gearSpecificFaq({ category: 'Other Gear Essentials', brand: 'Blackdog', model: 'Camping Hammer' })).toBeUndefined();
+  });
+});

@@ -1,6 +1,6 @@
 ﻿import { useState, type ComponentType } from 'react';
 import { useRental } from '../../context/RentalContext';
-import { TODAY } from '../../utils/duration';
+import { MAX_BOOKING_DATE, TODAY } from '../../utils/duration';
 import type { FulfillmentType } from '../../types/gearbnb';
 import { CheckIcon, MapPinIcon, TruckIcon } from '../icons';
 
@@ -43,6 +43,7 @@ function DateField({ label, value, min, onChange }: DateFieldProps) {
         required
         value={value}
         min={min}
+        max={MAX_BOOKING_DATE}
         onChange={(e) => onChange(e.target.value)}
         className="rounded-lg border border-line px-3 py-2.5 text-sm text-ink shadow-sm outline-none transition-colors focus:border-brand-forest focus:ring-2 focus:ring-brand-forest/20"
       />

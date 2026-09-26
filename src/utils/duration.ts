@@ -42,9 +42,30 @@ export function localTodayISO(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: BUSINESS_TIME_ZONE }).format(new Date());
 }
 
+/**
+ * Latest rental date a customer can pick. The RMS refuses dates more than a year out, so this stays
+ * a few days inside that, and a customer isn't let to choose a date the availability check and the
+ * booking would both bounce.
+ */
+export function latestBookableDateISO(fromISO: string = localTodayISO()): string {
+  const day = new Date(`${fromISO}T00:00:00Z`);
+  day.setUTCDate(day.getUTCDate() + 360);
+  return day.toISOString().slice(0, 10);
+}
+
+/** Trip dates restored from an earlier visit that have since passed. The RMS rejects past dates, so
+ *  keeping them would leave the availability check failing with no explanation the customer could
+ *  act on. Clears both dates (the rest of the trip details are kept) so they simply pick again. */
+export function dropStaleTripDates<T extends { startDate: string; returnDate: string }>(details: T, today: string = localTodayISO()): T {
+  return details.startDate && details.startDate < today ? { ...details, startDate: '', returnDate: '' } : details;
+}
+
 /** Computed once at module load, same as every existing caller expected of its own local copy —
  *  "today" doesn't need to be re-read per render on either catalog page. */
 export const TODAY = localTodayISO();
+
+/** The latest date a date picker should offer, see latestBookableDateISO. */
+export const MAX_BOOKING_DATE = latestBookableDateISO();
 
 /** Which duration preset a saved start/return pair represents, or null if it matches none.
  *  Restores a duration picker's selection when a customer returns to a page with dates already in
