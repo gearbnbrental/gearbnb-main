@@ -23,6 +23,7 @@ import type {
   VerificationDocumentKey,
 } from '../types/gearbnb';
 import { expandGearKinds } from '../utils/gearVariants';
+import { reconcileGearLine } from '../utils/gearReconcile';
 import { useCatalog } from './useCatalog';
 import { useAuth } from './AuthContext';
 
@@ -726,13 +727,7 @@ function cartReducer(state: CartState, action: CartAction): CartState {
       // gear catalog hasn't resolved yet.
       const byoGears = gearLookup
         ? state.byoGears
-            .map((selection) => {
-              const fresh = gearLookup.get(byoGearKey(selection));
-              if (!fresh || !fresh.canSelect) return undefined;
-              const quantity = Math.min(selection.quantity, fresh.availableCount);
-              if (quantity <= 0) return undefined;
-              return { ...fresh, quantity };
-            })
+            .map((selection) => reconcileGearLine(selection, gearLookup.get(byoGearKey(selection))))
             .filter((gear): gear is BookableGearSelection => gear !== undefined)
         : state.byoGears;
 
@@ -780,13 +775,7 @@ function cartReducer(state: CartState, action: CartAction): CartState {
           if (!kitIdSet.has(kitId)) continue;
           const nextGears = gearLookup
             ? gears
-                .map((selection) => {
-                  const fresh = gearLookup.get(byoGearKey(selection));
-                  if (!fresh || !fresh.canSelect) return undefined;
-                  const quantity = Math.min(selection.quantity, fresh.availableCount);
-                  if (quantity <= 0) return undefined;
-                  return { ...fresh, quantity };
-                })
+                .map((selection) => reconcileGearLine(selection, gearLookup.get(byoGearKey(selection))))
                 .filter((gear): gear is BookableGearSelection => gear !== undefined)
             : gears;
           if (nextGears.length > 0) nextPackageAddOns[kitId] = nextGears;

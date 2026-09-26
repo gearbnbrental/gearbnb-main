@@ -23,6 +23,7 @@ import type { BookableGearKind, BookableGearSelection, DateRange, DurationPreset
 import { cartStockUses, subtractStock } from '../utils/packageStock';
 import { decidePackageCheck, type PackageDateStock } from '../utils/packageDateStock';
 import { usePackageDateStock } from '../hooks/usePackageDateStock';
+import { useDateAwareGearKinds } from '../hooks/useGearDateStock';
 import {
   DURATION_PRESETS,
   DURATION_PROMO_BADGES,
@@ -163,7 +164,12 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color }: Pac
   // customer has picked one) — see KitEdition's own doc comment.
   const effectivePricing = selectedEdition?.pricing ?? kit.pricing;
   const effectiveDepositAmount = selectedEdition?.depositAmount ?? kit.depositAmount;
-  const effectiveIsOutOfStock = (selectedEdition ?? kit).isOutOfStock ?? false;
+  // "Out of stock" in the catalog snapshot only means none is free RIGHT NOW. Once the customer has
+  // chosen dates and the RMS says the package is free for them, that no longer applies, so the card
+  // stops calling it out of stock and lets the availability check decide.
+  const snapshotOutOfStock = (selectedEdition ?? kit).isOutOfStock ?? false;
+  const freeForChosenDates = dateStock.status === 'ready' && dateStock.canSelect.get(effectivePackageCode) === true;
+  const effectiveIsOutOfStock = snapshotOutOfStock && !freeForChosenDates;
   // Each edition is its own real Package row with its own description — never the parent kit's
   // once an edition is selected, same reasoning as effectivePricing above. A kit with no editions
   // (or before one is picked) falls back to the kit's own description, unchanged from before.
@@ -198,7 +204,7 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color }: Pac
   // to fire one availability request per card, which the RMS's per-minute limit could not always
   // absorb). A card only skips its own check when that lookup positively says available; anything
   // else, and any package already in the cart, still runs the precise check below.
-  const checkSource = decidePackageCheck(dateStock, effectivePackageCode, isSelected);
+  const checkSource = decidePackageCheck(dateStock, effectivePackageCode, isSelected, snapshotOutOfStock);
   const availabilityRequest: RmsAvailabilityRequest | null = useMemo(() => {
     if (!dateRange || !selectedDuration || effectiveIsOutOfStock || checkSource !== 'own') return null;
     const pickupAt = toAvailabilityTimestamp(dateRange.start, cart.tripDetails.preferredTime);
@@ -259,12 +265,12 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color }: Pac
         pricing: selectedEdition.pricing,
         depositAmount: selectedEdition.depositAmount,
         extraPerDayPrice: selectedEdition.extraPerDayPrice,
-        isOutOfStock: selectedEdition.isOutOfStock,
+        isOutOfStock: effectiveIsOutOfStock,
         description: selectedEdition.description,
         editions: undefined,
       });
     } else {
-      addKit(kit);
+      addKit({ ...kit, isOutOfStock: effectiveIsOutOfStock });
     }
   }
 
@@ -716,8 +722,18 @@ function PackageAddOnCard({
  * checkout already enforces — and stores into `cart.packageAddOns[kitId]`, never `byoGears`, so
  * the booking remains a package booking with extras rather than becoming a Build Your Own one.
  */
-function PackageAddOnsSection({ kitId, kitName }: { kitId: string; kitName: string }) {
-  const { gearKinds: catalogGearKinds, gearCatalogState, kits } = useCatalog();
+function PackageAddOnsSection({
+  kitId,
+  kitName,
+  stockWindow,
+}: {
+  kitId: string;
+  kitName: string;
+  stockWindow: { pickupAt: string; returnAt: string } | null;
+}) {
+  const { gearCatalogState, kits } = useCatalog();
+  // Extras are counted for the customer's chosen dates when there are any, see useDateAwareGearKinds.
+  const catalogGearKinds = useDateAwareGearKinds(stockWindow);
   const { cart, setPackageAddOnQuantity } = useRental();
   const navigate = useNavigate();
   const location = useLocation();
@@ -964,7 +980,7 @@ function PackageAddOnsSection({ kitId, kitName }: { kitId: string; kitName: stri
 
 export default function PathACatalog() {
   usePageMeta(PAGE_META.packages.title, PAGE_META.packages.description);
-  const { kits, catalogState, retryCatalog } = useCatalog();
+  const { kits, catalogState, retryCatalog, packageDetailsFailed } = useCatalog();
   const { cart, totals, updateTripDetails } = useRental();
   const [searchQuery, setSearchQuery] = useState('');
   // Free-text guest count, not a capacity dropdown — see the Group Size audit note below.
@@ -1334,6 +1350,11 @@ export default function PathACatalog() {
             // aspect-square comments for how its content was compacted to actually fit that width.
             <>
               {activeColor && <ColorSwitch colors={colorOptions} active={activeColor} onChange={setChosenColor} />}
+              {packageDetailsFailed && (
+                <p role="status" className="rounded-lg border border-line bg-surface-muted px-3 py-2 text-xs text-ink-muted">
+                  Some package details (photos, what&rsquo;s included and live stock) couldn&rsquo;t load just now. You can still browse and book, or refresh the page to try again.
+                </p>
+              )}
               <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-3">
                 {displayKits.map((kit) => (
                   <PackageCard
@@ -1354,7 +1375,7 @@ export default function PathACatalog() {
             never has to leave for Build Your Own to add an extra light/bed/stove. Attached to the
             first selected kit, matching the one-package-per-booking rule checkout enforces. */}
         {cart.selectedKits.length > 0 && (
-          <PackageAddOnsSection kitId={cart.selectedKits[0].id} kitName={cart.selectedKits[0].name} />
+          <PackageAddOnsSection kitId={cart.selectedKits[0].id} kitName={cart.selectedKits[0].name} stockWindow={stockWindow} />
         )}
 
         {/* Contextual help right where indecision actually happens — after browsing every

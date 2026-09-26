@@ -14,11 +14,19 @@ export type PackageDateStock =
  * The batch answer is only ever trusted when it says a package IS available. Anything else (it said
  * no, doesn't know the package, failed, or there's nothing to check yet) goes to the card's own
  * check, which gives the exact reasons. A selected package always runs its own check, because that
- * one includes the extras attached to it.
+ * one includes the extras attached to it, and so does one the plain stock snapshot calls out of stock
+ * (see `snapshotOutOfStock`).
  */
-export function decidePackageCheck(stock: PackageDateStock, packageCode: string, isSelected: boolean): 'own' | 'available' | 'checking' {
+export function decidePackageCheck(
+  stock: PackageDateStock,
+  packageCode: string,
+  isSelected: boolean,
+  snapshotOutOfStock = false,
+): 'own' | 'available' | 'checking' {
   if (isSelected) return 'own';
   if (stock.status === 'loading') return 'checking';
-  if (stock.status === 'ready' && stock.canSelect.get(packageCode) === true) return 'available';
+  // A package the "free right now" snapshot calls out of stock but the dates call free is the one
+  // case where the two disagree, so it gets the precise check instead of the lookup's word alone.
+  if (stock.status === 'ready' && stock.canSelect.get(packageCode) === true && !snapshotOutOfStock) return 'available';
   return 'own';
 }

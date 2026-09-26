@@ -403,7 +403,11 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
     }
     // Defensive: a kit can only reach the cart while in stock, but stock status can change
     // after it was added (e.g. a stale tab) — never let an out-of-stock item through to booking.
-    const outOfStockName = selectedKits.find((kit) => kit.isOutOfStock)?.name;
+    // The catalog's out-of-stock flag only means "none free RIGHT NOW", so it must not block a
+    // booking whose dates are already chosen: the fresh, date-specific availability check right below
+    // decides those, and is the authoritative one. The flag still guards when there are no dates.
+    const hasTripDates = Boolean(tripDetails.startDate && tripDetails.returnDate);
+    const outOfStockName = hasTripDates ? undefined : selectedKits.find((kit) => kit.isOutOfStock)?.name;
     if (outOfStockName) {
       setSubmitError(`${outOfStockName} just went out of stock and was removed from availability, please remove it from your cart and try again.`);
       return;

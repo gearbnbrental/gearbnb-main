@@ -18,6 +18,10 @@ describe('decidePackageCheck', () => {
   it('waits while the batch is loading instead of firing a request', () => {
     expect(decidePackageCheck({ status: 'loading' }, 'PKG-1', false)).toBe('checking');
   });
+  it('runs the precise check for a package the snapshot calls out of stock even when the dates say free', () => {
+    expect(decidePackageCheck(ready([['PKG-1', true]]), 'PKG-1', false, true)).toBe('own');
+    expect(decidePackageCheck(ready([['PKG-1', true]]), 'PKG-1', false, false)).toBe('available');
+  });
   it('always runs the own check for a package already in the cart, whatever the batch says', () => {
     expect(decidePackageCheck(ready([['PKG-1', true]]), 'PKG-1', true)).toBe('own');
     expect(decidePackageCheck({ status: 'loading' }, 'PKG-1', true)).toBe('own');

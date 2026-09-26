@@ -40,6 +40,7 @@ import { resolveGearVariant, sizeCapacityToShow } from '../utils/gearVariants';
 import ColorSwitch from '../components/ColorSwitch';
 import { filterGearByColor, gearColorOptions, supportsColorFilter } from '../utils/colorFilter';
 import { orderGearKinds } from '../utils/gearOrder';
+import { useDateAwareGearKinds } from '../hooks/useGearDateStock';
 import { splitBestForLine } from '../utils/bestForLine';
 import { productNote } from '../utils/gearNote';
 import { cleanGearName } from '../utils/gearName';
@@ -552,9 +553,18 @@ export default function PathBCatalog() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
-  const { gearKinds: catalogGearKinds, gearCatalogState, retryGearCatalog } = useCatalog();
-  const gearKinds = useMemo(() => orderGearKinds(catalogGearKinds), [catalogGearKinds]);
+  const { gearCatalogState, retryGearCatalog } = useCatalog();
   const { cart, totals, updateTripDetails, setByoGearQuantity, setByoAddOnQuantity } = useRental();
+  // Once the customer has chosen dates, stock is counted for THOSE dates (a unit rented today but
+  // back before their trip is available to them), not "free right now". Same catalog otherwise, and
+  // the ordinary catalog on any failure or while dates aren't chosen. See useDateAwareGearKinds.
+  const stockWindow = useMemo(() => {
+    const pickupAt = toAvailabilityTimestamp(cart.tripDetails.startDate, cart.tripDetails.preferredTime);
+    const returnAt = toAvailabilityTimestamp(cart.tripDetails.returnDate, cart.tripDetails.preferredTime);
+    return pickupAt && returnAt && returnAt > pickupAt ? { pickupAt, returnAt } : null;
+  }, [cart.tripDetails.startDate, cart.tripDetails.returnDate, cart.tripDetails.preferredTime]);
+  const catalogGearKinds = useDateAwareGearKinds(stockWindow);
+  const gearKinds = useMemo(() => orderGearKinds(catalogGearKinds), [catalogGearKinds]);
   // Restored from any already-saved dates (same reasoning as PathACatalog's own selectedDuration
   // state) so navigating away and back — or simply reloading — doesn't silently drop a duration
   // the customer already picked while `cart.tripDetails` itself already remembers it.

@@ -881,6 +881,21 @@ export function fetchPackageStockForDates(window: { pickupAt: string; returnAt: 
   );
 }
 
+/**
+ * The Build Your Own gear catalog with stock counted for specific dates ("free for the whole
+ * window"), instead of "free right now". `dateAware` is true only when the RMS actually applied
+ * the dates, so an older RMS that ignores the parameters is never mistaken for a real answer.
+ * Advisory and display-only, and never retried automatically: on any failure the caller keeps the
+ * ordinary snapshot.
+ */
+export function fetchGearStockForDates(window: { pickupAt: string; returnAt: string }, signal?: AbortSignal) {
+  const query = new URLSearchParams({ pickupAt: window.pickupAt, returnAt: window.returnAt });
+  return rmsFetch<{ kinds: RmsCatalogGearKind[]; dateAware?: boolean }>(`/api/customer/catalog/gear?${query.toString()}`, {
+    requireAuth: false,
+    signal,
+  });
+}
+
 /** The currently RMS-configured customer-facing payment QR codes, exactly as staff last set them
  * on the RMS Settings page. `null` for a method means no QR is currently configured for it — a
  * real, meaningful "coming soon" answer, never treated as "the fetch didn't happen yet." */

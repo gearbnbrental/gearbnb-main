@@ -40,6 +40,10 @@ export interface CatalogContextValue {
    * transient error must never wipe a customer's restored selection.
    */
   ready: boolean;
+  /** True when the RMS package details (photos, what's included, live stock) failed to load, so
+   *  packages are showing with their basic details only. Non-blocking: a quiet refresh that
+   *  succeeds clears it. */
+  packageDetailsFailed: boolean;
   /** The real Build Your Own gear catalog (GET /api/customer/catalog/gear) — empty until
    * gearCatalogState is 'ready'. Never mock data; see fetchBookableGearCatalog. */
   gearKinds: BookableGearKind[];
@@ -78,6 +82,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   // gearCatalogRetryCount below exactly.
   const [catalogRetryCount, setCatalogRetryCount] = useState(0);
   const [ready, setReady] = useState(false);
+  const [packageDetailsFailed, setPackageDetailsFailed] = useState(false);
   const [gearKinds, setGearKinds] = useState<BookableGearKind[]>([]);
   const [gearCatalogState, setGearCatalogState] = useState<GearCatalogState>('loading');
   // Bumped by retryGearCatalog to re-run the fetch effect below on demand — a plain re-render
@@ -119,7 +124,9 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
           const { packages: rmsPackages } = await fetchPackageCatalogFromRms();
           if (cancelled) return;
           kitsWithSelectability = applyPackageSelectability(kitData, rmsPackages);
+          setPackageDetailsFailed(false);
         } catch (error) {
+          setPackageDetailsFailed(true);
           console.warn(
             '[CatalogContext] package canSelect fetch failed, packages will show as in-stock until the next successful refresh:',
             error,
@@ -225,6 +232,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         setKits((current) => keepIfUnchanged(current, nextKits));
         setItems((current) => keepIfUnchanged(current, itemData));
         setGearKinds((current) => keepIfUnchanged(current, gearData));
+        setPackageDetailsFailed(false);
         lastLoadedAt = Date.now();
       } catch (error) {
         console.warn('[CatalogContext] quiet catalog refresh failed, keeping the current catalog:', error);
@@ -274,13 +282,14 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       catalogState,
       retryCatalog,
       ready,
+      packageDetailsFailed,
       gearKinds,
       gearCatalogState,
       retryGearCatalog,
       paymentQr,
       paymentQrState,
     }),
-    [kits, items, catalogState, retryCatalog, ready, gearKinds, gearCatalogState, retryGearCatalog, paymentQr, paymentQrState],
+    [kits, items, catalogState, retryCatalog, ready, packageDetailsFailed, gearKinds, gearCatalogState, retryGearCatalog, paymentQr, paymentQrState],
   );
 
   return <CatalogContext.Provider value={value}>{children}</CatalogContext.Provider>;

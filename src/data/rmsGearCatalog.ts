@@ -1,6 +1,7 @@
 import type { BookableAddOn, BookableGearKind, BookableGearVariant } from '../types/gearbnb';
 import {
   fetchGearCatalogFromRms,
+  fetchGearStockForDates,
   type RmsCatalogAddOn,
   type RmsCatalogGearKind,
   type RmsCatalogGearVariant,
@@ -87,6 +88,16 @@ function mapGearKind(kind: RmsCatalogGearKind): BookableGearKind {
  * unlike the package catalog's Supabase fetch, a failure here must propagate so the caller can
  * show a real error state, never silently substitute fake products a customer could book against.
  */
+/** The gear catalog with stock counted for these dates. Empty `kinds` and `dateAware: false` mean
+ *  "don't use this", never "nothing is available". */
+export async function fetchBookableGearStockForDates(
+  window: { pickupAt: string; returnAt: string },
+  signal?: AbortSignal,
+): Promise<{ kinds: BookableGearKind[]; dateAware: boolean }> {
+  const response = await fetchGearStockForDates(window, signal);
+  return { kinds: response.kinds.map(mapGearKind), dateAware: response.dateAware === true };
+}
+
 export async function fetchBookableGearCatalog(): Promise<BookableGearKind[]> {
   const { kinds } = await fetchGearCatalogFromRms();
   return kinds.map(mapGearKind);
