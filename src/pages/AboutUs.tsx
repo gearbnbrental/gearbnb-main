@@ -1,5 +1,6 @@
 ﻿import type { ComponentType, ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import BirSealBadge from '../components/BirSealBadge';
 import FaqAccordion, { type FaqItem } from '../components/FaqAccordion';
 import {
   CheckCircleIcon,
@@ -24,10 +25,6 @@ import { PAGE_META } from '../config/pageMeta';
  * itself marks as a placeholder and this project has no real address/coordinates for.
  */
 
-// text-accent, not text-brand-forest: identical color in light mode (see index.css's @theme
-// block — --color-accent equals --color-brand-forest there), but accent has an actual dark-mode
-// override to a brighter green, while brand-forest deliberately stays constant across themes
-// (fine for a button's own background, but too low-contrast for text sitting on a dark surface).
 const EYEBROW_CLASS = 'text-xs font-bold uppercase tracking-[0.18em] text-accent';
 
 /** A very faint, repeating dot texture — an outdoor-inspired "grain" rather than a flat, plain
@@ -82,6 +79,7 @@ const BENEFITS: ReactNode[] = [
       for retreats, team buildings, and group events
     </Link>
   </>,
+  'A trusted and compliant local camping gear rental you can book with confidence',
 ];
 
 interface ProcessStep {
@@ -221,86 +219,90 @@ export default function AboutUs() {
         <SectionGlow variant="forest" corner="right" />
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-10 lg:flex-row lg:items-center">
           <div className="flex flex-1 flex-col gap-4">
-            <span className={EYEBROW_CLASS}>Our Location &amp; Service Area</span>
-            <h2 className="font-serif text-2xl font-bold text-ink sm:text-3xl">
-              Camping Gear Rental Serving Las Piñas and Nearby Cities
-            </h2>
-            <p className="text-sm text-ink-muted sm:text-base">
-              <Link to="/catalog" className="underline underline-offset-2 hover:text-accent">
-                Rent camping gear
-              </Link>{' '}
-              from trusted outdoor brands, including Naturehike, Blackdog, Vidalido, Mobi Garden, Mountainhiker and
-              many more.
-            </p>
-            <div className="flex flex-col gap-2">
-              <p className="text-sm font-medium text-ink">Searching for camping gear for rent near me? We serve:</p>
-              <ul className="flex flex-col gap-1.5 text-sm text-ink-muted">
-                <li className="flex items-start gap-2">
-                  <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-                  Las Piñas and the rest of Metro Manila
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-                  Cities across Cavite
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-                  Cities across Laguna
-                </li>
-              </ul>
-            </div>
-            <p className="text-sm text-ink-muted sm:text-base">
-              Camping outside these areas? As long as you&rsquo;re able to pick up your gear from GearBnB, you&rsquo;re
-              welcome to rent, even for a trip to Luzon, Visayas or Mindanao.
-            </p>
-          </div>
-
-          {/* Map + brands card — now points at the real GearBnB Camping Gears Rental location
-              (confirmed via the client-provided Google Maps place link). The keyless
-              `google.com/maps?...&output=embed` form is used deliberately: it renders a real,
-              interactive embedded map with no Google Maps API key required, so nothing here adds
-              a key to expose. The brand chips alongside it are the exact brand names from the
-              client's original document, styled like the reference's "Our Brands" panel. */}
-          <div className="flex flex-1 flex-col gap-4 rounded-2xl border border-line/80 bg-surface p-4 shadow-sm sm:flex-row sm:p-5">
-            {/* aspect-[16/9] below sm (was aspect-square at every width): stacked as the first of
-                two full-width columns on mobile, a square map ran ~340px tall on its own before
-                "Our Brands" was visible below it — a wide, shorter ratio still shows the pin and
-                nearby streets clearly while taking meaningfully less vertical space. sm:aspect-
-                square restores the original ratio once this sits beside the brands card in a row,
-                where its height is already bounded by that row instead of standing alone. */}
-            <div className="aspect-[16/9] flex-1 overflow-hidden rounded-xl border border-line sm:aspect-square">
-              <iframe
-                title="GearBnB Camping Gears Rental location"
-                src="https://www.google.com/maps?q=14.4461908,120.9966593&z=17&output=embed"
-                className="h-full w-full border-0"
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-              />
-            </div>
-            <div className="flex flex-1 flex-col gap-3">
-              <p className="text-sm font-semibold text-ink">Brands in Our Rental Collection</p>
-              <div className="flex flex-wrap gap-1.5">
-                {BRANDS.map((brand) => (
-                  <span
-                    key={brand}
-                    className="rounded-full border border-line bg-surface-muted px-2.5 py-1 text-xs font-medium text-ink-muted"
-                  >
-                    {brand}
-                  </span>
-                ))}
-                <span className="rounded-full border border-line bg-surface-muted px-2.5 py-1 text-xs font-medium text-ink-muted">
-                  and more
-                </span>
+              <span className={EYEBROW_CLASS}>Our Location &amp; Service Area</span>
+              <h2 className="font-serif text-2xl font-bold text-ink sm:text-3xl">
+                Camping Gear Rental Serving Las Piñas and Nearby Cities
+              </h2>
+              <p className="text-sm text-ink-muted sm:text-base">
+                <Link to="/catalog" className="underline underline-offset-2 hover:text-accent">
+                  Rent camping gear
+                </Link>{' '}
+                from trusted outdoor brands, including Naturehike, Blackdog, Vidalido, Mobi Garden, Mountainhiker and
+                many more.
+              </p>
+              <div className="flex flex-col gap-2">
+                <p className="text-sm font-medium text-ink">Looking for a trusted and established local camping gear rental? We serve:</p>
+                <ul className="flex flex-col gap-1.5 text-sm text-ink-muted">
+                  <li className="flex items-start gap-2">
+                    <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+                    Las Piñas and the rest of Metro Manila
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+                    Cities across Cavite
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+                    Cities across Laguna
+                  </li>
+                </ul>
               </div>
-              <a
-                href="https://www.google.com/maps/place/GearBnB+Camping+Gears+Rental/@14.4461908,120.9966593,17z/data=!3m1!4b1!4m6!3m5!1s0x3397d3090cbbd26f:0x665f11a5d4c66dde!8m2!3d14.4461908!4d120.9966593!16s%2Fg%2F11z8h467l7?entry=ttu&g_ep=EgoyMDI2MDkwOS4wIKXMDSoASAFQAw%3D%3D"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-auto flex items-center gap-1 self-start text-sm font-semibold text-accent transition-colors hover:text-brand-forest-dark"
-              >
-                Get Directions <span aria-hidden="true">&rarr;</span>
-              </a>
+              <p className="text-sm text-ink-muted sm:text-base">
+                Camping outside these areas? As long as you&rsquo;re able to pick up your gear from GearBnB, you&rsquo;re
+                welcome to rent, even for a trip to Luzon, Visayas or Mindanao.
+              </p>
             </div>
+
+            {/* Map + brands card — now points at the real GearBnB Camping Gears Rental location
+                (confirmed via the client-provided Google Maps place link). The keyless
+                `google.com/maps?...&output=embed` form is used deliberately: it renders a real,
+                interactive embedded map with no Google Maps API key required, so nothing here adds
+                a key to expose. The brand chips alongside it are the exact brand names from the
+                client's original document, styled like the reference's "Our Brands" panel. */}
+            <div className="flex flex-1 flex-col gap-4">
+            <div className="flex flex-col gap-4 rounded-2xl border border-line/80 bg-surface p-4 shadow-sm sm:flex-row sm:p-5">
+              {/* aspect-[16/9] below sm (was aspect-square at every width): stacked as the first of
+                  two full-width columns on mobile, a square map ran ~340px tall on its own before
+                  "Our Brands" was visible below it — a wide, shorter ratio still shows the pin and
+                  nearby streets clearly while taking meaningfully less vertical space. sm:aspect-
+                  square restores the original ratio once this sits beside the brands card in a row,
+                  where its height is already bounded by that row instead of standing alone. */}
+              <div className="aspect-[16/9] flex-1 overflow-hidden rounded-xl border border-line sm:aspect-square">
+                <iframe
+                  title="GearBnB Camping Gears Rental location"
+                  src="https://www.google.com/maps?q=14.4461908,120.9966593&z=17&output=embed"
+                  className="h-full w-full border-0"
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                />
+              </div>
+              <div className="flex flex-1 flex-col gap-3">
+                <p className="text-sm font-semibold text-ink">Brands in Our Rental Collection</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {BRANDS.map((brand) => (
+                    <span
+                      key={brand}
+                      className="rounded-full border border-line bg-surface-muted px-2.5 py-1 text-xs font-medium text-ink-muted"
+                    >
+                      {brand}
+                    </span>
+                  ))}
+                  <span className="rounded-full border border-line bg-surface-muted px-2.5 py-1 text-xs font-medium text-ink-muted">
+                    and more
+                  </span>
+                </div>
+                <a
+                  href="https://www.google.com/maps/place/GearBnB+Camping+Gears+Rental/@14.4461908,120.9966593,17z/data=!3m1!4b1!4m6!3m5!1s0x3397d3090cbbd26f:0x665f11a5d4c66dde!8m2!3d14.4461908!4d120.9966593!16s%2Fg%2F11z8h467l7?entry=ttu&g_ep=EgoyMDI2MDkwOS4wIKXMDSoASAFQAw%3D%3D"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-auto flex items-center gap-1 self-start text-sm font-semibold text-accent transition-colors hover:text-brand-forest-dark"
+                >
+                  Get Directions <span aria-hidden="true">&rarr;</span>
+                </a>
+              </div>
+            </div>
+
+            <BirSealBadge />
           </div>
         </div>
       </section>

@@ -201,7 +201,7 @@ interface TextFieldProps {
  *  same fact, and announcing "star" alongside it would just be noise. */
 function RequiredMark() {
   return (
-    <span aria-hidden="true" className="text-red-600 dark:text-red-400">
+    <span aria-hidden="true" className="text-red-600">
       {' '}
       *
     </span>
@@ -314,7 +314,7 @@ export function DocumentDropzone({
           'relative flex h-28 flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed p-3 text-center transition-colors sm:h-36',
           uploading ? 'cursor-wait' : 'cursor-pointer',
           error
-            ? 'border-red-400 bg-red-50 dark:border-red-500 dark:bg-red-500/10'
+            ? 'border-red-400 bg-red-50'
             : uploaded
               ? 'border-brand-forest bg-brand-forest/10'
               : isDragActive
@@ -339,7 +339,7 @@ export function DocumentDropzone({
               onRemove();
             }}
             aria-label={`Remove ${config.title}`}
-            className="absolute right-2 top-2 rounded-full bg-surface p-1 text-ink-muted shadow hover:text-red-600 dark:hover:text-red-400"
+            className="absolute right-2 top-2 rounded-full bg-surface p-1 text-ink-muted shadow hover:text-red-600"
           >
             <XMarkIcon className="h-4 w-4" />
           </button>
@@ -369,7 +369,7 @@ export function DocumentDropzone({
                 <span>Uploaded</span>
               </div>
             ) : (
-              <p className="text-xs font-medium text-red-600 dark:text-red-400">Upload failed, try again</p>
+              <p className="text-xs font-medium text-red-600">Upload failed, try again</p>
             )}
             <p className="max-w-full truncate px-2 text-xs text-ink-muted">
               {file.name} · {formatFileSize(file.size)}
@@ -396,7 +396,7 @@ export function DocumentDropzone({
       </label>
 
       <p className="text-xs text-ink-muted">{config.helperText}</p>
-      {error && <p className="text-xs font-medium text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p className="text-xs font-medium text-red-600">{error}</p>}
     </div>
   );
 }
@@ -575,7 +575,7 @@ export default function VerificationUpload({ onSubmit }: VerificationUploadProps
         {/* Explains the marker once, up front, rather than leaving a bare asterisk to be guessed
             at. Not aria-hidden — unlike the individual marks, this legend is the explanation. */}
         <p className="text-xs text-ink-faint">
-          <span className="font-semibold text-red-600 dark:text-red-400">*</span> Required, every field below must
+          <span className="font-semibold text-red-600">*</span> Required, every field below must
           be completed before you can submit.
         </p>
       </div>
@@ -704,7 +704,7 @@ export default function VerificationUpload({ onSubmit }: VerificationUploadProps
             : 'Save Verification Details'}
       </button>
 
-      <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300">
+      <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
         <InfoCircleIcon className="h-5 w-5 shrink-0" />
         <p>
           <span className="font-semibold">What happens next: </span>

@@ -146,31 +146,31 @@ function PendingStatus({
   const isShort = shortfallCentavos > 0;
 
   return (
-    <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-400/30 dark:bg-amber-400/10">
-      <ClockIcon className="h-5 w-5 shrink-0 text-amber-700 dark:text-amber-300" />
+    <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+      <ClockIcon className="h-5 w-5 shrink-0 text-amber-700" />
       <div className="flex w-full flex-col gap-2">
         <div>
-          <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Payment Proof Under Review</p>
-          <p className="text-sm text-amber-800/80 dark:text-amber-300/80">
+          <p className="text-sm font-semibold text-amber-800">Payment Proof Under Review</p>
+          <p className="text-sm text-amber-800/80">
             Your security deposit payment proof is currently being reviewed by GearBnB.
           </p>
         </div>
 
         {amountClaimedCentavos !== null && (
-          <dl className="grid grid-cols-3 gap-2 rounded-lg bg-surface/60 p-2 text-center text-xs dark:bg-black/10">
+          <dl className="grid grid-cols-3 gap-2 rounded-lg bg-surface/60 p-2 text-center text-xs">
             <div>
-              <dt className="text-amber-800/70 dark:text-amber-300/70">Required</dt>
-              <dd className="font-semibold text-amber-800 dark:text-amber-300">{formatCurrency(requiredCentavos / 100)}</dd>
+              <dt className="text-amber-800/70">Required</dt>
+              <dd className="font-semibold text-amber-800">{formatCurrency(requiredCentavos / 100)}</dd>
             </div>
             <div>
-              <dt className="text-amber-800/70 dark:text-amber-300/70">Submitted</dt>
-              <dd className="font-semibold text-amber-800 dark:text-amber-300">
+              <dt className="text-amber-800/70">Submitted</dt>
+              <dd className="font-semibold text-amber-800">
                 {formatCurrency(amountClaimedCentavos / 100)}
               </dd>
             </div>
             <div>
-              <dt className="text-amber-800/70 dark:text-amber-300/70">Shortfall</dt>
-              <dd className="font-semibold text-amber-800 dark:text-amber-300">
+              <dt className="text-amber-800/70">Shortfall</dt>
+              <dd className="font-semibold text-amber-800">
                 {formatCurrency(Math.max(0, shortfallCentavos) / 100)}
               </dd>
             </div>
@@ -178,7 +178,7 @@ function PendingStatus({
         )}
 
         {isShort && (
-          <p className="text-xs text-amber-800/80 dark:text-amber-300/80">
+          <p className="text-xs text-amber-800/80">
             This submitted amount is still short of the required deposit, GearBnB may ask you to upload updated
             proof showing the full amount paid.
           </p>
@@ -320,37 +320,37 @@ function RejectedNotice({
   const isShortPayment = shortfallCentavos > 0;
 
   return (
-    <div className="flex items-start gap-3 rounded-xl border border-red-300 bg-red-50 p-4 dark:border-red-500/30 dark:bg-red-500/10">
-      <AlertIcon className="h-5 w-5 shrink-0 text-red-600 dark:text-red-400" />
+    <div className="flex items-start gap-3 rounded-xl border border-red-300 bg-red-50 p-4">
+      <AlertIcon className="h-5 w-5 shrink-0 text-red-600" />
       <div className="flex flex-col gap-2">
         <div>
-          <p className="text-sm font-semibold text-red-700 dark:text-red-400">
+          <p className="text-sm font-semibold text-red-700">
             Payment Proof Rejected{isShortPayment ? ', Payment Short' : ''}
           </p>
-          <p className="text-sm text-red-700/90 dark:text-red-400/90">This payment proof needs correction.</p>
+          <p className="text-sm text-red-700/90">This payment proof needs correction.</p>
         </div>
 
         {isShortPayment && amountClaimedCentavos !== null && (
           <>
-            <dl className="grid grid-cols-3 gap-2 rounded-lg bg-surface/60 p-2 text-center text-xs dark:bg-black/10">
+            <dl className="grid grid-cols-3 gap-2 rounded-lg bg-surface/60 p-2 text-center text-xs">
               <div>
-                <dt className="text-red-700/70 dark:text-red-400/70">Required</dt>
-                <dd className="font-semibold text-red-700 dark:text-red-400">{formatCurrency(requiredCentavos / 100)}</dd>
+                <dt className="text-red-700/70">Required</dt>
+                <dd className="font-semibold text-red-700">{formatCurrency(requiredCentavos / 100)}</dd>
               </div>
               <div>
-                <dt className="text-red-700/70 dark:text-red-400/70">Submitted</dt>
-                <dd className="font-semibold text-red-700 dark:text-red-400">{formatCurrency(amountClaimedCentavos / 100)}</dd>
+                <dt className="text-red-700/70">Submitted</dt>
+                <dd className="font-semibold text-red-700">{formatCurrency(amountClaimedCentavos / 100)}</dd>
               </div>
               <div>
-                <dt className="text-red-700/70 dark:text-red-400/70">Shortfall</dt>
-                <dd className="font-semibold text-red-700 dark:text-red-400">{formatCurrency(shortfallCentavos / 100)}</dd>
+                <dt className="text-red-700/70">Shortfall</dt>
+                <dd className="font-semibold text-red-700">{formatCurrency(shortfallCentavos / 100)}</dd>
               </div>
             </dl>
 
             {/* Always shown, regardless of what the admin's own reviewNote below says — the
                "top-up, not total" misunderstanding this fixes came from a customer reading an
                ambiguous note and assuming a receipt for just the shortfall was enough. */}
-            <p className="text-sm text-red-700/90 dark:text-red-400/90">
+            <p className="text-sm text-red-700/90">
               Please pay the remaining {formatCurrency(shortfallCentavos / 100)}, then upload updated proof showing
               the full {formatCurrency(requiredCentavos / 100)} security deposit has been paid. The new proof should
               show the total security deposit paid so far, not only the additional payment.
@@ -358,7 +358,7 @@ function RejectedNotice({
           </>
         )}
 
-        {reviewNote && <p className="text-sm text-red-700/90 dark:text-red-400/90">{reviewNote}</p>}
+        {reviewNote && <p className="text-sm text-red-700/90">{reviewNote}</p>}
       </div>
     </div>
   );
@@ -496,7 +496,7 @@ function ProofDropzone({ file, previewUrl, error, disabled, onSelect, onRemove }
           'relative flex h-24 flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed p-3 text-center transition-colors sm:h-32',
           disabled ? 'cursor-wait' : 'cursor-pointer',
           error
-            ? 'border-red-400 bg-red-50 dark:border-red-500 dark:bg-red-500/10'
+            ? 'border-red-400 bg-red-50'
             : hasFile
               ? 'border-brand-forest bg-brand-forest/10'
               : isDragActive
@@ -521,7 +521,7 @@ function ProofDropzone({ file, previewUrl, error, disabled, onSelect, onRemove }
               onRemove();
             }}
             aria-label="Remove selected file"
-            className="absolute right-2 top-2 rounded-full bg-surface p-1 text-ink-muted shadow hover:text-red-600 dark:hover:text-red-400"
+            className="absolute right-2 top-2 rounded-full bg-surface p-1 text-ink-muted shadow hover:text-red-600"
           >
             <XMarkIcon className="h-4 w-4" />
           </button>
@@ -552,7 +552,7 @@ function ProofDropzone({ file, previewUrl, error, disabled, onSelect, onRemove }
       </label>
 
       {error && (
-        <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+        <p role="alert" className="text-xs font-medium text-red-600">
           {error}
         </p>
       )}
@@ -903,7 +903,7 @@ export default function DepositProofUpload({
             </div>
 
             {detailsError && (
-              <p role="alert" className="text-sm font-medium text-red-600 dark:text-red-400">
+              <p role="alert" className="text-sm font-medium text-red-600">
                 {detailsError}
               </p>
             )}
@@ -918,7 +918,7 @@ export default function DepositProofUpload({
             />
 
             {submitError && (
-              <p role="alert" className="text-sm font-medium text-red-600 dark:text-red-400">
+              <p role="alert" className="text-sm font-medium text-red-600">
                 {submitError}
               </p>
             )}

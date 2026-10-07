@@ -119,7 +119,7 @@ function ProofDropzone({ file, previewUrl, error, disabled, onSelect, onRemove }
           'relative flex h-24 flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed p-3 text-center transition-colors sm:h-32',
           disabled ? 'cursor-wait' : 'cursor-pointer',
           error
-            ? 'border-red-400 bg-red-50 dark:border-red-500 dark:bg-red-500/10'
+            ? 'border-red-400 bg-red-50'
             : hasFile
               ? 'border-brand-forest bg-brand-forest/10'
               : isDragActive
@@ -144,7 +144,7 @@ function ProofDropzone({ file, previewUrl, error, disabled, onSelect, onRemove }
               onRemove();
             }}
             aria-label="Remove selected file"
-            className="absolute right-2 top-2 rounded-full bg-surface p-1 text-ink-muted shadow hover:text-red-600 dark:hover:text-red-400"
+            className="absolute right-2 top-2 rounded-full bg-surface p-1 text-ink-muted shadow hover:text-red-600"
           >
             <XMarkIcon className="h-4 w-4" />
           </button>
@@ -175,7 +175,7 @@ function ProofDropzone({ file, previewUrl, error, disabled, onSelect, onRemove }
       </label>
 
       {error && (
-        <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+        <p role="alert" className="text-xs font-medium text-red-600">
           {error}
         </p>
       )}
@@ -414,7 +414,7 @@ export default function AdditionalChargeProofDialog({
           </label>
 
           {detailsError && (
-            <p role="alert" className="text-sm font-medium text-red-600 dark:text-red-400">
+            <p role="alert" className="text-sm font-medium text-red-600">
               {detailsError}
             </p>
           )}
@@ -429,7 +429,7 @@ export default function AdditionalChargeProofDialog({
           />
 
           {submitError && (
-            <p role="alert" className="text-sm font-medium text-red-600 dark:text-red-400">
+            <p role="alert" className="text-sm font-medium text-red-600">
               {submitError}
             </p>
           )}

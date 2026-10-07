@@ -5,7 +5,6 @@ import { useRental } from '../context/RentalContext';
 import ConfirmDialog from './ConfirmDialog';
 import { ChevronDownIcon, UserIcon } from './icons';
 import SocialLinks from './SocialLinks';
-import ThemeToggle from './ThemeToggle';
 
 function CartIcon({ className }: { className?: string }) {
   return (
@@ -172,13 +171,7 @@ export default function Navbar() {
               alt=""
               className="h-8 w-8 rounded-full shadow-sm sm:h-10 sm:w-10 lg:h-12 lg:w-12"
             />
-            {/* brand-forest reads fine on this header's light-mode surface, but the same dark green
-                on the dark-mode surface is low-contrast — dark:text-ink switches it to this site's
-                normal near-white dark-mode text color, per the client's explicit "branding text
-                should also appear white in Dark Mode" request. Footer's own "GearBnB" wordmark
-                needs no equivalent change — it already sits on a constant brand-brown band in
-                brand-cream (an off-white), which never dims in dark mode. */}
-            <span className="font-serif text-lg font-bold tracking-tight text-brand-forest dark:text-ink sm:text-xl">
+            <span className="font-serif text-lg font-bold tracking-tight text-brand-forest sm:text-xl">
               GearBnB
             </span>
           </Link>
@@ -259,7 +252,7 @@ export default function Navbar() {
               // Inline from `lg` up only. Below that, My Bookings is the menu drawer's own entry
               // (see mobileNavLinks) — it used to also sit inline here at every width, so a
               // signed-in phone header carried it twice while squeezing a named account pill,
-              // theme toggle, cart and menu button into the same row.
+              // cart and menu button into the same row.
               <Link
                 to="/my-bookings"
                 className="hidden whitespace-nowrap rounded-md px-2 py-1.5 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-strong hover:text-ink lg:inline-block"
@@ -267,8 +260,6 @@ export default function Navbar() {
                 My Bookings
               </Link>
             )}
-
-            <ThemeToggle />
 
             <Link
               to="/cart"

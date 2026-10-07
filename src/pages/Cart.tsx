@@ -62,8 +62,8 @@ function RemoveButton({ itemLabel, onConfirm }: { itemLabel: string; onConfirm: 
 
   if (confirming) {
     return (
-      <div className="flex w-full items-center justify-between gap-2 rounded-lg bg-red-50 px-3 py-2 dark:bg-red-500/10">
-        <span className="text-xs font-medium text-red-700 dark:text-red-400">Remove this item?</span>
+      <div className="flex w-full items-center justify-between gap-2 rounded-lg bg-red-50 px-3 py-2">
+        <span className="text-xs font-medium text-red-700">Remove this item?</span>
         <div className="flex shrink-0 items-center gap-1.5">
           <button
             type="button"
@@ -92,7 +92,7 @@ function RemoveButton({ itemLabel, onConfirm }: { itemLabel: string; onConfirm: 
       type="button"
       onClick={() => setConfirming(true)}
       aria-label={`Remove ${itemLabel}`}
-      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink-faint transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink-faint transition-colors hover:bg-red-50 hover:text-red-600"
     >
       <TrashIcon className="h-4.5 w-4.5" />
     </button>
@@ -154,7 +154,7 @@ export default function Cart() {
     selectedCart.byoGears.reduce((sum, gear) => sum + gear.quantity, 0);
 
   const removedNotice = removedItemNames.length > 0 && (
-    <div className="flex items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300">
+    <div className="flex items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
       <p>
         {removedItemNames.length === 1
           ? `${removedItemNames[0]} is no longer available and was removed from your cart.`
@@ -279,7 +279,7 @@ export default function Cart() {
                               <button
                                 type="button"
                                 onClick={() => removeKitExtra(kit.id, extra.id)}
-                                className="text-xs font-medium text-red-600 hover:underline dark:text-red-400"
+                                className="text-xs font-medium text-red-600 hover:underline"
                               >
                                 Remove
                               </button>
@@ -327,7 +327,7 @@ export default function Cart() {
                                 <button
                                   type="button"
                                   onClick={() => setPackageAddOnQuantity(kit.id, gear, 0)}
-                                  className="text-xs font-medium text-red-600 hover:underline dark:text-red-400"
+                                  className="text-xs font-medium text-red-600 hover:underline"
                                 >
                                   Remove
                                 </button>

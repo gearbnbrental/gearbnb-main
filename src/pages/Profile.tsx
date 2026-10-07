@@ -13,7 +13,7 @@ const INPUT_CLASS =
 const SUCCESS_BANNER_CLASS =
   'rounded-lg border border-brand-forest/30 bg-brand-forest/10 px-3 py-2 text-sm text-accent';
 const ERROR_BANNER_CLASS =
-  'rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400';
+  'rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-600';
 
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (

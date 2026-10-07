@@ -36,7 +36,7 @@ export default function Footer() {
     // Sized to clear BackToTop's own top edge (bottom-[5.5rem] + its 2.75rem height) with a small
     // buffer. Desktop keeps its original py-12 unchanged — the floating stack there is comfortably
     // clear of the wider footer already.
-    <footer className="relative isolate overflow-hidden bg-brand-brown px-5 pb-36 pt-8 sm:px-6 sm:py-12">
+    <footer className="relative isolate overflow-hidden bg-brand-brown-dark px-5 pb-36 pt-8 sm:px-6 sm:py-12">
       {/* A soft radial highlight, not a texture/pattern change — client's "soft background... make
           it stand out more" request, read as "give the footer some gentle depth rather than a
           single flat color block," not "redesign it." Same color-mix + radial-gradient idiom

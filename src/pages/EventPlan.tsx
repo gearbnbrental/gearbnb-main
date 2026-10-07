@@ -2,6 +2,7 @@
 import { PAGE_META } from '../config/pageMeta';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import BirSealBadge from '../components/BirSealBadge';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { CheckCircleIcon, CheckIcon } from '../components/icons';
 import { useAuth } from '../context/AuthContext';
@@ -77,7 +78,7 @@ function Field({ label, required = true, children }: { label: string; required?:
   return (
     <label className="flex flex-col gap-1.5">
       <span className="text-sm font-medium text-ink">
-        {label} {required && <span className="text-red-500 dark:text-red-400">*</span>}
+        {label} {required && <span className="text-red-500">*</span>}
       </span>
       {children}
     </label>
@@ -355,7 +356,7 @@ export default function EventPlan() {
 
       <div className="flex flex-col gap-3">
         <span className="text-sm font-medium text-ink">
-          Equipment / Gear Needed <span className="text-red-500 dark:text-red-400">*</span>
+          Equipment / Gear Needed <span className="text-red-500">*</span>
         </span>
 
         <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Equipment selection preference">
@@ -418,7 +419,7 @@ export default function EventPlan() {
       </Field>
 
       {submitError && (
-        <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+        <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-600">
           {submitError}
         </p>
       )}
@@ -440,6 +441,10 @@ export default function EventPlan() {
         onConfirm={performSubmit}
       />
     </form>
+
+    {/* Business customers (team buildings, company outings) are the main audience here, so the
+        BIR seal sits right under the inquiry form as proof of a registered, compliant business. */}
+    <BirSealBadge className="mt-6" />
     </div>
   );
 }

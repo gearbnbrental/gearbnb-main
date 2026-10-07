@@ -69,7 +69,7 @@ export default function GearDetailsModal({ item, onClose }: GearDetailsModalProp
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-semibold text-ink">{item.name}</h2>
               {item.isOutOfStock && (
-                <span className="shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700 dark:bg-red-500/10 dark:text-red-400">
+                <span className="shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
                   Out of Stock
                 </span>
               )}

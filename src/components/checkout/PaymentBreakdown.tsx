@@ -813,7 +813,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
             {hasPackageAddOns && (
               <p
                 role="note"
-                className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300"
+                className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800"
               >
                 <span className="font-semibold">Security deposit is not yet final.</span> Additional
                 deposit requirements for selected add-ons will be reviewed and confirmed by GearBnB
@@ -886,9 +886,9 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
             checkoutAvailability.status === 'available'
               ? 'border-brand-forest/30 bg-brand-forest/10 text-accent'
               : checkoutAvailability.status === 'unavailable'
-                ? 'border-red-300 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400'
+                ? 'border-red-300 bg-red-50 text-red-700'
                 : checkoutAvailability.status === 'pending_turnover' || checkoutAvailability.status === 'error'
-                  ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300'
+                  ? 'border-amber-200 bg-amber-50 text-amber-800'
                   : 'border-line-soft bg-surface-muted text-ink-muted'
           }`}
         >
@@ -937,7 +937,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
             <button
               type="button"
               onClick={() => navigate('/cart')}
-              className="self-start rounded-md border border-current px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-white/40 dark:hover:bg-black/20"
+              className="self-start rounded-md border border-current px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-white/40"
             >
               Return to Cart
             </button>
@@ -951,7 +951,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
             <button
               type="button"
               onClick={backgroundAvailability.retry}
-              className="self-start rounded-md border border-current px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-white/40 dark:hover:bg-black/20"
+              className="self-start rounded-md border border-current px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-white/40"
             >
               Try Again
             </button>
@@ -960,13 +960,13 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
       )}
 
       {!submitError && unsupportedReason && (
-        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300">
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
           {unsupportedReason}
         </p>
       )}
 
       {submitError && (
-        <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+        <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-600">
           {submitError}
         </p>
       )}

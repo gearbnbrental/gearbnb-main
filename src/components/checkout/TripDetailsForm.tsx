@@ -153,7 +153,7 @@ export default function TripDetailsForm() {
       {isDelivery && (
         <label className="flex flex-col gap-1.5">
           <span className="text-sm font-medium text-ink">
-            Delivery Address <span className="text-red-500 dark:text-red-400">*</span>
+            Delivery Address <span className="text-red-500">*</span>
           </span>
           <textarea
             required
@@ -164,11 +164,11 @@ export default function TripDetailsForm() {
             placeholder="House No., Street, Barangay, City"
             className={`resize-none rounded-lg border px-3 py-2.5 text-sm text-ink shadow-sm outline-none transition-colors focus:ring-2 ${
               showAddressError
-                ? 'border-red-400 focus:border-red-500 focus:ring-red-500/20 dark:border-red-500 dark:focus:border-red-400'
+                ? 'border-red-400 focus:border-red-500 focus:ring-red-500/20'
                 : 'border-line focus:border-brand-forest focus:ring-brand-forest/20'
             }`}
           />
-          {showAddressError && <span className="text-xs font-medium text-red-600 dark:text-red-400">Address is required for delivery.</span>}
+          {showAddressError && <span className="text-xs font-medium text-red-600">Address is required for delivery.</span>}
         </label>
       )}
     </div>

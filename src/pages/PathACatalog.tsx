@@ -347,7 +347,7 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color }: Pac
           <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-ink sm:text-base">{kit.name}</h3>
           <div className="flex shrink-0 flex-col items-end gap-1">
             {effectiveIsOutOfStock && (
-              <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700 dark:bg-red-500/10 dark:text-red-400 sm:px-2 sm:text-xs">
+              <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700 sm:px-2 sm:text-xs">
                 Out of Stock
               </span>
             )}
@@ -437,12 +437,12 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color }: Pac
         {isSelected && availability.status === 'unavailable' && availability.issues.length > 0 && (
           <div
             role="alert"
-            className="flex flex-col gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] dark:border-amber-400/30 dark:bg-amber-400/10 sm:px-3 sm:py-2 sm:text-xs"
+            className="flex flex-col gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] sm:px-3 sm:py-2 sm:text-xs"
           >
-            <p className="font-semibold text-amber-800 dark:text-amber-300">
+            <p className="font-semibold text-amber-800">
               Not available for your selected dates
             </p>
-            <ul className="flex flex-col gap-0.5 text-amber-800/90 dark:text-amber-300/90">
+            <ul className="flex flex-col gap-0.5 text-amber-800/90">
               {availability.issues.map((issue) => (
                 <li key={issue.name} className="break-words">
                   {describeAvailabilityIssue(issue)}
@@ -450,7 +450,7 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color }: Pac
                 </li>
               ))}
             </ul>
-            <p className="text-amber-800/90 dark:text-amber-300/90">
+            <p className="text-amber-800/90">
               Adjust the quantity below, or change your dates before checking out.
             </p>
           </div>
@@ -1175,7 +1175,7 @@ export default function PathACatalog() {
                 aria-describedby="guest-count-hint"
                 className={`w-full rounded-xl border bg-surface p-3 text-sm text-ink shadow-sm outline-none transition-colors focus:ring-2 ${
                   guestCountError
-                    ? 'border-red-400 focus:border-red-500 focus:ring-red-500/20 dark:border-red-500'
+                    ? 'border-red-400 focus:border-red-500 focus:ring-red-500/20'
                     : 'border-line focus:border-brand-forest focus:ring-brand-forest/20'
                 }`}
               />
@@ -1320,14 +1320,14 @@ export default function PathACatalog() {
         )}
 
         {catalogState === 'error' && (
-          <div className="flex flex-col items-center gap-3 rounded-xl border border-red-300 bg-red-50 p-6 text-center dark:border-red-500/30 dark:bg-red-500/10">
-            <p className="text-sm text-red-600 dark:text-red-400">
+          <div className="flex flex-col items-center gap-3 rounded-xl border border-red-300 bg-red-50 p-6 text-center">
+            <p className="text-sm text-red-600">
               We couldn't load the package catalog right now. Please try again shortly.
             </p>
             <button
               type="button"
               onClick={retryCatalog}
-              className="rounded-lg border border-red-300 bg-surface px-4 py-2 text-sm font-medium text-red-700 shadow-sm transition-colors hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10"
+              className="rounded-lg border border-red-300 bg-surface px-4 py-2 text-sm font-medium text-red-700 shadow-sm transition-colors hover:bg-red-50"
             >
               Try Again
             </button>

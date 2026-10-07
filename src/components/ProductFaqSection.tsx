@@ -100,7 +100,7 @@ export default function ProductFaqSection({
 }) {
   if (entries.length === 0) return null;
   return (
-    <div className="flex flex-col gap-1 rounded-xl border border-accent/30 bg-accent/5 dark:bg-accent/10">
+    <div className="flex flex-col gap-1 rounded-xl border border-accent/30 bg-accent/5">
       <script
         type="application/ld+json"
         // eslint-disable-next-line react/no-danger

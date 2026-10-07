@@ -12,18 +12,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Camping Gear Rental in the Philippines | GearBnB</title>
     <meta name="description" content="Explore camping gear rental in the Philippines, serving Metro Manila, Las Piñas, and nearby cities. Find quality gear and book for your next adventure." />
-    <script>
-      (function () {
-        // Default is light — only an explicit prior choice (the in-app toggle) turns this dark.
-        // Deliberately does NOT fall back to prefers-color-scheme: a first-time visitor whose OS/
-        // browser reports a dark preference must still see the site's intended light-mode default,
-        // not have that decision made for them by an unrelated system setting they never chose
-        // inside this app. Runs before <body> renders so there's no flash of the wrong theme.
-        if (localStorage.getItem('gearbnb-theme') === 'dark') {
-          document.documentElement.classList.add('dark');
-        }
-      })();
-    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -197,7 +197,7 @@ export function QuantityStepper({ value, max, disabled, ariaLabel, onChange, com
         </button>
       </div>
       {error && (
-        <span role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+        <span role="alert" className="text-xs font-medium text-red-600">
           {error}
         </span>
       )}
@@ -880,26 +880,26 @@ export default function PathBCatalog() {
           </p>
         )}
         {isUnlocked && byoAvailability === 'error' && (
-          <div className="flex flex-col items-start gap-2 rounded-xl border border-red-300 bg-red-50 p-4 text-sm dark:border-red-500/30 dark:bg-red-500/10">
-            <p className="font-semibold text-red-700 dark:text-red-400">Couldn't check availability</p>
-            <p className="text-red-700/90 dark:text-red-400/90">
+          <div className="flex flex-col items-start gap-2 rounded-xl border border-red-300 bg-red-50 p-4 text-sm">
+            <p className="font-semibold text-red-700">Couldn't check availability</p>
+            <p className="text-red-700/90">
               We couldn't verify your selected gear's availability just now. Please try again before checking out.
             </p>
             <button
               type="button"
               onClick={retryByoAvailability}
-              className="rounded-lg border border-red-300 bg-surface px-3 py-1.5 text-xs font-medium text-red-700 shadow-sm transition-colors hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10"
+              className="rounded-lg border border-red-300 bg-surface px-3 py-1.5 text-xs font-medium text-red-700 shadow-sm transition-colors hover:bg-red-50"
             >
               Try again
             </button>
           </div>
         )}
         {isUnlocked && byoAvailability && byoAvailability !== 'checking' && byoAvailability !== 'error' && !byoAvailability.available && (
-          <div className="flex flex-col gap-1 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm dark:border-amber-400/30 dark:bg-amber-400/10">
-            <p className="font-semibold text-amber-800 dark:text-amber-300">
+          <div className="flex flex-col gap-1 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">
+            <p className="font-semibold text-amber-800">
               Some of your selected gear isn't available for these dates
             </p>
-            <p className="text-amber-800/90 dark:text-amber-300/90">
+            <p className="text-amber-800/90">
               {byoAvailability.issues.map((issue) => cleanGearName(issue.name, { keepColor: true })).join(', ')}, adjust the quantity, remove it, or
               change your dates before checking out.
             </p>
@@ -911,14 +911,14 @@ export default function PathBCatalog() {
          * twice over (once by that wrapper, once more by the "select duration" overlay sitting on
          * top of it) into something a customer could easily miss entirely. */}
         {gearCatalogState === 'error' && (
-          <div className="flex flex-col items-center gap-3 rounded-xl border border-red-300 bg-red-50 p-6 text-center dark:border-red-500/30 dark:bg-red-500/10">
-            <p className="text-sm text-red-600 dark:text-red-400">
+          <div className="flex flex-col items-center gap-3 rounded-xl border border-red-300 bg-red-50 p-6 text-center">
+            <p className="text-sm text-red-600">
               We couldn't load the Build Your Own catalog right now. Please try again shortly.
             </p>
             <button
               type="button"
               onClick={retryGearCatalog}
-              className="rounded-lg border border-red-300 bg-surface px-4 py-2 text-sm font-medium text-red-700 shadow-sm transition-colors hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10"
+              className="rounded-lg border border-red-300 bg-surface px-4 py-2 text-sm font-medium text-red-700 shadow-sm transition-colors hover:bg-red-50"
             >
               Try Again
             </button>

@@ -55,17 +55,17 @@ type FetchState =
  *  in-progress/informational. CANCELLED keeps its own red — it isn't any of those three things,
  *  and folding it into amber or gray would make a dead booking look actionable or merely quiet. */
 const STATUS_STYLES: Record<string, string> = {
-  PENDING_REVIEW: 'bg-amber-100 text-amber-800 dark:bg-amber-400/10 dark:text-amber-300',
-  AWAITING_CUSTOMER_RESPONSE: 'bg-amber-100 text-amber-800 dark:bg-amber-400/10 dark:text-amber-300',
-  AWAITING_PAYMENT: 'bg-amber-100 text-amber-800 dark:bg-amber-400/10 dark:text-amber-300',
-  PENDING_FOR_INSPECTION: 'bg-amber-100 text-amber-800 dark:bg-amber-400/10 dark:text-amber-300',
-  RESERVED: 'bg-blue-100 text-blue-800 dark:bg-blue-400/10 dark:text-blue-300',
-  READY_FOR_PICKUP: 'bg-blue-100 text-blue-800 dark:bg-blue-400/10 dark:text-blue-300',
-  RENTED: 'bg-blue-100 text-blue-800 dark:bg-blue-400/10 dark:text-blue-300',
+  PENDING_REVIEW: 'bg-amber-100 text-amber-800',
+  AWAITING_CUSTOMER_RESPONSE: 'bg-amber-100 text-amber-800',
+  AWAITING_PAYMENT: 'bg-amber-100 text-amber-800',
+  PENDING_FOR_INSPECTION: 'bg-amber-100 text-amber-800',
+  RESERVED: 'bg-blue-100 text-blue-800',
+  READY_FOR_PICKUP: 'bg-blue-100 text-blue-800',
+  RENTED: 'bg-blue-100 text-blue-800',
   COMPLETED: 'bg-brand-forest/10 text-accent',
   RETURNED: 'bg-brand-forest/10 text-accent',
-  OVERDUE_FOR_RETURN: 'bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400',
-  CANCELLED: 'bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400',
+  OVERDUE_FOR_RETURN: 'bg-red-100 text-red-700',
+  CANCELLED: 'bg-red-100 text-red-700',
 };
 
 /** Booking statuses that no longer need the customer's attention — grouped under a collapsed
@@ -240,9 +240,9 @@ type Tone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
 
 const TONE_STYLES: Record<Tone, string> = {
   success: 'border-brand-forest/30 bg-brand-forest/10 text-accent',
-  warning: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300',
-  danger: 'border-red-300 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400',
-  info: 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-400/30 dark:bg-blue-400/10 dark:text-blue-300',
+  warning: 'border-amber-200 bg-amber-50 text-amber-800',
+  danger: 'border-red-300 bg-red-50 text-red-700',
+  info: 'border-blue-200 bg-blue-50 text-blue-800',
   neutral: 'border-line-soft bg-surface-muted text-ink-muted',
 };
 
@@ -523,7 +523,7 @@ function BookingProgress({ status, blocked }: { status: string; blocked: boolean
                 ? 'border-brand-forest/40 bg-brand-forest/10 text-accent'
                 : 'border-line bg-surface text-ink-faint';
           const labelClass = isBlocked
-            ? 'font-semibold text-red-700 dark:text-red-400'
+            ? 'font-semibold text-red-700'
             : isCurrent
               ? 'font-semibold text-ink'
               : isDone
@@ -654,7 +654,7 @@ function CollapsedSummary({ booking }: { booking: RmsMyBooking }) {
         </>
       )}
       {booking.damageReports && booking.damageReports.length > 0 && (
-        <div className="flex items-start gap-2 text-amber-700 dark:text-amber-300">
+        <div className="flex items-start gap-2 text-amber-700">
           <AlertTriangleIcon className="mt-0.5 h-4 w-4 shrink-0" />
           <dt className="sr-only">Gear inspection</dt>
           <dd className="min-w-0 break-words font-medium">Gear Inspection Update</dd>
@@ -973,15 +973,15 @@ function AdditionalChargesPanel({
                   {state === 'waived' && <p className="text-xs font-medium text-ink-muted">Waived</p>}
                   {state === 'reversed' && <p className="text-xs font-medium text-ink-muted">Reversed</p>}
                   {state === 'payable' && (
-                    <p className="text-xs font-medium text-amber-700 dark:text-amber-300">Pending Payment</p>
+                    <p className="text-xs font-medium text-amber-700">Pending Payment</p>
                   )}
                   {state === 'pending_review' && (
-                    <p className="text-xs font-medium text-amber-700 dark:text-amber-300">Payment Proof Under Review</p>
+                    <p className="text-xs font-medium text-amber-700">Payment Proof Under Review</p>
                   )}
                   {state === 'approved' && <p className="text-xs font-medium text-accent">Payment Approved</p>}
                   {state === 'rejected' && (
                     <div className="flex flex-col gap-1">
-                      <p className="text-xs font-medium text-red-600 dark:text-red-400">Payment Proof Rejected</p>
+                      <p className="text-xs font-medium text-red-600">Payment Proof Rejected</p>
                       {c.paymentProof?.reviewNote && <p className="text-xs text-ink-muted">{c.paymentProof.reviewNote}</p>}
                     </div>
                   )}
@@ -1041,11 +1041,11 @@ function GearInspectionPanel({ bookingId, reports }: { bookingId: string; report
   return (
     <div
       id={`gear-inspection-${bookingId}`}
-      className="flex scroll-mt-4 flex-col gap-3 rounded-xl border-2 border-amber-300 bg-amber-50 p-4 dark:border-amber-400/50 dark:bg-amber-400/10 sm:p-5"
+      className="flex scroll-mt-4 flex-col gap-3 rounded-xl border-2 border-amber-300 bg-amber-50 p-4 sm:p-5"
     >
       <div className="flex items-center gap-2">
-        <AlertTriangleIcon className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300" />
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
+        <AlertTriangleIcon className="h-4 w-4 shrink-0 text-amber-700" />
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-amber-800">
           Gear Inspection, Issue Reported
         </h3>
       </div>
@@ -1094,42 +1094,42 @@ function ReturnSettlementPanel({
   const isFullyCovered = settlement.excessChargeCentavos <= 0 && settlement.balanceDueCentavos <= 0;
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border-2 border-amber-300 bg-amber-50 p-4 dark:border-amber-400/50 dark:bg-amber-400/10 sm:p-5">
+    <div className="flex flex-col gap-3 rounded-xl border-2 border-amber-300 bg-amber-50 p-4 sm:p-5">
       <div className="flex items-center gap-2">
-        <ShieldCheckIcon className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300" />
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
+        <ShieldCheckIcon className="h-4 w-4 shrink-0 text-amber-700" />
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-amber-800">
           Return Settlement
         </h3>
       </div>
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
-        <dt className="text-amber-800/80 dark:text-amber-300/80">Return Issue</dt>
-        <dd className="text-right font-medium text-amber-900 dark:text-amber-200">
+        <dt className="text-amber-800/80">Return Issue</dt>
+        <dd className="text-right font-medium text-amber-900">
           {formatCurrency(settlement.issueAmountCentavos / 100)}
         </dd>
 
-        <dt className="text-amber-800/80 dark:text-amber-300/80">Covered by Security Deposit</dt>
-        <dd className="text-right font-medium text-amber-900 dark:text-amber-200">
+        <dt className="text-amber-800/80">Covered by Security Deposit</dt>
+        <dd className="text-right font-medium text-amber-900">
           {formatCurrency(settlement.depositAppliedCentavos / 100)}
         </dd>
 
-        <dt className="text-amber-800/80 dark:text-amber-300/80">Security Deposit Retained</dt>
-        <dd className="text-right font-medium text-amber-900 dark:text-amber-200">
+        <dt className="text-amber-800/80">Security Deposit Retained</dt>
+        <dd className="text-right font-medium text-amber-900">
           {formatCurrency(settlement.depositAppliedCentavos / 100)}
         </dd>
 
-        <dt className="text-amber-800/80 dark:text-amber-300/80">Security Deposit Refunded</dt>
-        <dd className="text-right font-medium text-amber-900 dark:text-amber-200">
+        <dt className="text-amber-800/80">Security Deposit Refunded</dt>
+        <dd className="text-right font-medium text-amber-900">
           {formatCurrency(settlement.refundCentavos / 100)}
         </dd>
       </dl>
 
-      <div className="flex items-center justify-between border-t border-amber-300/60 pt-2.5 dark:border-amber-400/30">
-        <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+      <div className="flex items-center justify-between border-t border-amber-300/60 pt-2.5">
+        <p className="text-sm font-semibold text-amber-900">
           {isFullyCovered ? 'No Additional Balance Due' : 'Additional Amount Due, Return Issue'}
         </p>
         {!isFullyCovered && (
-          <p className="text-base font-bold text-amber-900 dark:text-amber-200">
+          <p className="text-base font-bold text-amber-900">
             {formatCurrency(settlement.balanceDueCentavos / 100)}
           </p>
         )}
@@ -1139,7 +1139,7 @@ function ReturnSettlementPanel({
           never asserts a relationship that isn't actually there. Reworded, never duplicated: the
           amount itself is only ever shown once, in AdditionalChargesPanel further down this card. */}
       {!isFullyCovered && hasAdditionalCharges && (
-        <p className="text-xs text-amber-800/80 dark:text-amber-300/80">
+        <p className="text-xs text-amber-800/80">
           This is the same amount shown in Additional Charges below, the remaining return-issue
           amount after your security deposit was applied, not a second, separate charge.
         </p>
@@ -1517,13 +1517,13 @@ function SummaryTile({ label, value, tone }: { label: string; value: number; ton
     <div
       className={`flex flex-col gap-0.5 rounded-xl border p-2.5 sm:p-3 ${
         isAttention
-          ? 'border-red-300 bg-red-50 ring-1 ring-red-300 dark:border-red-500/40 dark:bg-red-500/10 dark:ring-red-500/40'
+          ? 'border-red-300 bg-red-50 ring-1 ring-red-300'
           : 'border-line bg-surface'
       }`}
     >
       <span
         className={`text-xl font-bold ${
-          isAttention ? 'text-red-700 dark:text-red-400' : isEmpty ? 'text-ink-faint' : 'text-ink'
+          isAttention ? 'text-red-700' : isEmpty ? 'text-ink-faint' : 'text-ink'
         }`}
       >
         {value}
@@ -1565,8 +1565,8 @@ function ActionRequiredPanel({
   }
 
   return (
-    <div className="flex flex-col gap-2.5 rounded-xl border-2 border-red-300 bg-red-50 p-3.5 dark:border-red-500/40 dark:bg-red-500/10 sm:gap-3 sm:p-5">
-      <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-red-800 dark:text-red-300">
+    <div className="flex flex-col gap-2.5 rounded-xl border-2 border-red-300 bg-red-50 p-3.5 sm:gap-3 sm:p-5">
+      <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-red-800">
         <AlertTriangleIcon className="h-4 w-4 shrink-0" />
         Action Required ({items.length})
       </h2>
@@ -1669,7 +1669,7 @@ function PaymentSummary({ booking }: { booking: RmsMyBooking }) {
         badge={
           paymentStatusLabel && (
             <span
-              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${rentalFee?.status === 'PAID' ? 'bg-brand-forest/10 text-accent' : 'bg-amber-100 text-amber-800 dark:bg-amber-400/10 dark:text-amber-300'}`}
+              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${rentalFee?.status === 'PAID' ? 'bg-brand-forest/10 text-accent' : 'bg-amber-100 text-amber-800'}`}
             >
               {paymentStatusLabel}
             </span>
@@ -1683,11 +1683,11 @@ function PaymentSummary({ booking }: { booking: RmsMyBooking }) {
       {rentalFee && (
         <div
           className={`flex items-center justify-between rounded-lg px-3 py-2.5 ${
-            hasBalanceDue ? 'bg-amber-50 dark:bg-amber-400/10' : 'bg-brand-forest/10'
+            hasBalanceDue ? 'bg-amber-50' : 'bg-brand-forest/10'
           }`}
         >
           <div>
-            <span className={`text-sm font-medium ${hasBalanceDue ? 'text-amber-800 dark:text-amber-300' : 'text-accent'}`}>
+            <span className={`text-sm font-medium ${hasBalanceDue ? 'text-amber-800' : 'text-accent'}`}>
               Balance
             </span>
             {!hasBalanceDue && (
@@ -1696,7 +1696,7 @@ function PaymentSummary({ booking }: { booking: RmsMyBooking }) {
               </span>
             )}
           </div>
-          <span className={`text-xl font-bold ${hasBalanceDue ? 'text-amber-800 dark:text-amber-300' : 'text-accent'}`}>
+          <span className={`text-xl font-bold ${hasBalanceDue ? 'text-amber-800' : 'text-accent'}`}>
             {formatCurrency(rentalFee.outstandingCentavos / 100)}
           </span>
         </div>
@@ -2164,7 +2164,7 @@ export default function MyBookings() {
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="font-serif text-xl font-semibold text-ink">My Bookings</h1>
             {attentionCount > 0 && (
-              <span className="flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700 dark:bg-red-500/10 dark:text-red-400">
+              <span className="flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">
                 <AlertTriangleIcon className="h-3 w-3" />
                 {attentionCount} need{attentionCount === 1 ? 's' : ''} attention
               </span>
@@ -2239,12 +2239,12 @@ export default function MyBookings() {
       )}
 
       {state.kind === 'error' && (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-red-300 bg-red-50 p-6 text-center dark:border-red-500/30 dark:bg-red-500/10">
-          <p className="text-sm text-red-600 dark:text-red-400">{state.message}</p>
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-red-300 bg-red-50 p-6 text-center">
+          <p className="text-sm text-red-600">{state.message}</p>
           <button
             type="button"
             onClick={handleRefresh}
-            className="rounded-lg border border-red-300 bg-surface px-4 py-2 text-sm font-medium text-red-700 shadow-sm transition-colors hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10"
+            className="rounded-lg border border-red-300 bg-surface px-4 py-2 text-sm font-medium text-red-700 shadow-sm transition-colors hover:bg-red-50"
           >
             Try Again
           </button>

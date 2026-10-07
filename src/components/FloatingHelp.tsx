@@ -138,7 +138,7 @@ export default function FloatingHelp() {
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="TikTok (opens in a new tab)"
-                className="flex items-center justify-center gap-2 rounded-full bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm transition-transform hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0 dark:bg-black"
+                className="flex items-center justify-center gap-2 rounded-full bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm transition-transform hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
               >
                 <TikTokIcon className="h-4.5 w-4.5" />
                 TikTok

@@ -56,7 +56,7 @@ export default function PasswordInput({
         aria-invalid={invalid || undefined}
         className={
           invalid
-            ? `${INPUT_CLASS} border-red-400 focus:border-red-500 focus:ring-red-500/20 dark:border-red-500`
+            ? `${INPUT_CLASS} border-red-400 focus:border-red-500 focus:ring-red-500/20`
             : INPUT_CLASS
         }
       />
