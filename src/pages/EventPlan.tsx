@@ -2,7 +2,6 @@
 import { PAGE_META } from '../config/pageMeta';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import BirSealBadge from '../components/BirSealBadge';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { CheckCircleIcon, CheckIcon } from '../components/icons';
 import { useAuth } from '../context/AuthContext';
@@ -441,10 +440,6 @@ export default function EventPlan() {
         onConfirm={performSubmit}
       />
     </form>
-
-    {/* Business customers (team buildings, company outings) are the main audience here, so the
-        BIR seal sits right under the inquiry form as proof of a registered, compliant business. */}
-    <BirSealBadge className="mt-6" />
     </div>
   );
 }

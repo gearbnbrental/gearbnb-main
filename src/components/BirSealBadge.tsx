@@ -3,8 +3,7 @@
  * businesses with an online presence. Cropped from the BIR-issued badge (header and reminder
  * text removed). Kept on a white plate so the QR code has a light quiet zone to scan.
  *
- * Shown on About Us (below the map) and Plan an Event (below the inquiry form, where business
- * customers are most likely to look for proof of registration).
+ * Shown on About Us, below the map.
  */
 export default function BirSealBadge({ className = '' }: { className?: string }) {
   return (
