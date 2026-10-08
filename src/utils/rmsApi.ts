@@ -343,6 +343,10 @@ export interface RmsBookingSubmission {
     byoAgreementAccepted?: true;
     estimatedRentalFeeCentavos: number;
     estimatedDepositCentavos: number;
+    /** The promo saving the site displayed (0 when none), in centavos. The RMS only compares it
+     *  with its own figure and flags a mismatch for staff; it never trusts or charges from it.
+     *  Always separate from estimatedRentalFeeCentavos, which stays the normal, pre-discount fee. */
+    estimatedDiscountCentavos?: number;
   };
   verificationDocuments: { kind: string; storagePath: string }[];
 }
@@ -360,6 +364,9 @@ export interface RmsBookingResult {
   status: string;
   rentalFeeCentavos: number;
   depositCentavos: number;
+  /** What the RMS actually discounted this booking by (0 when nothing). Optional defensively: an
+   *  older RMS response won't carry it. */
+  discountCentavos?: number;
 }
 
 export function submitBookingToRms(payload: RmsBookingSubmission, idempotencyKey: string) {
@@ -449,6 +456,17 @@ export interface RmsRentalFee {
   proofStatus?: DepositProofStatus;
   reviewNote?: string | null;
   amountClaimedCentavos?: number | null;
+  /** The rental fee before any discount, and the discount taken off it. `dueCentavos` above is
+   *  already after the discount. Optional defensively, for an older RMS response. */
+  beforeDiscountCentavos?: number;
+  discountCentavos?: number;
+}
+
+/** A discount applied to a booking: an automatic promo, or one staff set by hand ("Discount"). */
+export interface RmsBookingDiscount {
+  savedCentavos: number;
+  source: 'PROMO' | 'MANUAL';
+  label: string;
 }
 
 /** Matches the RMS's VerificationDocumentStatus enum exactly (prisma/schema.prisma). */
@@ -577,6 +595,8 @@ export interface RmsMyBooking {
    * response predating this field — treated the same as `null` (no section), never crashes, never
    * fabricates a settlement. See RmsReturnSettlement's own doc comment for the individual fields. */
   returnSettlement?: RmsReturnSettlement | null;
+  /** `null` when the booking has no discount; absent on an older RMS response (treated the same). */
+  discount?: RmsBookingDiscount | null;
 }
 
 /** Read-only — safe to retry a transient failure (see withReadRetry). Never used for a mutation. */
@@ -1069,4 +1089,62 @@ export async function checkAvailability(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** The RMS's site-wide automatic promo, as published to customers. Amounts are centavos and the
+ *  percentage is basis points (1500 = 15%). See src/utils/promo.ts for how the site reads it. */
+export interface RmsPublicPromo {
+  discountType: 'PERCENT' | 'FLAT';
+  percentOffBasisPoints: number;
+  flatOffCentavos: number;
+  /** Per-unit cap on a percent discount; null = no cap. Always null for a flat promo. */
+  capCentavos: number | null;
+  /** Checked against the NORMAL price of covered gear only, before any discount. */
+  minSpendCentavos: number;
+  firstTimeRentersOnly: boolean;
+  termsText: string | null;
+  /** "PACKAGES" plus any of the ten gear category keys (see PROMO_CATEGORY_SCOPE_KEYS). */
+  scopeKeys: string[];
+  /** Last moment a customer can BOOK and still get the discount; null = no booking deadline. */
+  endsAt: string | null;
+  /** Rental window: the discount only covers a trip whose PICKUP falls inside it. Either end may
+   *  be null (open). */
+  tripStartsAt: string | null;
+  tripEndsAt: string | null;
+}
+
+export interface RmsPublicPromoResponse {
+  promo: RmsPublicPromo | null;
+  /** Only sent for a signed-in customer on a first-time-only promo. false = returning renter. */
+  eligibleForYou?: boolean;
+}
+
+export type RmsPromoEligibility = 'ELIGIBLE' | 'NOT_ELIGIBLE' | 'SIGN_IN_TO_CONFIRM' | 'NOT_REQUIRED';
+export type RmsPromoQuoteReason = 'NO_PROMO' | 'OUTSIDE_TRIP_WINDOW' | 'NOT_IN_SCOPE' | 'MIN_SPEND_NOT_MET' | 'NOT_FIRST_TIME';
+
+/** The RMS's authoritative "what would this basket save" answer. */
+export interface RmsPromoQuote {
+  applied: boolean;
+  reason: RmsPromoQuoteReason | null;
+  eligibility: RmsPromoEligibility;
+  offerLabel: string | null;
+  rentalFeeCentavos: number;
+  addOnTotalCentavos: number;
+  subtotalCentavos: number;
+  discountCentavos: number;
+  totalAfterDiscountCentavos: number;
+  remainingToQualifyCentavos: number | null;
+}
+
+/** The live promo, if any. Public; the customer's token is attached automatically when signed in,
+ *  which is what makes the RMS add `eligibleForYou`. No automatic retry: the caller treats any
+ *  failure as "no promo" and simply asks again later. */
+export function fetchPublicPromo(signal?: AbortSignal) {
+  return rmsFetch<RmsPublicPromoResponse>('/api/customer/promo', { requireAuth: false, signal });
+}
+
+/** Quote for one basket, same body as the availability check. Public (token attached when signed
+ *  in). Rate limited by the RMS, so callers debounce it and never retry automatically. */
+export function fetchPromoQuote(input: RmsAvailabilityRequest, signal?: AbortSignal) {
+  return rmsFetch<RmsPromoQuote>('/api/customer/promo/quote', { method: 'POST', body: input, requireAuth: false, signal });
 }

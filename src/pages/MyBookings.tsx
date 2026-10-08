@@ -30,8 +30,10 @@ import {
   type RmsRentalFee,
   type RmsReturnSettlement,
   type RmsVerificationDocumentKind,
+  type RmsBookingDiscount,
 } from '../utils/rmsApi';
 import { formatCurrency } from '../utils/format';
+import BookingDiscountSummary from '../components/promo/BookingDiscountSummary';
 import { BUSINESS_TIME_ZONE } from '../utils/duration';
 import { MESSENGER_URL } from '../config/social';
 import { cleanGearName } from '../utils/gearName';
@@ -781,11 +783,14 @@ function TripSummaryStrip({ booking }: { booking: RmsMyBooking }) {
 function RentalFeeSummary({
   bookingId,
   rentalFee,
+  discount,
   onRentalFeeProofSubmitted,
   readOnly,
 }: {
   bookingId: string;
   rentalFee: RmsRentalFee;
+  /** The booking's discount (promo or set by staff), when it has one. */
+  discount?: RmsBookingDiscount | null;
   onRentalFeeProofSubmitted: () => void;
   /** True once the parent booking has reached a terminal status (COMPLETED/CANCELLED) — forwarded
    *  straight to RentalFeeProofUpload; see that component's own doc comment on its `readOnly` prop. */
@@ -801,6 +806,9 @@ function RentalFeeSummary({
         <p className="text-2xl font-bold text-ink">{formatCurrency(rentalFee.dueCentavos / 100)}</p>
         <p className="text-xs text-ink-faint">Amount Due</p>
       </div>
+
+      {/* Straight from the RMS: the fee before the discount and the discount itself. */}
+      <BookingDiscountSummary discount={discount} rentalFee={rentalFee} />
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
         <dt className="text-ink-muted">Amount Paid</dt>
@@ -1453,6 +1461,7 @@ function BookingCard({
               <RentalFeeSummary
                 bookingId={booking.bookingId}
                 rentalFee={booking.rentalFee}
+                discount={booking.discount}
                 onRentalFeeProofSubmitted={onRentalFeeProofSubmitted}
                 readOnly={isTerminalBooking(booking)}
               />

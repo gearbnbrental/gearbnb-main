@@ -7,6 +7,7 @@ import Footer from './components/Footer';
 import Navbar from './components/Navbar';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CatalogProvider } from './context/CatalogContext';
+import { PromoProvider } from './context/PromoContext';
 import { RentalProvider } from './context/RentalContext';
 
 // LandingPage stays a static import because it is the entry route for a typical first visit.
@@ -122,6 +123,7 @@ function App() {
       <CatalogProvider>
         <RentalProvider>
           <BrowserRouter>
+            <PromoProvider>
             <div className="min-h-screen">
               <VerificationGate />
               <ScrollToTop />
@@ -186,6 +188,7 @@ function App() {
               <BackToTop />
               <FloatingHelp />
             </div>
+            </PromoProvider>
           </BrowserRouter>
         </RentalProvider>
       </CatalogProvider>

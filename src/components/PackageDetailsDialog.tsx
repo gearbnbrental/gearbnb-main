@@ -2,6 +2,11 @@
 import { useCatalog } from '../context/useCatalog';
 import type { BookableGearKind, PackageComponent } from '../types/gearbnb';
 import { formatCurrency } from '../utils/format';
+import { usePromo } from '../context/PromoContext';
+import { useRental } from '../context/RentalContext';
+import { formatCentavos, formatPromoOffer, packageCardPromo, pesosToCentavos } from '../utils/promo';
+import { promoPickupAt } from '../utils/promoCart';
+import OffBadge from './promo/OffBadge';
 import { splitBestForLine } from '../utils/bestForLine';
 import { classifyComponent, matchComponentToGearKind } from '../utils/packageComponents';
 import { buildFaqLinkTargets } from '../utils/faqLinks';
@@ -104,6 +109,18 @@ export default function PackageDetailsDialog({
   onClose,
 }: PackageDetailsDialogProps) {
   const { gearKinds } = useCatalog();
+  // Same promo rule as the package card, for each price tier: discounted once the promo covers
+  // packages and the tier meets the minimum, unless a start date outside the promo's dates is set.
+  const { promo, eligibleForYou, nowMs } = usePromo();
+  const { cart } = useRental();
+  const pickupAt = cart.tripDetails.startDate ? promoPickupAt(cart.tripDetails) : null;
+  const tierPromo = (pesos: number) => {
+    const result = packageCardPromo(promo, eligibleForYou, pesosToCentavos(pesos), pickupAt, nowMs);
+    return result?.kind === 'discounted' ? result : null;
+  };
+  const promo48 = tierPromo(pricing['48h']);
+  const promo72 = tierPromo(pricing['72h']);
+  const badgePromo = promo48?.promo ?? promo72?.promo ?? null;
   const gallery: LightboxImage[] = [...(imageUrl ? [imageUrl] : []), ...(images ?? [])]
     .filter((src, index, all) => all.indexOf(src) === index)
     .map((src) => ({ src, alt: name }));
@@ -237,7 +254,10 @@ export default function PackageDetailsDialog({
         <div className="flex flex-col gap-4 p-5 sm:p-6">
           <div className="flex flex-col gap-1">
             <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Package{paxRange ? ` · ${paxRange}` : ''}</p>
-            <h2 className="font-serif text-xl font-bold text-ink sm:text-2xl">{name}</h2>
+            <h2 className="flex flex-wrap items-center gap-x-2 gap-y-1 font-serif text-xl font-bold text-ink sm:text-2xl">
+              {name}
+              {badgePromo && <OffBadge offer={formatPromoOffer(badgePromo)} size="large" className="my-1" />}
+            </h2>
             {bestFor && <p className="-mt-1 text-sm font-semibold text-accent">Best {lead} {bestFor}</p>}
           </div>
 
@@ -285,11 +305,28 @@ export default function PackageDetailsDialog({
 
           <div className="flex items-center justify-between gap-3 rounded-xl bg-surface-muted p-3">
             <div>
-              <p className="text-lg font-bold text-accent">
-                {formatCurrency(pricing['48h'])}
-                <span className="text-sm font-normal text-ink-muted"> / 48h</span>
-              </p>
-              <p className="text-xs text-ink-muted">{formatCurrency(pricing['72h'])} / 72h</p>
+              {/* With the promo: normal price crossed off, discounted price right beside it, per
+                  tier. Without it: exactly the plain prices from before. */}
+              {promo48 ? (
+                <p className="flex flex-wrap items-baseline gap-x-1.5 text-lg font-bold text-ink">
+                  <s className="text-sm font-medium text-ink-faint">{formatCurrency(pricing['48h'])}</s>
+                  {formatCentavos(promo48.nowCentavos)}
+                  <span className="text-sm font-normal text-ink-muted">/ 48h</span>
+                </p>
+              ) : (
+                <p className="text-lg font-bold text-accent">
+                  {formatCurrency(pricing['48h'])}
+                  <span className="text-sm font-normal text-ink-muted"> / 48h</span>
+                </p>
+              )}
+              {promo72 ? (
+                <p className="flex flex-wrap items-baseline gap-x-1 text-xs text-ink-muted">
+                  <s className="text-ink-faint">{formatCurrency(pricing['72h'])}</s>
+                  <span className="font-semibold text-ink">{formatCentavos(promo72.nowCentavos)}</span> / 72h
+                </p>
+              ) : (
+                <p className="text-xs text-ink-muted">{formatCurrency(pricing['72h'])} / 72h</p>
+              )}
             </div>
             <div className="text-right">
               <p className="text-[10px] uppercase tracking-wide text-ink-faint">Deposit</p>

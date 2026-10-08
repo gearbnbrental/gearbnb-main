@@ -13,6 +13,8 @@ import {
 import { QuantityStepper } from './PathBCatalog';
 import { formatCurrency } from '../utils/format';
 import { cleanGearName } from '../utils/gearName';
+import { useBasketPromo } from '../hooks/useBasketPromo';
+import { BarPromoNote, BarRentalFee } from '../components/promo/PromoTotals';
 
 function CheckboxInput({
   checked,
@@ -132,6 +134,7 @@ export default function Cart() {
     dismissRemovedNotice,
     totals,
   } = useRental();
+  const basketPromo = useBasketPromo();
   const { selectedKits, selectedItems, kitExtras, packageAddOns, byoGears, byoAddOns, checkoutSelection, removedItemNames } =
     cart;
   const hasSelection = selectedKits.length > 0 || selectedItems.length > 0 || byoGears.length > 0;
@@ -480,11 +483,12 @@ export default function Cart() {
               <span className="text-sm font-semibold text-ink">
                 Deposit {isByoOnly ? 'To Be Determined' : formatCurrency(totals.dueToday)}
                 <span className="mx-1.5 text-ink-faint">&bull;</span>
-                Rental Fee {formatCurrency(totals.dueBeforeStart)}
+                <BarRentalFee normalPesos={totals.dueBeforeStart} state={basketPromo} />
               </span>
             ) : (
               <span className="text-sm text-ink-muted">Check at least one item above to continue.</span>
             )}
+            {hasCheckedForCheckout && <BarPromoNote state={basketPromo} />}
           </div>
           {hasCheckedForCheckout ? (
             // A plain <Link> would take a guest straight into the checkout form before they know

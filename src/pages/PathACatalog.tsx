@@ -37,6 +37,17 @@ import { formatCurrency } from '../utils/format';
 import { toRmsBrand, type RmsAvailabilityIssue, type RmsAvailabilityRequest, type RmsBookingGearLine } from '../utils/rmsApi';
 import { useAvailabilityCheck } from '../hooks/useAvailabilityCheck';
 import { cleanGearName } from '../utils/gearName';
+import { usePromo } from '../context/PromoContext';
+import { useBasketPromo } from '../hooks/useBasketPromo';
+import { BarPromoNote, BarRentalFee } from '../components/promo/PromoTotals';
+import ByoPromoProgress from '../components/promo/ByoPromoProgress';
+import OffBadge from '../components/promo/OffBadge';
+import { PROMO_COPY } from '../config/promoCopy';
+import { formatCentavos, formatPromoOffer, packageCardPromo, pesosToCentavos } from '../utils/promo';
+import { gearCardPromoNote, gearCardPromoSaving } from '../utils/promoDisplay';
+import YouSaveLine from '../components/promo/YouSaveLine';
+import GearPriceBlock from '../components/promo/GearPriceBlock';
+import { promoPickupAt } from '../utils/promoCart';
 import { describeAvailabilityIssue } from '../utils/availabilityIssue';
 
 type PackageDuration = Extract<DurationPresetId, '48h' | '72h'>;
@@ -189,6 +200,17 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color }: Pac
   // here; it never falls back to guessed content.
   const { lead, bestFor } = splitBestForLine(effectiveDescription);
   const price = selectedDuration ? effectivePricing[selectedDuration] : null;
+  // The promo's view of this card's own price, for the chosen duration: a struck-through normal
+  // price next to the discounted one only when a pickup date is chosen and every promo condition
+  // holds (see packageCardPromo); otherwise at most a small neutral tag.
+  const { promo, eligibleForYou, nowMs } = usePromo();
+  const cardPromo = packageCardPromo(
+    promo,
+    eligibleForYou,
+    price === null ? null : pesosToCentavos(price),
+    dateRange ? promoPickupAt(cart.tripDetails) : null,
+    nowMs,
+  );
 
   // Real, date-scoped availability — checked against the RMS's actual inventory/assignment data,
   // never computed locally. Each card owns its own useAvailabilityCheck instance; the shared
@@ -403,16 +425,47 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color }: Pac
       </div>
 
       <div className="mt-2.5 flex flex-col gap-2 sm:mt-5 sm:gap-3">
-        <div className="flex items-center justify-between border-t border-line-soft pt-2 sm:pt-3">
-          {/* This row is already side-by-side (price left, deposit right) at every width — unlike
-              the BYO gear card, there's no button sharing this row to squeeze against, so the
-              72h-upsell/extra-day-rate hints below only ever needed `min-w-0` to wrap safely, never
+        <div className="flex flex-col gap-2 border-t border-line-soft pt-2 sm:flex-row sm:items-center sm:justify-between sm:gap-0 sm:pt-3">
+          {/* Side by side (price left, deposit right) from `sm` up. Below `sm` the deposit gets its
+              own row under the price: in the 2-column phone grid a card is only ~150px wide, and
+              the price stack (crossed-off price, discounted price, "You save", promo tag) had the
+              deposit squeezed against it. The 72h-upsell/extra-day-rate hints below only need
+              `min-w-0` to wrap safely, never
               hiding on mobile. */}
-          <div className="min-w-0">
+          <div className="flex min-w-0 flex-col gap-1">
             <p className="text-[10px] uppercase tracking-wide text-ink-faint sm:text-xs">Package Price</p>
-            <p className="text-sm font-bold text-ink sm:text-lg">
-              {price !== null ? formatCurrency(price) : `${formatCurrency(effectivePricing['48h'])}–${formatCurrency(effectivePricing['72h'])}`}
-            </p>
+            {cardPromo?.kind === 'discounted' ? (
+              <>
+                {/* Desktop: all on one line. Phone: the crossed-off price takes its own line
+                    (basis-full) so the discounted price and the badge fit side by side. */}
+                <p className="flex flex-wrap items-baseline gap-x-1.5">
+                  <s className="basis-full text-xs font-medium text-ink-faint sm:basis-auto sm:text-sm">{formatCentavos(cardPromo.normalCentavos)}</s>
+                  <span className="text-sm font-bold text-ink sm:text-lg">{formatCentavos(cardPromo.nowCentavos)}</span>
+                  <OffBadge offer={formatPromoOffer(cardPromo.promo)} className="self-center" />
+                </p>
+                {/* No "(15%)" here: the "15% OFF" badge beside the price already says it. */}
+                <YouSaveLine
+                  centavos={cardPromo.normalCentavos - cardPromo.nowCentavos}
+                  percent={null}
+                  className="text-xs sm:text-sm"
+                />
+              </>
+            ) : (
+              <p className="text-sm font-bold text-ink sm:text-lg">
+                {price !== null ? formatCurrency(price) : `${formatCurrency(effectivePricing['48h'])}–${formatCurrency(effectivePricing['72h'])}`}
+              </p>
+            )}
+            {cardPromo?.kind === 'tag' && (
+              <p className="inline-flex flex-wrap self-start items-center gap-x-1.5 text-[11px] font-medium text-accent sm:text-xs">
+                {/* A rounded box (not a pill) below `sm`, so it can wrap onto two lines cleanly in a
+                    narrow phone card; the pill shape comes back once there's room. */}
+                <span className="rounded-md bg-brand-forest/10 px-1.5 py-0.5 leading-snug sm:rounded-full sm:px-2">
+                  {cardPromo.audience === 'everyone'
+                    ? PROMO_COPY.packageTagEveryone(formatPromoOffer(cardPromo.promo))
+                    : PROMO_COPY.packageTag(formatPromoOffer(cardPromo.promo))}
+                </span>
+              </p>
+            )}
             {selectedDuration === '48h' && !effectiveIsOutOfStock && (
               <p className="text-xs font-medium text-accent">
                 Add {formatCurrency(getSeventyTwoHourUpsellDelta(effectivePricing))} to rent for 72h instead
@@ -422,7 +475,7 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color }: Pac
               <p className="text-xs font-medium text-ink-muted">+{formatCurrency(effectiveExtraPerDayPrice)} per extra day</p>
             )}
           </div>
-          <div className="shrink-0 text-right">
+          <div className="flex shrink-0 items-baseline justify-between gap-2 border-t border-line-soft pt-2 sm:block sm:border-0 sm:pt-0 sm:text-right">
             <p className="text-[10px] uppercase tracking-wide text-ink-faint sm:text-xs">Deposit</p>
             <p className="text-xs font-semibold text-ink sm:text-sm">{formatCurrency(effectiveDepositAmount)}</p>
           </div>
@@ -598,12 +651,19 @@ function PackageAddOnCard({
   kind,
   quantity,
   price,
+  promoSaving,
+  promoNote,
   onQuantityChange,
 }: {
   kind: BookableGearKind;
   quantity: number;
   /** Null until the customer has picked a duration — shows the 48h–72h range instead of a total. */
   price: number | null;
+  /** What one unit saves once the promo applies (same rule as Build Your Own's gear cards); the
+   *  card then shows the normal price crossed off, the discounted price and "✓ You save". */
+  promoSaving: { centavos: number; percent: string | null } | null;
+  /** Same "15% off your order once it reaches ₱1,000" note Build Your Own shows on covered gear. */
+  promoNote: string | null;
   onQuantityChange: (next: number) => void;
 }) {
   const [imageFailed, setImageFailed] = useState(false);
@@ -676,18 +736,17 @@ function PackageAddOnCard({
         {/* Stacked below `lg` so the quantity control gets the full width of the details column
             instead of being squeezed beside the price; side by side once the card is a wide square tile. */}
         <div className="mt-auto flex flex-col items-start gap-2 pt-1 lg:flex-row lg:items-end lg:justify-between lg:pt-2">
-          <div className="min-w-0">
-            <p className="text-lg font-bold leading-tight text-accent">
-              {price !== null
-                ? formatCurrency(price)
-                : kind.pricing['48h'] === kind.pricing['72h']
-                  ? formatCurrency(kind.pricing['48h'])
-                  : `${formatCurrency(kind.pricing['48h'])}–${formatCurrency(kind.pricing['72h'])}`}
-            </p>
-            {quantity > 1 && price !== null && (
-              <p className="text-[11px] text-ink-muted">Subtotal {formatCurrency(price * quantity)}</p>
-            )}
-          </div>
+          {/* Price and subtotal keep this card's own sizes; only the promo lines share Build Your
+              Own's style. */}
+          <GearPriceBlock
+            pricing={kind.pricing}
+            price={price}
+            quantity={quantity}
+            promoSaving={promoSaving}
+            promoNote={promoNote}
+            priceClassName="text-lg font-bold leading-tight text-ink"
+            subtotalClassName="text-[11px] text-ink-muted"
+          />
           {kind.canSelect ? (
             // Capped at the RMS's own availableCount — a convenience only; the RMS independently
             // re-validates the requested quantity server-side at availability check and booking.
@@ -736,6 +795,7 @@ function PackageAddOnsSection({
   // Extras are counted for the customer's chosen dates when there are any, see useDateAwareGearKinds.
   const catalogGearKinds = useDateAwareGearKinds(stockWindow);
   const { cart, setPackageAddOnQuantity } = useRental();
+  const basketPromo = useBasketPromo();
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
@@ -950,6 +1010,8 @@ function PackageAddOnsSection({
                       kind={kind}
                       quantity={selectedQuantities.get(key) ?? 0}
                       price={hasDuration ? getGearKindPrice(kind, cart.tripDetails) : null}
+                      promoSaving={gearCardPromoSaving(basketPromo, kind.category, hasDuration ? getGearKindPrice(kind, cart.tripDetails) : null)}
+                      promoNote={gearCardPromoNote(basketPromo, kind.category)}
                       onQuantityChange={(next) => {
                         // Only an increase needs an account — lowering/removing is always allowed,
                         // matching every other cart mutation. RentalContext refuses the mutation
@@ -983,6 +1045,7 @@ export default function PathACatalog() {
   usePageMeta(PAGE_META.packages.title, PAGE_META.packages.description);
   const { kits, catalogState, retryCatalog, packageDetailsFailed } = useCatalog();
   const { cart, totals, updateTripDetails } = useRental();
+  const basketPromo = useBasketPromo();
   const [searchQuery, setSearchQuery] = useState('');
   // Free-text guest count, not a capacity dropdown — see the Group Size audit note below.
   const [guestCountInput, setGuestCountInput] = useState('');
@@ -1304,6 +1367,10 @@ export default function PathACatalog() {
           </div>
         </div>
 
+        {/* Same sticky "unlock your discount" tracker as Build Your Own. A package (and any gear
+            added on top of it) counts toward the minimum. */}
+        <ByoPromoProgress state={basketPromo} />
+
         {catalogState === 'loading' && (
           <div className="grid grid-cols-2 animate-pulse gap-2.5 sm:gap-4 lg:grid-cols-3" aria-busy="true" aria-label="Loading package catalog">
             {Array.from({ length: 6 }, (_, index) => (
@@ -1429,8 +1496,9 @@ export default function PathACatalog() {
             <span className="text-sm font-semibold text-ink">
               Deposit {formatCurrency(totals.dueToday)}
               <span className="mx-1.5 text-ink-faint">&bull;</span>
-              Rental Fee {formatCurrency(totals.dueBeforeStart)}
+              <BarRentalFee normalPesos={totals.dueBeforeStart} state={basketPromo} />
             </span>
+            <BarPromoNote state={basketPromo} />
           </div>
           <Link
             to="/cart"

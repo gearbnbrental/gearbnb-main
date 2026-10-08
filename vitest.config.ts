@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     // The modules under test transitively import src/supabase.ts, which constructs a client at
     // import time. These are placeholders so the import resolves without a real project — no test
     // here performs any network call.

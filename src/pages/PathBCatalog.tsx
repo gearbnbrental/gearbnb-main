@@ -45,6 +45,11 @@ import { useDateAwareGearKinds } from '../hooks/useGearDateStock';
 import { splitBestForLine } from '../utils/bestForLine';
 import { productNote } from '../utils/gearNote';
 import { cleanGearName } from '../utils/gearName';
+import { useBasketPromo } from '../hooks/useBasketPromo';
+import ByoPromoProgress from '../components/promo/ByoPromoProgress';
+import { BarPromoNote, BarRentalFee } from '../components/promo/PromoTotals';
+import { gearCardPromoNote, gearCardPromoSaving } from '../utils/promoDisplay';
+import GearPriceBlock from '../components/promo/GearPriceBlock';
 
 /** Mirrors the RMS's own customer-safe display-name construction
  * (src/server/availability/service.ts's kindDisplayName) exactly, so an
@@ -297,6 +302,13 @@ interface GearCardProps {
   /** Set only when this selected kind came back in the RMS's availability issues for the current
    * dates — never inferred locally. */
   unavailableForDates: boolean;
+  /** "{offer} off your order once it reaches ₱min" on gear the live promo covers; null otherwise.
+   *  The card's own price always stays the plain, normal price. */
+  promoNote: string | null;
+  /** Once the order's discount is unlocked: what one unit of this gear saves. The card then shows
+   *  the normal price crossed off, the discounted price and "✓ You save ₱X (15%)" instead of
+   *  promoNote. */
+  promoSaving: { centavos: number; percent: string | null } | null;
   onQuantityChange: (next: number) => void;
   onAddOnQuantityChange: (addOn: BookableAddOn, next: number) => void;
 }
@@ -311,6 +323,8 @@ function GearCard({
   showExtraDayRate,
   price,
   unavailableForDates,
+  promoNote,
+  promoSaving,
   onQuantityChange,
   onAddOnQuantityChange,
 }: GearCardProps) {
@@ -436,34 +450,35 @@ function GearCard({
             no room to sit beside (see that control's own comment). The plain round "+" button is
             small enough to share a row even at mobile width, which is what makes room to finally
             show the 72h-upsell/extra-day-rate hints below on mobile too — see those paragraphs'
-            own `hidden` toggle. */}
+            own `hidden` toggle. Also a column whenever the promo price stack shows (crossed-off
+            price, discounted price, "You save"): beside even the small "+" it wrapped into a
+            sliver on a phone. */}
         <div
           className={`mt-auto flex gap-1.5 pt-1 sm:flex-row sm:items-end sm:justify-between sm:gap-2 sm:pt-2 ${
-            isSelected ? 'flex-col items-start' : 'flex-row items-center justify-between'
+            isSelected || promoSaving ? 'flex-col items-start' : 'flex-row items-center justify-between'
           }`}
         >
-          <div className="min-w-0">
-            <p className="text-sm font-bold leading-tight text-accent sm:text-lg">
-              {hasDuration && price !== null
-                ? formatCurrency(price)
-                : kind.pricing['48h'] === kind.pricing['72h']
-                  ? formatCurrency(kind.pricing['48h'])
-                  : `${formatCurrency(kind.pricing['48h'])}–${formatCurrency(kind.pricing['72h'])}`}
-            </p>
-            {showUpsell && getSeventyTwoHourUpsellDelta(kind.pricing) > 0 && (
-              <p className={`text-[11px] font-medium text-accent sm:block ${isSelected ? 'hidden' : ''}`}>
-                +{formatCurrency(getSeventyTwoHourUpsellDelta(kind.pricing))} for 72h
-              </p>
-            )}
-            {showExtraDayRate && kind.extraPerDayPrice > 0 && (
-              <p className={`text-[11px] font-medium text-ink-muted sm:block ${isSelected ? 'hidden' : ''}`}>
-                +{formatCurrency(kind.extraPerDayPrice)} per extra day
-              </p>
-            )}
-            {quantity > 1 && hasDuration && price !== null && (
-              <p className="text-[10px] text-ink-muted sm:text-[11px]">Subtotal {formatCurrency(price * quantity)}</p>
-            )}
-          </div>
+          <GearPriceBlock
+            pricing={kind.pricing}
+            price={hasDuration ? price : null}
+            quantity={quantity}
+            promoSaving={promoSaving}
+            promoNote={promoNote}
+            hints={
+              <>
+                {showUpsell && getSeventyTwoHourUpsellDelta(kind.pricing) > 0 && (
+                  <p className={`text-[11px] font-medium text-accent sm:block ${isSelected ? 'hidden' : ''}`}>
+                    +{formatCurrency(getSeventyTwoHourUpsellDelta(kind.pricing))} for 72h
+                  </p>
+                )}
+                {showExtraDayRate && kind.extraPerDayPrice > 0 && (
+                  <p className={`text-[11px] font-medium text-ink-muted sm:block ${isSelected ? 'hidden' : ''}`}>
+                    +{formatCurrency(kind.extraPerDayPrice)} per extra day
+                  </p>
+                )}
+              </>
+            }
+          />
 
           {kind.canSelect ? (
             isSelected ? (
@@ -556,6 +571,7 @@ export default function PathBCatalog() {
   const { user } = useAuth();
   const { gearCatalogState, retryGearCatalog } = useCatalog();
   const { cart, totals, updateTripDetails, setByoGearQuantity, setByoAddOnQuantity } = useRental();
+  const basketPromo = useBasketPromo();
   // Once the customer has chosen dates, stock is counted for THOSE dates (a unit rented today but
   // back before their trip is available to them), not "free right now". Same catalog otherwise, and
   // the ordinary catalog on any failure or while dates aren't chosen. See useDateAwareGearKinds.
@@ -906,6 +922,8 @@ export default function PathBCatalog() {
           </div>
         )}
 
+        <ByoPromoProgress state={basketPromo} />
+
         {/* A genuine catalog failure is shown here, always at full visibility — never nested
          * inside the duration-gate's dimmed/opacity-40 wrapper below, where it would be faded
          * twice over (once by that wrapper, once more by the "select duration" overlay sitting on
@@ -1043,6 +1061,8 @@ export default function PathBCatalog() {
                             showExtraDayRate={selectedPreset === '72h'}
                             price={hasDuration ? getGearKindPrice(kind, cart.tripDetails) : null}
                             unavailableForDates={unavailableNames.has(kindDisplayName(kind))}
+                            promoNote={gearCardPromoNote(basketPromo, kind.category)}
+                            promoSaving={gearCardPromoSaving(basketPromo, kind.category, hasDuration ? getGearKindPrice(kind, cart.tripDetails) : null)}
                             onQuantityChange={(next) => {
                               const current = gearSelections.get(key) ?? 0;
                               if (next > current && !requireAuth()) return;
@@ -1123,8 +1143,9 @@ export default function PathBCatalog() {
                 <>Deposit {formatCurrency(totals.dueToday)}</>
               )}
               <span className="mx-1.5 text-ink-faint">&bull;</span>
-              Rental Fee {formatCurrency(totals.dueBeforeStart)}
+              <BarRentalFee normalPesos={totals.dueBeforeStart} state={basketPromo} />
             </span>
+            <BarPromoNote state={basketPromo} />
           </div>
           {byoAvailability === 'error' ? (
             // A failed check is never treated as "nothing to block on" — same reasoning as

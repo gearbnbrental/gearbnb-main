@@ -8,6 +8,8 @@ import VerificationUpload from '../components/checkout/VerificationUpload';
 import PaymentBreakdown from '../components/checkout/PaymentBreakdown';
 import { useAuth } from '../context/AuthContext';
 import { formatCurrency } from '../utils/format';
+import { PROMO_COPY } from '../config/promoCopy';
+import { formatCentavos } from '../utils/promo';
 import type { RmsBookingResult } from '../utils/rmsApi';
 
 export default function Checkout() {
@@ -40,6 +42,12 @@ export default function Checkout() {
           <h1 className="font-serif text-xl font-semibold text-ink">Booking Request Submitted</h1>
           <p className="text-sm font-semibold text-accent">Booking #{submittedBooking.bookingNumber}</p>
           <p className="text-sm text-ink-muted">Your booking request has been submitted and is awaiting review.</p>
+          {/* The RMS's own figure for this booking, never the site's estimate. */}
+          {(submittedBooking.discountCentavos ?? 0) > 0 && (
+            <p className="rounded-full bg-brand-forest/10 px-3 py-1 text-sm font-semibold text-accent">
+              {PROMO_COPY.youSaved(formatCentavos(submittedBooking.discountCentavos ?? 0))}
+            </p>
+          )}
         </div>
 
         {depositNotYetDetermined ? (

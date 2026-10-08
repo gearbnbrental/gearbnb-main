@@ -158,5 +158,25 @@ server: {
   port: 5177,
   strictPort: true,
   allowedHosts: ['latinas-bond-elections-fighting.trycloudflare.com'],
+  // Dev only, opt-in: lets `vite dev` read the LIVE RMS (prices, catalog, availability, promo)
+  // without a local RMS. The live RMS only allows gearbnbrental.com in a browser, so requests go
+  // through this dev server instead. Turn on with VITE_RMS_DEV_API_URL=/rms-live in
+  // .env.development.local. Read-only on purpose: anything that could create or change real data
+  // (bookings, payment proofs, uploads, inquiries) is refused here.
+  proxy: {
+    '/rms-live': {
+      target: 'https://admin.gearbnbrental.com',
+      changeOrigin: true,
+      rewrite: (path) => path.replace(/^\/rms-live/, ''),
+      bypass(req, res) {
+        const path = (req.url ?? '').replace(/^\/rms-live/, '').split('?')[0]
+        const readOnlyPost = path === '/api/customer/availability' || path === '/api/customer/promo/quote'
+        if (req.method === 'GET' || req.method === 'OPTIONS' || (req.method === 'POST' && readOnlyPost)) return undefined
+        res?.writeHead(403, { 'Content-Type': 'application/json' })
+        res?.end(JSON.stringify({ error: 'Blocked in local dev: this would change real data in the live RMS.' }))
+        return false
+      },
+    },
+  },
 }
 })

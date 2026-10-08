@@ -33,6 +33,13 @@ import {
 import { clearAvailabilityCache, requestAvailabilityCheck, useAvailabilityCheck } from '../../hooks/useAvailabilityCheck';
 import { cleanGearName } from '../../utils/gearName';
 import { describeAvailabilityIssue } from '../../utils/availabilityIssue';
+import { useBasketPromo } from '../../hooks/useBasketPromo';
+import { usePromoQuote } from '../../hooks/usePromoQuote';
+import { promoLinesForCart } from '../../utils/promoCart';
+import { formatCentavos, type BasketPromoState } from '../../utils/promo';
+import { decideCheckoutSaving } from '../../utils/promoDisplay';
+import { PromoRentalFeeRows } from '../promo/PromoTotals';
+import CheckoutSavingLine from '../promo/CheckoutSavingLine';
 
 function formatDate(dateStr: string): string | null {
   if (!dateStr) return null;
@@ -72,9 +79,12 @@ interface SummaryCardProps {
    * whose real amount doesn't exist yet (see requirement 13/20). */
   amount: number | null;
   description: string;
+  /** Keep centavos ("₱1,062.50") instead of rounding to whole pesos — only for an amount a
+   *  percent discount made non-whole. Off by default, so the card reads exactly as before. */
+  exactCentavos?: boolean;
 }
 
-function SummaryCard({ variant, eyebrow, title, amount, description }: SummaryCardProps) {
+function SummaryCard({ variant, eyebrow, title, amount, description, exactCentavos = false }: SummaryCardProps) {
   const isPrimary = variant === 'primary';
 
   return (
@@ -98,7 +108,7 @@ function SummaryCard({ variant, eyebrow, title, amount, description }: SummaryCa
         {title}
       </span>
       <span className={amount === null ? 'text-xl font-bold tracking-tight' : 'text-3xl font-bold tracking-tight'}>
-        {amount === null ? 'To Be Determined' : formatCurrency(amount)}
+        {amount === null ? 'To Be Determined' : exactCentavos ? formatCentavos(Math.round(amount * 100)) : formatCurrency(amount)}
       </span>
       <p className={isPrimary ? 'text-xs text-white' : 'text-xs text-ink-muted'}>{description}</p>
     </div>
@@ -152,6 +162,8 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
     tripDetails,
     verificationDocs,
   } = selectedCart;
+
+  const basketPromo = useBasketPromo();
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -311,6 +323,36 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
   // useAvailabilityCheck hook (see its own doc comment for why this used to be duplicated,
   // slightly differently, on this page, PathACatalog, and PathBCatalog).
   const backgroundAvailability = useAvailabilityCheck(backgroundAvailabilityRequest);
+
+  // The RMS's own quote for this exact basket and dates (same body as the availability check),
+  // asked only while a promo is live for this customer and the booking itself is submittable.
+  // Never blocks anything: on failure the saving is hidden or shown as an estimate.
+  const promoQuote = usePromoQuote(
+    basketPromo.kind !== 'hidden' && !unsupportedReason ? backgroundAvailabilityRequest : null,
+    promoLinesForCart(cart),
+  );
+  const saving = decideCheckoutSaving(basketPromo, promoQuote, Boolean(user));
+  /** What the customer is shown as taken off the rental fee, and what's reported to the RMS as
+   *  estimatedDiscountCentavos. Never the deposit. */
+  const displayedDiscountCentavos = saving.kind === 'confirmed' || saving.kind === 'estimate' ? saving.centavos : 0;
+  // The breakdown rows follow the saving above (quote first), never the browse-time math alone.
+  const checkoutPromoState: BasketPromoState =
+    displayedDiscountCentavos > 0 && basketPromo.kind !== 'hidden'
+      ? {
+          kind: 'unlocked',
+          promo: basketPromo.promo,
+          audience: basketPromo.audience,
+          computation: {
+            coveredSubtotalCentavos: 0,
+            qualified: true,
+            discountCentavos: displayedDiscountCentavos,
+            remainingToQualifyCentavos: 0,
+          },
+        }
+      : basketPromo.kind === 'outside-window'
+        ? basketPromo
+        : { kind: 'hidden' };
+  const rentalFeeDue = Math.max(0, Math.round(totals.dueBeforeStart * 100) - displayedDiscountCentavos) / 100;
 
   const [checkoutAvailability, setCheckoutAvailability] = useState<CheckoutAvailabilityState>({ status: 'idle' });
 
@@ -529,6 +571,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
             (getKitPrice(selectedKits[0], tripDetails) + calculatePackageAddOnsFee(selectedCart)) * 100,
           ),
           estimatedDepositCentavos: Math.round(selectedKits[0].depositAmount * 100),
+          estimatedDiscountCentavos: displayedDiscountCentavos,
         }
       : {
           ...baseBooking,
@@ -558,6 +601,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
           // always writes depositCentavos = 0 for a BYO booking regardless of what's sent here;
           // an admin sets the real amount manually after review.
           estimatedDepositCentavos: 0,
+          estimatedDiscountCentavos: displayedDiscountCentavos,
         };
 
     // Dev-only timing (Change 15) — measures exactly where the time between clicking "Submit
@@ -660,13 +704,15 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
           variant="secondary"
           eyebrow="Due Before Rental Start Date"
           title="Rental Fee Total"
-          amount={totals.dueBeforeStart}
+          amount={rentalFeeDue}
+          exactCentavos={displayedDiscountCentavos > 0}
           description={
-            formattedStartDate
+            (displayedDiscountCentavos > 0 ? `After your ${formatCentavos(displayedDiscountCentavos)} discount. ` : '') +
+            (formattedStartDate
               ? `Pay in full before ${formattedStartDate}${
                   totals.rentalDurationDays > 0 ? ` · ${totals.rentalDurationDays}-day rental` : ''
                 }`
-              : 'Pay in full before your trip starts.'
+              : 'Pay in full before your trip starts.')
           }
         />
       </div>
@@ -801,10 +847,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
                   <span className="font-semibold text-ink">To Be Determined</span>
                 </div>
               )}
-              <div className="flex items-center justify-between">
-                <span className="font-medium text-ink-muted">Rental Fee Subtotal</span>
-                <span className="font-semibold text-ink">{formatCurrency(totals.dueBeforeStart)}</span>
-              </div>
+              <PromoRentalFeeRows normalPesos={totals.dueBeforeStart} state={checkoutPromoState} />
             </div>
 
             {/* Visible here, before the submit button below, so the customer reads this before —
@@ -827,6 +870,8 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
           </p>
         )}
       </section>
+
+      {hasSelection && <CheckoutSavingLine saving={saving} catalogPath={hasPackage ? '/catalog/camping-packages' : '/catalog/build-your-own'} />}
 
       {hasSelection && (
         <section className="flex flex-col gap-3 rounded-xl border border-line p-4 sm:p-5">
@@ -991,3 +1036,4 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
     </div>
   );
 }
+

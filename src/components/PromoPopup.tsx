@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { usePromo } from '../context/PromoContext';
+import { formatPromoOffer } from '../utils/promo';
+import { PROMO_COPY } from '../config/promoCopy';
 
 const SHOW_DELAY_MS = 1000;
-// "Until October 31 only" — the popup stops appearing once the promo is over (Philippine time),
-// so an expired offer is never advertised even if nobody remembers to take this down.
-const PROMO_ENDS_AT = new Date('2026-11-01T00:00:00+08:00');
 const PROMO_IMAGE = '/images/promos/first-time-renter-15-off-v3.webp';
 const SEEN_KEY = 'gearbnb-promo-first-time-15-off-seen';
 
@@ -25,19 +25,26 @@ function markSeen() {
 }
 
 /**
- * Homepage promo popup (15% off for first-time renters). Appears 1 second after the homepage
- * opens, once per browser session; clicking the animation goes to the catalog. Closes via the ×
- * button, a click on the backdrop, or Escape.
+ * Homepage promo popup. Appears only while the RMS reports a live promo this visitor can get (and
+ * before its booking deadline, which usePromo already enforces), 1 second after the homepage
+ * opens, once per browser session; clicking the artwork goes to the catalog. Closes via the ×
+ * button, a click on the backdrop, or Escape. Disappears at once if the promo goes away (it ended,
+ * or the visitor signed in as a returning renter).
  */
 export default function PromoPopup() {
+  const { promo } = usePromo();
   const [open, setOpen] = useState(false);
+  const mountedAt = useRef(Date.now());
+  const hasPromo = promo !== null;
 
   useEffect(() => {
-    if (Date.now() >= PROMO_ENDS_AT.getTime() || alreadySeenThisSession()) return;
-    // Opens once BOTH the 1-second delay has passed and the animation has finished downloading,
-    // so a slow connection never shows a blank or half-loaded popup — it just appears a bit later.
+    if (!hasPromo || alreadySeenThisSession()) return;
+    // Opens once BOTH the 1-second delay (counted from arrival, not from when the promo answer
+    // came back) has passed and the animation has finished downloading, so a slow connection
+    // never shows a blank or half-loaded popup — it just appears a bit later.
     let cancelled = false;
-    const delay = new Promise<void>((resolve) => window.setTimeout(resolve, SHOW_DELAY_MS));
+    const remainingDelay = Math.max(0, mountedAt.current + SHOW_DELAY_MS - Date.now());
+    const delay = new Promise<void>((resolve) => window.setTimeout(resolve, remainingDelay));
     const loaded = new Promise<void>((resolve, reject) => {
       const img = new Image();
       img.onload = () => resolve();
@@ -56,7 +63,7 @@ export default function PromoPopup() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [hasPromo]);
 
   useEffect(() => {
     if (!open) return;
@@ -67,7 +74,8 @@ export default function PromoPopup() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [open]);
 
-  if (!open) return null;
+  if (!open || !promo) return null;
+  const description = `${formatPromoOffer(promo)} off${promo.firstTimeRentersOnly ? ' for first-time renters' : ''}. ${PROMO_COPY.termsApply}`;
 
   return (
     <div
@@ -78,19 +86,22 @@ export default function PromoPopup() {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="15% off for all first-time renters, until October 31 only"
+        aria-label={description}
         className="relative w-full max-w-sm"
         onClick={(e) => e.stopPropagation()}
       >
         <Link to="/catalog" onClick={() => setOpen(false)} className="block overflow-hidden rounded-2xl shadow-2xl">
           <img
             src={PROMO_IMAGE}
-            alt="15% off for all first-time renters, until October 31 only. Rent now."
+            alt={`${description} Rent now.`}
             width={800}
             height={800}
             className="block h-auto w-full"
           />
         </Link>
+        <p className="mt-2 text-center text-xs text-white">
+          {PROMO_COPY.termsApply}
+        </p>
         <button
           type="button"
           onClick={() => setOpen(false)}
