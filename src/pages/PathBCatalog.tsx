@@ -412,9 +412,18 @@ function GearCard({
             <span className="shrink-0 text-[10px] text-ink-faint sm:text-[11px]">Avail: {kind.availableCount}</span>
           )}
         </div>
-        <h3 className="line-clamp-2 text-xs font-medium leading-snug text-ink sm:text-sm" title={cleanGearName(kind.name)}>
-          {cleanGearName(kind.name)}
-        </h3>
+        <div className="flex flex-col items-start gap-1 sm:flex-row sm:justify-between sm:gap-2">
+          <h3 className="line-clamp-2 text-xs font-medium leading-snug text-ink sm:text-sm" title={cleanGearName(kind.name)}>
+            {cleanGearName(kind.name)}
+          </h3>
+          {/* Same red "Out of Stock" as the package cards: none free (for the chosen dates, once
+              picked) or the RMS flagged this selected gear as unavailable for those dates. */}
+          {(!kind.canSelect || unavailableForDates) && (
+            <span className="shrink-0 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700 sm:px-2 sm:text-xs">
+              Out of Stock
+            </span>
+          )}
+        </div>
         {cardBestFor.bestFor ? (
           <p className="-mt-0.5 break-words text-[11px] font-medium leading-snug text-accent sm:text-xs">
             Best {cardBestFor.lead} {cardBestFor.bestFor}

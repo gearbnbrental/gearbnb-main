@@ -365,10 +365,14 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color }: Pac
           />
         )}
 
-        <div className="flex items-start justify-between gap-1.5 sm:gap-2">
+        {/* Phone: the name gets the full width and the pills sit under it (beside it they squeezed
+            the name to "The Base Camper..."); from `sm` up, side by side as before. */}
+        <div className="flex flex-col items-start gap-1 sm:flex-row sm:justify-between sm:gap-2">
           <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-ink sm:text-base">{kit.name}</h3>
-          <div className="flex shrink-0 flex-col items-end gap-1">
-            {effectiveIsOutOfStock && (
+          <div className="flex shrink-0 flex-row flex-wrap items-center gap-1 sm:flex-col sm:items-end">
+            {/* Red "Out of Stock" beside the name both when nothing is free right now and when the
+                RMS says the package isn't free for the dates the customer picked. */}
+            {(effectiveIsOutOfStock || availability.status === 'unavailable') && (
               <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700 sm:px-2 sm:text-xs">
                 Out of Stock
               </span>
