@@ -31,8 +31,6 @@ import {
 } from '../utils/rmsApi';
 import { formatCurrency } from '../utils/format';
 import BookingDiscountSummary from '../components/promo/BookingDiscountSummary';
-import { useCatalog } from '../context/useCatalog';
-import { resolveAddOnDisplayName } from '../utils/addOnName';
 // Rental-fee figures keep their centavos when a percent discount makes them non-whole
 // ("₱5,257.25"); identical to formatCurrency for every whole-peso amount.
 import { formatCentavos } from '../utils/promo';
@@ -778,13 +776,12 @@ function hasPackageAddOns(booking: RmsMyBooking): boolean {
 }
 
 function RentalLineItems({ booking }: { booking: RmsMyBooking }) {
-  const { gearKinds } = useCatalog();
   // The RMS returns extra rentable inventory as BookingGear rows either way, so `gears` means two
   // different things depending on the booking: the whole rental on a Build Your Own booking, or
   // the optional extras added on top of a package. Labelled accordingly rather than always calling
   // them "Build Your Own Gear", which would misdescribe a package booking's add-ons.
   const isPackageBooking = booking.packages.length > 0;
-  const groups: { label: string; items: { name: string; quantity: number }[]; additional: boolean; isAddOns?: boolean }[] = [
+  const groups: { label: string; items: { name: string; quantity: number }[]; additional: boolean }[] = [
     { label: 'Package', items: booking.packages, additional: false },
     {
       label: isPackageBooking ? 'Optional Add-ons' : 'Build Your Own Gear',
@@ -798,7 +795,7 @@ function RentalLineItems({ booking }: { booking: RmsMyBooking }) {
     // had two separate add-on concepts. "Additional Gear" keeps the same "these are extra, not the
     // base selection" meaning (still gets the "+" prefix via `additional: true`) without repeating
     // a heading that reads as package-specific terminology on a booking that has no package at all.
-    { label: isPackageBooking ? 'Add-ons' : 'Additional Gear', items: booking.addOns, additional: true, isAddOns: true },
+    { label: isPackageBooking ? 'Add-ons' : 'Additional Gear', items: booking.addOns, additional: true },
   ].filter((group) => group.items.length > 0);
 
   if (groups.length === 0) return null;
@@ -816,9 +813,7 @@ function RentalLineItems({ booking }: { booking: RmsMyBooking }) {
                     readers, so this would otherwise just be read out as stray punctuation. */}
                 {group.additional && <span aria-hidden="true">+ </span>}
                 {item.quantity > 1 ? `${item.quantity}× ` : ''}
-                {/* Add-ons: the RMS currently names these by brand + category ("Blackdog Other
-                    Gear Essentials"); show the real add-on name when the catalog pins it down. */}
-                {cleanGearName(group.isAddOns ? resolveAddOnDisplayName(item.name, gearKinds) : item.name, { keepColor: true })}
+                {cleanGearName(item.name, { keepColor: true })}
               </li>
             ))}
           </ul>
