@@ -126,28 +126,30 @@ describe('terms dialog content', () => {
 
 describe('checkout saving line', () => {
   it('confirmed by the quote', () => {
-    expect(text(<CheckoutSavingLine saving={{ kind: 'confirmed', centavos: 21000, label: '15% off', promo }} catalogPath="/catalog" />)).toContain(
-      'You saved ₱210 on this booking (15% off)',
-    );
+    const out = text(<CheckoutSavingLine saving={{ kind: 'confirmed', centavos: 21000, label: '15% off', promo }} catalogPath="/catalog" normalFeeCentavos={140000} />);
+    expect(out).toContain('You saved ₱210 (15% off)');
+    expect(out).toContain('Before discount ₱1,400');
+    expect(out).toContain('Discount −₱210');
+    expect(out).toContain('After discount ₱1,190');
   });
 
   it('estimate after a failed quote is labelled as one', () => {
-    const out = text(<CheckoutSavingLine saving={{ kind: 'estimate', centavos: 21000, promo }} catalogPath="/catalog" />);
+    const out = text(<CheckoutSavingLine saving={{ kind: 'estimate', centavos: 21000, promo }} catalogPath="/catalog" normalFeeCentavos={140000} />);
     expect(out).toContain('Estimated saving: ₱210');
     expect(out).toContain('confirmed when your booking is reviewed');
   });
 
   it('sign in to confirm, and add more to unlock with a link back to the catalog', () => {
-    expect(text(<CheckoutSavingLine saving={{ kind: 'sign-in', centavos: 21000, promo }} catalogPath="/catalog" />)).toContain(
+    expect(text(<CheckoutSavingLine saving={{ kind: 'sign-in', centavos: 21000, promo }} catalogPath="/catalog" normalFeeCentavos={140000} />)).toContain(
       "You'd save ₱210 as a first-time renter. Sign in to confirm.",
     );
-    const below = html(<CheckoutSavingLine saving={{ kind: 'below-minimum', remainingCentavos: 50000 }} catalogPath="/catalog/build-your-own" />);
+    const below = html(<CheckoutSavingLine saving={{ kind: 'below-minimum', remainingCentavos: 50000 }} catalogPath="/catalog/build-your-own" normalFeeCentavos={140000} />);
     expect(below).toContain('Add ₱500 more to unlock your discount');
     expect(below).toContain('href="/catalog/build-your-own"');
   });
 
   it('nothing at all when there is no saving', () => {
-    expect(html(<CheckoutSavingLine saving={{ kind: 'none' }} catalogPath="/catalog" />)).toBe('');
+    expect(html(<CheckoutSavingLine saving={{ kind: 'none' }} catalogPath="/catalog" normalFeeCentavos={140000} />)).toBe('');
   });
 });
 

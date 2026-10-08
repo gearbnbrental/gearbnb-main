@@ -632,14 +632,12 @@ export default function DepositProofUpload({
   const [fileError, setFileError] = useState<string | null>(null);
   const [amountPaid, setAmountPaid] = useState('0.00');
   const [methodId, setMethodId] = useState('');
-  const [referenceNumber, setReferenceNumber] = useState('');
   const [detailsError, setDetailsError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const methodSelectId = useId();
   const amountFieldId = useId();
-  const referenceFieldId = useId();
 
   const objectUrlRef = useRef<string | null>(null);
 
@@ -761,12 +759,10 @@ export default function DepositProofUpload({
         storagePath: path,
         amountClaimedCentavos: amountCentavos,
         method: selectedMethod.rmsMethod,
-        referenceNumber: referenceNumber.trim() || undefined,
       });
       resetSelection();
       setAmountPaid('0.00');
       setMethodId('');
-      setReferenceNumber('');
       onProofSubmitted?.();
     } catch (err) {
       setSubmitError(
@@ -778,7 +774,7 @@ export default function DepositProofUpload({
   }
 
   return (
-    <div className="flex flex-col gap-4 rounded-xl border border-line p-4 sm:p-5">
+    <div className="flex flex-col gap-4 rounded-xl border border-line bg-surface p-4 sm:p-5">
       <div className="flex flex-col gap-1">
         <h3 className="text-sm font-semibold uppercase tracking-wide text-ink-muted">Security Deposit</h3>
         <p className={isNotYetDetermined ? 'text-xl font-bold text-ink' : 'text-2xl font-bold text-ink'}>
@@ -886,20 +882,6 @@ export default function DepositProofUpload({
                 </select>
               </label>
 
-              <div className="sm:col-span-2">
-                <label htmlFor={referenceFieldId} className="flex flex-col gap-1.5">
-                  <span className="text-sm font-medium text-ink">Reference Number (optional)</span>
-                  <input
-                    id={referenceFieldId}
-                    type="text"
-                    disabled={submitting}
-                    value={referenceNumber}
-                    onChange={(e) => setReferenceNumber(e.target.value)}
-                    placeholder="Transaction/reference number from your receipt"
-                    className="rounded-lg border border-line px-3 py-2.5 text-sm text-ink shadow-sm outline-none transition-colors focus:border-brand-forest focus:ring-2 focus:ring-brand-forest/20"
-                  />
-                </label>
-              </div>
             </div>
 
             {detailsError && (

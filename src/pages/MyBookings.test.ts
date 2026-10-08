@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  describeDeposit,
+  rentalFeePill,
   classifyMyBookingsLoadError,
   getBookingStatusLabel,
   getChargeProofState,
@@ -8,7 +10,7 @@ import {
   hasOutstandingPayment,
   isTerminalBooking,
 } from './MyBookings';
-import { RMS_NOT_CONFIGURED_CODE, RmsApiError, type RmsAdditionalCharge, type RmsMyBooking } from '../utils/rmsApi';
+import { RMS_NOT_CONFIGURED_CODE, RmsApiError, type RmsAdditionalCharge, type RmsMyBooking, type RmsRentalFee } from '../utils/rmsApi';
 
 /**
  * Pins down the terminal-booking behaviour fixed in this pass: once a booking reaches COMPLETED or
@@ -326,5 +328,56 @@ describe('classifyMyBookingsLoadError', () => {
   it('a network failure or unknown throw is an ordinary error', () => {
     expect(classifyMyBookingsLoadError(new TypeError('Failed to fetch'))).toBe('error');
     expect(classifyMyBookingsLoadError('nope')).toBe('error');
+  });
+});
+
+describe('describeDeposit (collapsed booking card)', () => {
+  const booking = (deposit: Partial<RmsMyBooking['securityDeposit']>, extra: Partial<RmsMyBooking> = {}) =>
+    ({
+      bookingId: 'b', bookingNumber: 'GB-1', status: 'AWAITING_PAYMENT', pickupAt: '2026-10-12T02:00:00.000Z', returnAt: '2026-10-15T02:00:00.000Z',
+      rentalFeeCentavos: 0, depositCentavos: 0, fulfillmentType: 'PICKUP', deliveryAddress: null,
+      packages: [{ name: 'Kit', quantity: 1 }], gears: [], addOns: [], verificationDocuments: [],
+      securityDeposit: { requiredCentavos: 90000, verifiedCentavos: 0, verified: false, proofStatus: null, reviewNote: null, amountClaimedCentavos: null, ...deposit },
+      ...extra,
+    }) as RmsMyBooking;
+
+  it('says the deposit amount is due now to reserve the gear', () => {
+    expect(describeDeposit(booking({}))).toEqual({ amount: '₱900', note: 'Due now to reserve your gear', due: true, status: 'Pending' });
+  });
+  it('is to be determined before GearBnB sets a Build Your Own deposit', () => {
+    expect(describeDeposit(booking({ requiredCentavos: 0 }, { packages: [] }))).toMatchObject({ amount: 'To Be Determined', due: false });
+  });
+  it('reflects a proof under review, a rejected proof, and a paid deposit', () => {
+    expect(describeDeposit(booking({ proofStatus: 'PENDING_REVIEW' }))).toMatchObject({ note: 'Payment received, being reviewed', due: false, status: 'Under Review' });
+    expect(describeDeposit(booking({ proofStatus: 'REJECTED' }))).toMatchObject({ due: true });
+    expect(describeDeposit(booking({ verified: true, verifiedCentavos: 90000 }))).toEqual({ amount: '₱900', note: 'Paid', due: false, status: 'Paid' });
+  });
+  it('mentions a pending add-on deposit on a package with extras', () => {
+    expect(describeDeposit(booking({ addOnDepositCentavos: null }, { gears: [{ name: 'Chair', quantity: 2 }] }))?.note).toBe(
+      'Due now to reserve your gear (add-on deposit to be confirmed)',
+    );
+  });
+});
+
+describe('rentalFeePill', () => {
+  const fee = (extra: Partial<RmsRentalFee>) =>
+    ({ dueCentavos: 1000, paidCentavos: 0, outstandingCentavos: 1000, status: 'PENDING', dueDate: '2026-10-12T02:00:00.000Z', ...extra }) as RmsRentalFee;
+  it('maps the RMS status to Paid / Pending / Under Review / Partially Paid', () => {
+    expect(rentalFeePill(fee({ status: 'PAID' }))).toBe('Paid');
+    expect(rentalFeePill(fee({}))).toBe('Pending');
+    expect(rentalFeePill(fee({ proofStatus: 'PENDING_REVIEW' }))).toBe('Under Review');
+    expect(rentalFeePill(fee({ status: 'PARTIALLY_PAID' }))).toBe('Partially Paid');
+  });
+});
+
+describe('"Pay security deposit" goes to the Security Deposit section', () => {
+  it('targets the deposit section (amount, payment instructions, proof upload), not the top of the details', () => {
+    const booking = {
+      bookingId: 'b1', bookingNumber: 'GB-1', status: 'AWAITING_PAYMENT', pickupAt: '2026-10-12T02:00:00.000Z', returnAt: '2026-10-15T02:00:00.000Z',
+      rentalFeeCentavos: 0, depositCentavos: 90000, fulfillmentType: 'PICKUP', deliveryAddress: null,
+      packages: [{ name: 'Kit', quantity: 1 }], gears: [], addOns: [], verificationDocuments: [],
+      securityDeposit: { requiredCentavos: 90000, verifiedCentavos: 0, verified: false, proofStatus: null, reviewNote: null, amountClaimedCentavos: null },
+    } as unknown as RmsMyBooking;
+    expect(getNextStep(booking).cta).toEqual({ label: 'Pay security deposit', targetId: 'security-deposit-b1' });
   });
 });

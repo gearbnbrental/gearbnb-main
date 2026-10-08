@@ -14,6 +14,7 @@ import { QuantityStepper } from './PathBCatalog';
 import { formatCurrency } from '../utils/format';
 import { cleanGearName } from '../utils/gearName';
 import { useBasketPromo } from '../hooks/useBasketPromo';
+import { checkoutBlocker } from '../utils/checkoutRules';
 import { BarPromoNote, BarRentalFee } from '../components/promo/PromoTotals';
 
 function CheckboxInput({
@@ -151,6 +152,10 @@ export default function Cart() {
   const hasCheckedForCheckout =
     selectedCart.selectedKits.length > 0 || selectedCart.selectedItems.length > 0 || selectedCart.byoGears.length > 0;
   const isByoOnly = selectedCart.byoGears.length > 0 && selectedCart.selectedKits.length === 0;
+  // Stops the customer HERE, before they fill in trip details and upload documents, when what's
+  // checked can't go through as one booking (e.g. a Package and Build Your Own together) — the
+  // same rule checkout enforces at the end (see checkoutBlocker).
+  const blocker = hasCheckedForCheckout ? checkoutBlocker(selectedCart) : null;
   const totalUnitCount =
     selectedCart.selectedKits.length +
     selectedCart.selectedItems.length +
@@ -490,7 +495,12 @@ export default function Cart() {
             )}
             {hasCheckedForCheckout && <BarPromoNote state={basketPromo} />}
           </div>
-          {hasCheckedForCheckout ? (
+          {blocker && (
+            <p role="alert" className="order-first w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 sm:text-sm">
+              {blocker}
+            </p>
+          )}
+          {hasCheckedForCheckout && !blocker ? (
             // A plain <Link> would take a guest straight into the checkout form before they know
             // an account is required — routing through the same friendly auth-required message
             // every other gated action uses (see AuthRequiredMessage) instead of a silent redirect.

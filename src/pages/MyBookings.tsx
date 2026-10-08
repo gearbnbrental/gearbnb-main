@@ -9,13 +9,10 @@ import VerificationDocumentsReview from '../components/checkout/VerificationDocu
 import { useAuth } from '../context/AuthContext';
 import {
   AlertTriangleIcon,
-  BoltIcon,
-  ChatBubbleIcon,
   CheckCircleIcon,
   ChevronDownIcon,
   ClockIcon,
   CreditCardIcon,
-  EyeIcon,
   GearPlaceholderIcon,
   MapPinIcon,
   ShieldCheckIcon,
@@ -34,6 +31,11 @@ import {
 } from '../utils/rmsApi';
 import { formatCurrency } from '../utils/format';
 import BookingDiscountSummary from '../components/promo/BookingDiscountSummary';
+import { useCatalog } from '../context/useCatalog';
+import { resolveAddOnDisplayName } from '../utils/addOnName';
+// Rental-fee figures keep their centavos when a percent discount makes them non-whole
+// ("₱5,257.25"); identical to formatCurrency for every whole-peso amount.
+import { formatCentavos } from '../utils/promo';
 import { BUSINESS_TIME_ZONE } from '../utils/duration';
 import { MESSENGER_URL } from '../config/social';
 import { cleanGearName } from '../utils/gearName';
@@ -274,6 +276,10 @@ interface NextStep {
 
 export function getNextStep(booking: RmsMyBooking): NextStep {
   const detailsTargetId = `booking-details-${booking.bookingId}`;
+  // Deposit and rental-fee CTAs land on their own section (payment instructions + proof upload),
+  // not just the top of the details panel.
+  const depositTargetId = `security-deposit-${booking.bookingId}`;
+  const rentalFeeTargetId = `rental-fee-${booking.bookingId}`;
 
   // These three checks each imply an action the customer can still take (replace a document,
   // resubmit a rejected proof) — never applicable once the booking is terminal (COMPLETED/
@@ -300,13 +306,13 @@ export function getNextStep(booking: RmsMyBooking): NextStep {
         shortfallCentavos > 0
           ? `Your deposit payment was ${formatCurrency(shortfallCentavos / 100)} short, pay the remaining amount, then upload updated proof showing the FULL ${formatCurrency(requiredCentavos / 100)} deposit paid (not just the additional payment).`
           : 'Your deposit payment proof was rejected, please review and resubmit.';
-      return { tone: 'danger', message, cta: { label: 'Resubmit deposit proof', targetId: detailsTargetId } };
+      return { tone: 'danger', message, cta: { label: 'Resubmit deposit proof', targetId: depositTargetId } };
     }
     if (booking.rentalFee?.proofStatus === 'REJECTED') {
       return {
         tone: 'danger',
         message: 'Your rental fee payment proof was rejected, please submit a new proof of payment.',
-        cta: { label: 'Resubmit payment proof', targetId: detailsTargetId },
+        cta: { label: 'Resubmit payment proof', targetId: rentalFeeTargetId },
       };
     }
   }
@@ -352,7 +358,7 @@ export function getNextStep(booking: RmsMyBooking): NextStep {
       return {
         tone: 'warning',
         message: 'Pay your security deposit to reserve your gear.',
-        cta: { label: 'Pay security deposit', targetId: detailsTargetId },
+        cta: { label: 'Pay security deposit', targetId: depositTargetId },
       };
     }
     case 'RESERVED':
@@ -517,15 +523,17 @@ function BookingProgress({ status, blocked }: { status: string; blocked: boolean
           const isBlocked = isCurrent && blocked;
           const isLast = index === PROGRESS_STAGES.length - 1;
 
+          // A stage waiting on the customer is shown in the friendly brand green (with a soft halo),
+          // never red: it's their next step, not something they did wrong.
           const dotClass = isBlocked
-            ? 'border-red-500 bg-red-500 text-white'
+            ? 'border-brand-forest bg-brand-forest text-white ring-4 ring-brand-forest/15'
             : isCurrent
               ? 'border-brand-forest bg-brand-forest text-white'
               : isDone
                 ? 'border-brand-forest/40 bg-brand-forest/10 text-accent'
                 : 'border-line bg-surface text-ink-faint';
           const labelClass = isBlocked
-            ? 'font-semibold text-red-700'
+            ? 'font-semibold text-accent'
             : isCurrent
               ? 'font-semibold text-ink'
               : isDone
@@ -546,14 +554,14 @@ function BookingProgress({ status, blocked }: { status: string; blocked: boolean
                 {isDone ? (
                   <CheckCircleIcon className="h-3.5 w-3.5" />
                 ) : isBlocked ? (
-                  <AlertTriangleIcon className="h-3 w-3" />
+                  <ClockIcon className="h-3 w-3" />
                 ) : (
                   <span className={`h-1.5 w-1.5 rounded-full ${isCurrent ? 'bg-white' : 'bg-current'}`} />
                 )}
               </span>
               <span className={`pt-0.5 text-sm ${labelClass}`}>
                 {stage.label}
-                {isBlocked && <span className="ml-1.5 text-xs font-medium">, action needed</span>}
+                {isBlocked && <span className="ml-1.5 text-xs font-medium">· your next step</span>}
               </span>
             </li>
           );
@@ -621,39 +629,116 @@ function DetailsToggle({
   );
 }
 
-/** The short form of a booking's DEEPER detail once its card is collapsed — just the two figures
- *  customers come back to check (the outstanding balance and payment status) and a
- *  gear-inspection flag when there is one. Rental dates, booking type and fulfillment are
- *  deliberately NOT repeated here — they live in the always-visible TripSummaryStrip above this,
- *  in both the collapsed and expanded state, so collapsing a card never hides them. Every value is
- *  read straight off the RMS response (`rentalFee` is the server's own computed object); nothing
- *  here is recalculated in the browser. This is what Booking History now shows by default for each
- *  past booking (see BookingCard's `defaultOpen`), so a payment status here — not just a balance
- *  that's usually already ₱0 for a finished booking — is what actually tells a customer how that
- *  booking was settled without expanding it. */
+/** What the collapsed card says about the security deposit: the amount and, plainly, where it
+ *  stands — due now to reserve the gear, under review, paid, or not set yet (Build Your Own, until
+ *  GearBnB reviews the booking). Read straight off the RMS's securityDeposit object. */
+export type PaymentPill = 'Paid' | 'Pending' | 'Under Review' | 'Partially Paid' | 'Refunded' | 'Void';
+
+export function describeDeposit(
+  booking: RmsMyBooking,
+): { amount: string; note: string; due: boolean; status: PaymentPill } | null {
+  const deposit = booking.securityDeposit;
+  const terminal = isTerminalBooking(booking);
+  if (deposit.verified) {
+    return { amount: formatCentavos(deposit.verifiedCentavos || deposit.requiredCentavos), note: 'Paid', due: false, status: 'Paid' };
+  }
+  if (terminal) return null;
+  if (deposit.requiredCentavos <= 0) {
+    return { amount: 'To Be Determined', note: 'GearBnB will let you know the amount after reviewing your booking', due: false, status: 'Pending' };
+  }
+  const amount = formatCentavos(deposit.requiredCentavos);
+  const addOnPending = hasPackageAddOns(booking) && deposit.addOnDepositCentavos == null;
+  if (deposit.proofStatus === 'PENDING_REVIEW') {
+    return { amount, note: 'Payment received, being reviewed', due: false, status: 'Under Review' };
+  }
+  if (deposit.proofStatus === 'REJECTED') {
+    return { amount, note: 'Due now, please resubmit your payment proof', due: true, status: 'Pending' };
+  }
+  return {
+    amount,
+    note: `Due now to reserve your gear${addOnPending ? ' (add-on deposit to be confirmed)' : ''}`,
+    due: true,
+    status: 'Pending',
+  };
+}
+
+/** The rental fee's short status for the collapsed card's pill, from the RMS's own status (and a
+ *  payment proof that's waiting for review). */
+export function rentalFeePill(rentalFee: RmsRentalFee): PaymentPill {
+  if (rentalFee.status === 'PAID') return 'Paid';
+  if (rentalFee.status === 'REFUNDED') return 'Refunded';
+  if (rentalFee.status === 'VOID') return 'Void';
+  if (rentalFee.proofStatus === 'PENDING_REVIEW') return 'Under Review';
+  if (rentalFee.status === 'PARTIALLY_PAID') return 'Partially Paid';
+  return 'Pending';
+}
+
+/** Small status pill beside a payment's label. Paid is green; everything else a calm neutral,
+ *  never red, so an unpaid item reads as "not yet", not as a problem. */
+function PaymentStatusPill({ status }: { status: PaymentPill }) {
+  return (
+    <span
+      className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+        status === 'Paid' ? 'bg-brand-forest/15 text-accent' : 'bg-line-soft text-ink-muted'
+      }`}
+    >
+      {status}
+    </span>
+  );
+}
+
+/**
+ * The short form of a booking once its card is collapsed (the default): the rental dates, then the
+ * two payments kept clearly apart, each with its own amount and its own due date, so a customer
+ * never reads the rental fee as the only thing owed. The security deposit is due now (it reserves
+ * the gear); the rental fee is due on or before the pickup date. Plus a gear-inspection flag when
+ * there is one. Every value is read straight off the RMS response; nothing is recalculated.
+ */
 function CollapsedSummary({ booking }: { booking: RmsMyBooking }) {
   const { rentalFee } = booking;
-  if (!rentalFee && !(booking.damageReports && booking.damageReports.length > 0)) return null;
-
-  const paymentStatusLabel = rentalFee
-    ? (RENTAL_FEE_STATUS_LABELS[rentalFee.status] ?? formatStatusLabel(rentalFee.status))
-    : null;
+  const deposit = describeDeposit(booking);
+  const feePaid = rentalFee?.status === 'PAID';
 
   return (
     // min-w-0 + break-words on every value: a long note or a narrow 375px phone must wrap inside
     // the card rather than force the whole page to scroll sideways.
-    <dl className="flex flex-col gap-1.5 border-t border-line-soft pt-3 text-sm">
+    <dl className="flex flex-col gap-2.5 border-t border-line-soft pt-3 text-sm">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+        <dt className="text-ink-muted">Rental Dates:</dt>
+        <dd className="min-w-0 break-words font-medium text-ink">
+          {formatDateOnly(booking.pickupAt)} &ndash; {formatDateOnly(booking.returnAt)}
+        </dd>
+      </div>
+      {deposit && (
+        <div className="flex flex-col gap-0.5">
+          <dt className="flex items-center gap-2 text-ink-muted">
+            Security Deposit <PaymentStatusPill status={deposit.status} />
+          </dt>
+          <dd className="min-w-0 break-words">
+            <span className="font-semibold text-ink">{deposit.amount}</span>
+            {/* A paid deposit's pill already says "Paid"; no need to repeat it under the amount. */}
+            {deposit.status !== 'Paid' && (
+              <span className={`block text-xs ${deposit.due ? 'font-medium text-accent' : 'text-ink-muted'}`}>{deposit.note}</span>
+            )}
+          </dd>
+        </div>
+      )}
       {rentalFee && (
-        <>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <dt className="text-ink-muted">Balance:</dt>
-            <dd className="font-semibold text-ink">{formatCurrency(rentalFee.outstandingCentavos / 100)}</dd>
-          </div>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <dt className="text-ink-muted">Payment Status:</dt>
-            <dd className="font-medium text-ink">{paymentStatusLabel}</dd>
-          </div>
-        </>
+        <div className="flex flex-col gap-0.5">
+          <dt className="flex items-center gap-2 text-ink-muted">
+            Rental Fee <PaymentStatusPill status={rentalFeePill(rentalFee)} />
+          </dt>
+          <dd className="min-w-0 break-words">
+            <span className="font-semibold text-ink">{formatCentavos(feePaid ? rentalFee.dueCentavos : rentalFee.outstandingCentavos)}</span>
+            {/* Only while it's still owed: the pill beside the label already gives any other status. */}
+            {!feePaid && !isTerminalBooking(booking) && (
+              <span className="block text-xs text-ink-muted">
+                {rentalFee.paidCentavos > 0 && `${formatCentavos(rentalFee.paidCentavos)} paid, rest `}
+                {rentalFee.paidCentavos > 0 ? 'due' : 'Due'} on or before {formatDateOnly(rentalFee.dueDate)} (your pickup date)
+              </span>
+            )}
+          </dd>
+        </div>
       )}
       {booking.damageReports && booking.damageReports.length > 0 && (
         <div className="flex items-start gap-2 text-amber-700">
@@ -693,12 +778,13 @@ function hasPackageAddOns(booking: RmsMyBooking): boolean {
 }
 
 function RentalLineItems({ booking }: { booking: RmsMyBooking }) {
+  const { gearKinds } = useCatalog();
   // The RMS returns extra rentable inventory as BookingGear rows either way, so `gears` means two
   // different things depending on the booking: the whole rental on a Build Your Own booking, or
   // the optional extras added on top of a package. Labelled accordingly rather than always calling
   // them "Build Your Own Gear", which would misdescribe a package booking's add-ons.
   const isPackageBooking = booking.packages.length > 0;
-  const groups: { label: string; items: { name: string; quantity: number }[]; additional: boolean }[] = [
+  const groups: { label: string; items: { name: string; quantity: number }[]; additional: boolean; isAddOns?: boolean }[] = [
     { label: 'Package', items: booking.packages, additional: false },
     {
       label: isPackageBooking ? 'Optional Add-ons' : 'Build Your Own Gear',
@@ -712,7 +798,7 @@ function RentalLineItems({ booking }: { booking: RmsMyBooking }) {
     // had two separate add-on concepts. "Additional Gear" keeps the same "these are extra, not the
     // base selection" meaning (still gets the "+" prefix via `additional: true`) without repeating
     // a heading that reads as package-specific terminology on a booking that has no package at all.
-    { label: isPackageBooking ? 'Add-ons' : 'Additional Gear', items: booking.addOns, additional: true },
+    { label: isPackageBooking ? 'Add-ons' : 'Additional Gear', items: booking.addOns, additional: true, isAddOns: true },
   ].filter((group) => group.items.length > 0);
 
   if (groups.length === 0) return null;
@@ -730,48 +816,14 @@ function RentalLineItems({ booking }: { booking: RmsMyBooking }) {
                     readers, so this would otherwise just be read out as stray punctuation. */}
                 {group.additional && <span aria-hidden="true">+ </span>}
                 {item.quantity > 1 ? `${item.quantity}× ` : ''}
-                {cleanGearName(item.name, { keepColor: true })}
+                {/* Add-ons: the RMS currently names these by brand + category ("Blackdog Other
+                    Gear Essentials"); show the real add-on name when the catalog pins it down. */}
+                {cleanGearName(group.isAddOns ? resolveAddOnDisplayName(item.name, gearKinds) : item.name, { keepColor: true })}
               </li>
             ))}
           </ul>
         </div>
       ))}
-    </div>
-  );
-}
-
-/**
- * Always-visible headline strip — rental dates, booking type, and fulfillment, the three things a
- * customer should never have to expand a card to see (per the client's explicit list of "must be
- * visible by default" fields). Sits above the Hide/Show Details toggle, so collapsing a card only
- * hides the deeper payment/verification/inspection detail below it, never this. A tinted box
- * (rather than plain text) so it reads as the card's own "at a glance" header, distinct from the
- * denser detail underneath.
- */
-function TripSummaryStrip({ booking }: { booking: RmsMyBooking }) {
-  const isByoBooking = booking.packages.length === 0;
-  const duration = formatRentalDuration(booking.pickupAt, booking.returnAt);
-
-  return (
-    <div className="flex flex-col gap-2 rounded-xl bg-surface-muted p-2.5 sm:flex-row sm:items-center sm:justify-between sm:p-4">
-      <div className="flex items-start gap-2.5">
-        <ClockIcon className="mt-0.5 h-4 w-4 shrink-0 text-ink-faint" />
-        <div className="min-w-0">
-          <p className="text-xs uppercase tracking-wide text-ink-faint">Rental Dates</p>
-          <p className="break-words text-base font-semibold text-ink">
-            {formatDateOnly(booking.pickupAt)} &ndash; {formatDateOnly(booking.returnAt)}
-            {duration && <span className="font-normal text-ink-muted"> &middot; {duration}</span>}
-          </p>
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center gap-1.5 pl-6 sm:pl-0">
-        <span className="rounded-full border border-line bg-surface px-2.5 py-1 text-xs font-medium text-ink">
-          {isByoBooking ? 'Build Your Own' : (booking.packages[0]?.name ?? 'Package')}
-        </span>
-        <span className="rounded-full border border-line bg-surface px-2.5 py-1 text-xs font-medium text-ink">
-          {booking.fulfillmentType === 'DELIVERY' ? 'Delivery' : 'Self Pickup'}
-        </span>
-      </div>
     </div>
   );
 }
@@ -798,44 +850,89 @@ function RentalFeeSummary({
 }) {
   const statusLabel = RENTAL_FEE_STATUS_LABELS[rentalFee.status] ?? formatStatusLabel(rentalFee.status);
   const isPaid = rentalFee.status === 'PAID';
+  const canPay = !isPaid && !readOnly && rentalFee.outstandingCentavos > 0;
+  const isPartlyPaid = !isPaid && rentalFee.paidCentavos > 0 && rentalFee.outstandingCentavos > 0;
+  // Collapsed to just the amount and due date, so a customer sees "pay this by then" without
+  // scrolling through the payment details. Opens by itself when a payment proof was rejected,
+  // since the customer then has something to do in here (resubmit).
+  const [open, setOpen] = useState(rentalFee.proofStatus === 'REJECTED');
+  const panelId = `rental-fee-details-${bookingId}`;
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-line p-4 sm:p-5">
-      <div className="flex flex-col gap-1">
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-ink-muted">Rental Fee</h3>
-        <p className="text-2xl font-bold text-ink">{formatCurrency(rentalFee.dueCentavos / 100)}</p>
-        <p className="text-xs text-ink-faint">Amount Due</p>
+    // A green border so it reads as its own section, separate from the Security Deposit card above.
+    // Only the headline (label, amount, due date) is tinted green; the details underneath sit on
+    // plain white so they're easy to read.
+    <div id={`rental-fee-${bookingId}`} className="flex scroll-mt-24 flex-col overflow-hidden rounded-xl border-2 border-brand-forest/40 bg-surface">
+      <div className="flex items-start justify-between gap-3 bg-brand-forest/10 p-4 sm:p-5">
+        <div className="flex min-w-0 flex-col gap-1">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-accent">Rental Fee</h3>
+          {/* After a partial payment (e.g. half by GCash, the rest in cash at pickup) the headline
+              is what's still owed, never the full fee; the paid part and the total are spelled out
+              underneath. All three figures are the RMS's own. */}
+          <p className="text-2xl font-bold text-ink">
+            {formatCentavos(isPaid ? rentalFee.dueCentavos : rentalFee.outstandingCentavos)}
+            {isPartlyPaid && <span className="ml-1.5 text-sm font-semibold text-ink-muted">remaining</span>}
+          </p>
+          {isPartlyPaid && (
+            <p className="text-xs font-medium text-accent">
+              {formatCentavos(rentalFee.paidCentavos)} paid of {formatCentavos(rentalFee.dueCentavos)}
+            </p>
+          )}
+          <p className="text-xs text-ink-muted">
+            {isPaid ? 'Paid' : `Due on or before ${formatDateTime(rentalFee.dueDate)}`}
+          </p>
+        </div>
+        {/* "Pay Now" while the fee is still owed (opens the payment instructions and proof upload);
+            just "Details" once it's paid or the booking is over, when there's nothing to pay. */}
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          aria-expanded={open}
+          aria-controls={panelId}
+          className={`flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+            !open && canPay
+              ? 'bg-brand-forest text-white shadow-sm hover:bg-brand-forest-dark'
+              : 'border border-line bg-surface text-accent hover:bg-surface-strong'
+          }`}
+        >
+          {open ? 'Hide' : canPay ? 'Pay Now' : 'Details'}
+          <ChevronDownIcon className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
+        </button>
       </div>
 
-      {/* Straight from the RMS: the fee before the discount and the discount itself. */}
-      <BookingDiscountSummary discount={discount} rentalFee={rentalFee} />
+      {open && (
+        <div id={panelId} className="flex flex-col gap-3 border-t border-brand-forest/20 p-4 sm:p-5">
+          {/* Straight from the RMS: the fee before the discount and the discount itself. */}
+          <BookingDiscountSummary discount={discount} rentalFee={rentalFee} />
 
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
-        <dt className="text-ink-muted">Amount Paid</dt>
-        <dd className="text-right font-medium text-ink">{formatCurrency(rentalFee.paidCentavos / 100)}</dd>
-        <dt className="text-ink-muted">Outstanding</dt>
-        <dd className="text-right font-medium text-ink">{formatCurrency(rentalFee.outstandingCentavos / 100)}</dd>
-        <dt className="text-ink-muted">Payment Status</dt>
-        <dd className="text-right font-medium text-ink">{statusLabel}</dd>
-        <dt className="text-ink-muted">Due Date</dt>
-        <dd className="text-right font-medium text-ink">{formatDateTime(rentalFee.dueDate)}</dd>
-      </dl>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+            <dt className="text-ink-muted">Amount Paid</dt>
+            <dd className="text-right font-medium text-ink">{formatCentavos(rentalFee.paidCentavos)}</dd>
+            <dt className="text-ink-muted">Outstanding</dt>
+            <dd className="text-right font-medium text-ink">{formatCentavos(rentalFee.outstandingCentavos)}</dd>
+            <dt className="text-ink-muted">Payment Status</dt>
+            <dd className="text-right font-medium text-ink">{statusLabel}</dd>
+            <dt className="text-ink-muted">Due Date</dt>
+            <dd className="text-right font-medium text-ink">{formatDateTime(rentalFee.dueDate)}</dd>
+          </dl>
 
-      <p className="text-xs text-ink-faint">
-        Payable any time on or before your rental date, cash at pickup is accepted. To pay
-        cashlessly, follow the payment instructions below and upload your proof of payment.
-      </p>
+          <p className="text-xs text-ink-faint">
+            Payable any time on or before your rental date, cash at pickup is accepted. To pay
+            cashlessly, follow the payment instructions below and upload your proof of payment.
+          </p>
 
-      <RentalFeeProofUpload
-        bookingId={bookingId}
-        isPaid={isPaid}
-        paidCentavos={rentalFee.paidCentavos}
-        proofStatus={rentalFee.proofStatus ?? null}
-        reviewNote={rentalFee.reviewNote ?? null}
-        amountClaimedCentavos={rentalFee.amountClaimedCentavos ?? null}
-        onProofSubmitted={onRentalFeeProofSubmitted}
-        readOnly={readOnly}
-      />
+          <RentalFeeProofUpload
+            bookingId={bookingId}
+            isPaid={isPaid}
+            paidCentavos={rentalFee.paidCentavos}
+            proofStatus={rentalFee.proofStatus ?? null}
+            reviewNote={rentalFee.reviewNote ?? null}
+            amountClaimedCentavos={rentalFee.amountClaimedCentavos ?? null}
+            onProofSubmitted={onRentalFeeProofSubmitted}
+            readOnly={readOnly}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -1156,55 +1253,6 @@ function ReturnSettlementPanel({
   );
 }
 
-/**
- * A titled card of real buttons for the handful of things a customer actually does with this
- * booking — never a placeholder link. "View Payment Details" just scrolls to the payment section
- * already rendered in this same card's main column (never navigates or fetches anything new);
- * "Contact Support" reuses the site's one real Messenger destination (config/social.ts), the same
- * link the global "Need Help?" widget already uses. Lives in the card's right-hand column, so —
- * unlike the page-level sidebar this replaced earlier in the project — it can only ever refer to
- * the ONE booking it's rendered next to.
- */
-function QuickActions({
-  booking,
-  onJumpTo,
-}: {
-  booking: RmsMyBooking;
-  onJumpTo: (targetId: string) => void;
-}) {
-  return (
-    <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4">
-      <SectionHeader icon={BoltIcon} title="Quick Actions" subtitle="Need help or have questions?" />
-      <div className="flex flex-col gap-2">
-        <button
-          type="button"
-          onClick={() => onJumpTo(`booking-details-${booking.bookingId}`)}
-          className="flex items-center justify-between gap-2 rounded-lg bg-brand-forest px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-forest-dark"
-        >
-          <span className="flex items-center gap-2">
-            <EyeIcon className="h-4 w-4 shrink-0" />
-            View Payment Details
-          </span>
-          <span aria-hidden="true">&rarr;</span>
-        </button>
-        <a
-          href={MESSENGER_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="Contact Support via Messenger (opens in a new tab)"
-          className="flex items-center justify-between gap-2 rounded-lg border border-line px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-surface-strong"
-        >
-          <span className="flex items-center gap-2">
-            <ChatBubbleIcon className="h-4 w-4 shrink-0" />
-            Contact Support
-          </span>
-          <span aria-hidden="true">&rarr;</span>
-        </a>
-      </div>
-    </div>
-  );
-}
-
 /** Bold, high-contrast shortcut card to the Gear Inspection findings further down this same card
  *  — only rendered when the RMS actually recorded a damage/loss report, matching the same
  *  condition GearInspectionPanel itself uses. Never a duplicate data source: this is purely a
@@ -1328,8 +1376,6 @@ function BookingCard({
         </span>
       </div>
 
-      <TripSummaryStrip booking={booking} />
-
       {nextStep.message && (
         <div className={`flex items-start gap-2 rounded-lg border px-3 py-2 sm:py-2.5 ${TONE_STYLES[nextStep.tone]}`}>
           <ToneIcon tone={nextStep.tone} className="h-4 w-4 shrink-0 translate-y-0.5" />
@@ -1369,24 +1415,35 @@ function BookingCard({
             anything narrower than lg, right column stacking below the main content. */}
         <div className="grid gap-3.5 border-t border-line-soft pt-3 sm:gap-4 lg:grid-cols-[1fr_17rem] lg:items-start lg:gap-5">
           <div className="flex min-w-0 flex-col gap-3.5 sm:gap-4">
-            {/* Exact pickup/return time-of-day — the headline date range already lives in the
-                always-visible TripSummaryStrip above; this is the finer detail a customer has just
-                chosen to hide when the card is collapsed. */}
+            {/* Pickup/return dates and times, rental length, kit and fulfillment — the one place a
+                booking's rental details live (a separate "Rental Dates" strip above this repeated
+                them and was removed). A collapsed card still shows its dates in collapsedSummary. */}
             <div className="flex flex-col gap-2.5 rounded-xl border border-line bg-surface p-3.5 sm:gap-3 sm:p-4">
               <SectionHeader icon={GearPlaceholderIcon} title="Rental Details" subtitle="Your gear rental information" />
-              <div className="grid grid-cols-1 gap-2.5 rounded-lg bg-surface-muted p-2.5 sm:grid-cols-3 sm:gap-3 sm:p-3">
+              <div className="grid grid-cols-1 gap-2.5 rounded-lg bg-surface-muted p-2.5 sm:grid-cols-2 sm:gap-3 sm:p-3">
                 <div className="min-w-0">
                   <p className="text-xs text-ink-faint">Pickup</p>
                   <p className="break-words text-sm font-medium text-ink">{formatDateTime(booking.pickupAt)}</p>
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs text-ink-faint">Return</p>
-                  <p className="break-words text-sm font-medium text-ink">{formatDateTime(booking.returnAt)}</p>
+                  <p className="break-words text-sm font-medium text-ink">
+                    {formatDateTime(booking.returnAt)}
+                    {formatRentalDuration(booking.pickupAt, booking.returnAt) && (
+                      <span className="font-normal text-ink-muted"> &middot; {formatRentalDuration(booking.pickupAt, booking.returnAt)}</span>
+                    )}
+                  </p>
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs text-ink-faint">Rental Kit</p>
                   <p className="break-words text-sm font-medium text-ink">
                     {booking.packages.length === 0 ? 'Build Your Own' : (booking.packages[0]?.name ?? 'Package')}
+                  </p>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs text-ink-faint">Fulfillment</p>
+                  <p className="break-words text-sm font-medium text-ink">
+                    {booking.fulfillmentType === 'DELIVERY' ? 'Delivery' : 'Self Pickup'}
                   </p>
                 </div>
               </div>
@@ -1404,7 +1461,6 @@ function BookingCard({
               <RentalLineItems booking={booking} />
             </div>
 
-            <PaymentSummary booking={booking} />
             {/* Omitted for CANCELLED — see BookingProgress's own comment on why a cancelled booking
                 doesn't have a meaningful position in this sequence. */}
             {booking.status !== 'CANCELLED' && (
@@ -1438,20 +1494,25 @@ function BookingCard({
                 />
               )}
 
-            <DepositProofUpload
-              bookingId={booking.bookingId}
-              requiredCentavos={booking.securityDeposit.requiredCentavos}
-              verifiedCentavos={booking.securityDeposit.verifiedCentavos}
-              verified={booking.securityDeposit.verified}
-              proofStatus={booking.securityDeposit.proofStatus}
-              reviewNote={booking.securityDeposit.reviewNote}
-              amountClaimedCentavos={booking.securityDeposit.amountClaimedCentavos}
-              addOnDepositCentavos={booking.securityDeposit.addOnDepositCentavos}
-              isByoBooking={booking.packages.length === 0}
-              hasPackageAddOns={hasPackageAddOns(booking)}
-              onProofSubmitted={onDepositProofSubmitted}
-              readOnly={isTerminalBooking(booking)}
-            />
+            {/* Anchor for the "Pay security deposit" / "Resubmit deposit proof" buttons: lands on the
+                deposit amount, payment instructions and proof upload. scroll-mt clears the sticky
+                site header. */}
+            <div id={`security-deposit-${booking.bookingId}`} className="scroll-mt-24">
+              <DepositProofUpload
+                bookingId={booking.bookingId}
+                requiredCentavos={booking.securityDeposit.requiredCentavos}
+                verifiedCentavos={booking.securityDeposit.verifiedCentavos}
+                verified={booking.securityDeposit.verified}
+                proofStatus={booking.securityDeposit.proofStatus}
+                reviewNote={booking.securityDeposit.reviewNote}
+                amountClaimedCentavos={booking.securityDeposit.amountClaimedCentavos}
+                addOnDepositCentavos={booking.securityDeposit.addOnDepositCentavos}
+                isByoBooking={booking.packages.length === 0}
+                hasPackageAddOns={hasPackageAddOns(booking)}
+                onProofSubmitted={onDepositProofSubmitted}
+                readOnly={isTerminalBooking(booking)}
+              />
+            </div>
 
             {/* Deliberately a separate card, never merged with Security Deposit above — the rental
                 fee is a distinct charge with its own due date (the pickup date) and is never required
@@ -1497,13 +1558,19 @@ function BookingCard({
                 readOnly={isTerminalBooking(booking)}
               />
             )}
+
+            {/* The overall money summary, last: the deposit and rental fee sections above are where
+                the customer acts; this rounds it all up. Set apart from them by a dashed divider and
+                extra space (not a different colour) so it reads as its own section. */}
+            <div className="mt-1 border-t-2 border-dashed border-line pt-4 sm:mt-2 sm:pt-5">
+              <PaymentSummary booking={booking} />
+            </div>
           </div>
 
           <aside className="flex flex-col gap-4 lg:sticky lg:top-24">
             {booking.damageReports && booking.damageReports.length > 0 && (
               <InspectionShortcut bookingId={booking.bookingId} onJumpTo={jumpTo} />
             )}
-            <QuickActions booking={booking} onJumpTo={jumpTo} />
             <NeedAssistanceCard />
           </aside>
         </div>
@@ -1514,91 +1581,14 @@ function BookingCard({
 
 /** Compact count tile for the dashboard strip. Every figure it shows is counted from the bookings
  *  the RMS actually returned — never a placeholder or an estimate. A zero count is deliberately
- *  quieter (faint number, no border emphasis) so an empty tile recedes instead of competing for
- *  attention with the tiles that actually have something to report; a positive "Needs Action" count
- *  gets a ring (not just a colored fill) so it reads as the one tile that wants a second look
- *  without shouting over the rest of the strip. */
-function SummaryTile({ label, value, tone }: { label: string; value: number; tone?: 'attention' }) {
+ *  quieter (faint number) so an empty tile recedes instead of competing with the ones that have
+ *  something to report. */
+function SummaryTile({ label, value }: { label: string; value: number }) {
   const isEmpty = value === 0;
-  const isAttention = tone === 'attention' && value > 0;
-
   return (
-    <div
-      className={`flex flex-col gap-0.5 rounded-xl border p-2.5 sm:p-3 ${
-        isAttention
-          ? 'border-red-300 bg-red-50 ring-1 ring-red-300'
-          : 'border-line bg-surface'
-      }`}
-    >
-      <span
-        className={`text-xl font-bold ${
-          isAttention ? 'text-red-700' : isEmpty ? 'text-ink-faint' : 'text-ink'
-        }`}
-      >
-        {value}
-      </span>
-      <span className={`text-xs ${isEmpty && !isAttention ? 'text-ink-faint' : 'text-ink-muted'}`}>{label}</span>
-    </div>
-  );
-}
-
-/**
- * Page-level rollup of every booking that currently needs the customer's attention — never a
- * second source of truth: each row is just this same booking's own getNextStep result (the exact
- * tone/message already shown inline on that booking's own card), surfaced once above the booking
- * list so a customer with several bookings doesn't have to open each card to find out what's
- * actionable (danger and warning tones only — an info/success/neutral next-step is "in progress,"
- * not something the customer needs to do anything about). "View" scrolls to that booking's own
- * card, where the same message and its own CTA (if any) are already rendered — this panel never
- * duplicates the action itself, only where to find it. Renders a quiet all-clear state instead of
- * an empty section when nothing needs action.
- */
-function ActionRequiredPanel({
-  bookings,
-  onJumpToBooking,
-}: {
-  bookings: RmsMyBooking[];
-  onJumpToBooking: (bookingNumber: string) => void;
-}) {
-  const items = bookings
-    .map((booking) => ({ booking, nextStep: getNextStep(booking) }))
-    .filter(({ nextStep }) => nextStep.tone === 'danger' || nextStep.tone === 'warning');
-
-  if (items.length === 0) {
-    return (
-      <div className="flex items-center gap-2.5 rounded-xl border border-brand-forest/30 bg-brand-forest/10 px-4 py-3 text-sm font-medium text-accent">
-        <CheckCircleIcon className="h-4 w-4 shrink-0" />
-        You're all caught up.
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-2.5 rounded-xl border-2 border-red-300 bg-red-50 p-3.5 sm:gap-3 sm:p-5">
-      <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-red-800">
-        <AlertTriangleIcon className="h-4 w-4 shrink-0" />
-        Action Required ({items.length})
-      </h2>
-      <ul className="flex flex-col gap-2">
-        {items.map(({ booking, nextStep }) => (
-          <li
-            key={booking.bookingId}
-            className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-lg bg-surface px-3 py-2 shadow-sm sm:gap-y-2 sm:py-2.5"
-          >
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-ink-faint">#{booking.bookingNumber}</p>
-              <p className="text-sm text-ink">{nextStep.message}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => onJumpToBooking(booking.bookingNumber)}
-              className="shrink-0 rounded-md border border-line px-3 py-1.5 text-xs font-semibold text-accent transition-colors hover:bg-surface-strong"
-            >
-              View →
-            </button>
-          </li>
-        ))}
-      </ul>
+    <div className="flex flex-col gap-0.5 rounded-xl border border-line bg-surface p-2.5 sm:p-3">
+      <span className={`text-xl font-bold ${isEmpty ? 'text-ink-faint' : 'text-ink'}`}>{value}</span>
+      <span className={`text-xs ${isEmpty ? 'text-ink-faint' : 'text-ink-muted'}`}>{label}</span>
     </div>
   );
 }
@@ -1678,7 +1668,7 @@ function PaymentSummary({ booking }: { booking: RmsMyBooking }) {
         badge={
           paymentStatusLabel && (
             <span
-              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${rentalFee?.status === 'PAID' ? 'bg-brand-forest/10 text-accent' : 'bg-amber-100 text-amber-800'}`}
+              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${rentalFee?.status === 'PAID' ? 'bg-brand-forest/10 text-accent' : 'bg-line-soft text-ink-muted'}`}
             >
               {paymentStatusLabel}
             </span>
@@ -1692,11 +1682,11 @@ function PaymentSummary({ booking }: { booking: RmsMyBooking }) {
       {rentalFee && (
         <div
           className={`flex items-center justify-between rounded-lg px-3 py-2.5 ${
-            hasBalanceDue ? 'bg-amber-50' : 'bg-brand-forest/10'
+            hasBalanceDue ? 'border border-line' : 'bg-brand-forest/10'
           }`}
         >
           <div>
-            <span className={`text-sm font-medium ${hasBalanceDue ? 'text-amber-800' : 'text-accent'}`}>
+            <span className={`text-sm font-medium ${hasBalanceDue ? 'text-ink-muted' : 'text-accent'}`}>
               Balance
             </span>
             {!hasBalanceDue && (
@@ -1705,8 +1695,8 @@ function PaymentSummary({ booking }: { booking: RmsMyBooking }) {
               </span>
             )}
           </div>
-          <span className={`text-xl font-bold ${hasBalanceDue ? 'text-amber-800' : 'text-accent'}`}>
-            {formatCurrency(rentalFee.outstandingCentavos / 100)}
+          <span className={`text-xl font-bold ${hasBalanceDue ? 'text-ink' : 'text-accent'}`}>
+            {formatCentavos(rentalFee.outstandingCentavos)}
           </span>
         </div>
       )}
@@ -1716,7 +1706,7 @@ function PaymentSummary({ booking }: { booking: RmsMyBooking }) {
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
         <dt className="text-ink-muted">Rental Fee</dt>
         <dd className="text-right font-medium text-ink">
-          {rentalFee ? formatCurrency(rentalFee.dueCentavos / 100) : formatCurrency(booking.rentalFeeCentavos / 100)}
+          {rentalFee ? formatCentavos(rentalFee.dueCentavos) : formatCentavos(booking.rentalFeeCentavos)}
         </dd>
 
         {hasDeterminedAddOnDeposit ? (
@@ -1804,7 +1794,7 @@ function PaymentSummary({ booking }: { booking: RmsMyBooking }) {
           {rentalFee && (
             <>
               <dt className="text-ink-muted">Amount Paid</dt>
-              <dd className="text-right font-medium text-ink">{formatCurrency(rentalFee.paidCentavos / 100)}</dd>
+              <dd className="text-right font-medium text-ink">{formatCentavos(rentalFee.paidCentavos)}</dd>
 
               <dt className="text-ink-muted">Payment Status</dt>
               <dd className="text-right font-medium text-ink">
@@ -2098,7 +2088,6 @@ export default function MyBookings() {
   const pastBookings = bookings.filter((booking) => PAST_STATUSES.has(booking.status));
   const currentBookings = activeBookings.filter((booking) => CURRENT_STATUSES.has(booking.status));
   const upcomingBookings = activeBookings.filter((booking) => !CURRENT_STATUSES.has(booking.status));
-  const attentionCount = bookings.filter(needsAttention).length;
   const pendingReviewCount = bookings.filter((booking) => PENDING_REVIEW_STATUSES.has(booking.status)).length;
   const completedCount = bookings.filter((booking) => booking.status === 'COMPLETED' || booking.status === 'RETURNED').length;
   // The "Payment" tab's own filtered view — see hasOutstandingPayment's own doc comment. Computed
@@ -2136,31 +2125,6 @@ export default function MyBookings() {
     setHistoryQuery('');
   }
 
-  // Scrolls to a booking's card from the page-level Action Required panel. Expands the Booking
-  // History section first when the target booking lives there — it's collapsed by default (see
-  // showPast's initial state) — so the card actually exists on the page before scrolling to it.
-  // The card's own detailsOpen state is a separate concern handled entirely inside BookingCard
-  // (see its jumpTo): this only needs to get the CARD itself on screen, since the next-step
-  // message and its own CTA are already visible on a card regardless of whether it's expanded.
-  function handleJumpToBooking(bookingNumber: string) {
-    const isPast = pastBookings.some((booking) => booking.bookingNumber === bookingNumber);
-    // The Action Required panel stays visible regardless of which tab is active (see its own
-    // render call below), so its "View" target might currently be on a hidden tab — every
-    // non-past booking always renders under "Current" (Payment is an additional filtered view
-    // layered on top of it, never the only place a booking appears), so that split alone is
-    // enough to always land on the right tab. Same reasoning as the highlighted-booking effect
-    // above for clearing any active History filter/search that could keep the target out of view.
-    setActiveTab(isPast ? 'history' : 'current');
-    if (isPast) {
-      clearHistoryFilters();
-    }
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        document.getElementById(`booking-${bookingNumber}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
-    });
-  }
-
   return (
     // max-w-6xl (72rem/1152px) — enough room for the sidebar + booking-list layout below to feel
     // comfortable at 1280/1440/1920 desktop widths without stretching either column into an
@@ -2172,12 +2136,6 @@ export default function MyBookings() {
         <div className="flex flex-col gap-1 sm:gap-1.5">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="font-serif text-xl font-semibold text-ink">My Bookings</h1>
-            {attentionCount > 0 && (
-              <span className="flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">
-                <AlertTriangleIcon className="h-3 w-3" />
-                {attentionCount} need{attentionCount === 1 ? 's' : ''} attention
-              </span>
-            )}
           </div>
           <p className="text-sm text-ink-muted">View your current rentals, payment status, and booking history.</p>
         </div>
@@ -2201,16 +2159,11 @@ export default function MyBookings() {
       {/* Full-width horizontal metrics strip directly under the title — replaces the old cramped
           2x2 grid that used to live in a narrow sidebar column. */}
       {state.kind === 'ready' && bookings.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
           <SummaryTile label="Current & Upcoming" value={activeBookings.length} />
           <SummaryTile label="Pending Review" value={pendingReviewCount} />
-          <SummaryTile label="Needs Action" value={attentionCount} tone="attention" />
           <SummaryTile label="Completed" value={completedCount} />
         </div>
-      )}
-
-      {state.kind === 'ready' && bookings.length > 0 && (
-        <ActionRequiredPanel bookings={bookings} onJumpToBooking={handleJumpToBooking} />
       )}
 
       {/* Category tabs (Part 4) — a filtered VIEW over the one already-fetched booking list, never
@@ -2311,7 +2264,7 @@ export default function MyBookings() {
                       }
                       onVerificationResubmitted={(kind) => handleVerificationResubmitted(booking.bookingId, kind)}
                       highlighted={booking.bookingNumber === highlightedBookingNumber}
-                      defaultOpen
+                      defaultOpen={booking.bookingNumber === highlightedBookingNumber}
                     />
                   ))}
                 </div>
@@ -2333,7 +2286,7 @@ export default function MyBookings() {
                       }
                       onVerificationResubmitted={(kind) => handleVerificationResubmitted(booking.bookingId, kind)}
                       highlighted={booking.bookingNumber === highlightedBookingNumber}
-                      defaultOpen
+                      defaultOpen={booking.bookingNumber === highlightedBookingNumber}
                     />
                   ))}
                 </div>
@@ -2364,7 +2317,7 @@ export default function MyBookings() {
                       }
                       onVerificationResubmitted={(kind) => handleVerificationResubmitted(booking.bookingId, kind)}
                       highlighted={booking.bookingNumber === highlightedBookingNumber}
-                      defaultOpen
+                      defaultOpen={booking.bookingNumber === highlightedBookingNumber}
                     />
                   ))}
                 </div>

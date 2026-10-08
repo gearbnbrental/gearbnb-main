@@ -34,6 +34,7 @@ import { clearAvailabilityCache, requestAvailabilityCheck, useAvailabilityCheck 
 import { cleanGearName } from '../../utils/gearName';
 import { describeAvailabilityIssue } from '../../utils/availabilityIssue';
 import { useBasketPromo } from '../../hooks/useBasketPromo';
+import { checkoutBlocker } from '../../utils/checkoutRules';
 import { usePromoQuote } from '../../hooks/usePromoQuote';
 import { promoLinesForCart } from '../../utils/promoCart';
 import { formatCentavos, type BasketPromoState } from '../../utils/promo';
@@ -204,17 +205,8 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
   // it is never caught here. More than one package and the old individual-gear (pre-BYO) cart slot
   // remain unsupported — none of these are silently dropped: submission is blocked with an
   // explicit reason instead, per instruction not to discard checkout data quietly.
-  const hasAnyKitExtras = Object.values(kitExtras).some((ids) => ids.length > 0);
-  const unsupportedReason =
-    selectedItems.length > 0
-      ? "Individual gear added the old way isn't supported through online checkout, please remove it from your cart, or use Build Your Own instead."
-      : hasPackage && hasByoGear
-        ? 'Please choose either a Package or Build Your Own for this booking, not both. Remove one before submitting.'
-        : selectedKits.length > 1
-          ? 'Only one package can be booked per online submission right now, please remove extra packages from your cart.'
-          : hasPackage && hasAnyKitExtras
-            ? "Package add-ons aren't yet supported through online checkout, please remove them from your cart, or contact us directly to add them to your booking."
-            : null;
+  // Same rule the Cart already applies before the customer gets here (see checkoutBlocker).
+  const unsupportedReason = checkoutBlocker(selectedCart);
 
   /** RMS-confirmed availability for the customer's actual current checkout selection — never
    *  trusted from whatever the catalog page last saw, since a package/gear can be reserved by
@@ -717,6 +709,16 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
         />
       </div>
 
+      {/* The saving, right under the two cards it explains — a light box, so the Rental Fee
+          Total card stays the figure that stands out. */}
+      {hasSelection && (
+        <CheckoutSavingLine
+          saving={saving}
+          catalogPath={hasPackage ? '/catalog/camping-packages' : '/catalog/build-your-own'}
+          normalFeeCentavos={Math.round(totals.dueBeforeStart * 100)}
+        />
+      )}
+
       <section className="flex flex-col gap-3 rounded-xl border border-line p-4 sm:p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-muted">Itemized Breakdown</h2>
 
@@ -870,8 +872,6 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
           </p>
         )}
       </section>
-
-      {hasSelection && <CheckoutSavingLine saving={saving} catalogPath={hasPackage ? '/catalog/camping-packages' : '/catalog/build-your-own'} />}
 
       {hasSelection && (
         <section className="flex flex-col gap-3 rounded-xl border border-line p-4 sm:p-5">
