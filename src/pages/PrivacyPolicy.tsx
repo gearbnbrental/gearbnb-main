@@ -36,6 +36,7 @@ const SECTIONS: LegalSection[] = [
           <li><Strong>Your rights.</Strong> You are allowed to access, correct, block or delete your data and to withdraw your consent. Email {DPO_EMAIL}.</li>
           <li><Strong>Google sign-in.</Strong> If you sign in with Google we receive your name, email address and profile picture. We use this data only to run your GearBnB account. We do not sell the data or use the data for advertising. See <SectionLink id="google">section&nbsp;5</SectionLink>.</li>
           <li><Strong>Payments.</Strong> We do not use a payment provider. You pay by GCash or bank transfer and we record each payment by hand.</li>
+          <li><Strong>Meta Pixel.</Strong> With your consent, our website uses Meta Pixel to count visits and measure our Facebook and Instagram ads. You choose on our cookie banner. See <SectionLink id="cookies">section&nbsp;12</SectionLink>.</li>
         </LegalList>
       </>
     ),
@@ -117,8 +118,8 @@ const SECTIONS: LegalSection[] = [
         </LegalList>
         <p><Strong>Data your device sends us</Strong></p>
         <LegalList>
-          <li><Strong>Technical data.</Strong> Your IP address, device type, browser, pages visited and the date and time of your visit.</li>
-          <li><Strong>Cookie and storage data.</Strong> Small files and browser storage which keep the site working. See <SectionLink id="cookies">section&nbsp;12</SectionLink>.</li>
+          <li><Strong>Technical data.</Strong> Your IP address, device type, browser, pages visited and the date and time of your visit. If you accept cookies on our banner, Meta Pixel also collects some of this data for us.</li>
+          <li><Strong>Cookie and storage data.</Strong> Small files and browser storage which keep the site working, and Meta Pixel cookies if you accept them on our cookie banner. See <SectionLink id="cookies">section&nbsp;12</SectionLink>.</li>
         </LegalList>
         <p>You choose what you give us. We need the contact details, booking details and verification documents to complete a rental.</p>
       </>
@@ -253,6 +254,7 @@ const SECTIONS: LegalSection[] = [
             ['Keep financial and tax records', 'Booking and payment records', 'Legal obligation'],
             ['Prevent fraud, theft and unpaid rentals', 'Verification documents, booking and payment records', 'Legitimate interests'],
             ['Run, secure and improve the website', 'Technical data', 'Legitimate interests'],
+            ['Count website visits and measure our Facebook and Instagram ads (Meta Pixel)', 'Technical data and cookie data', 'Consent'],
             ['Meet legal requests and protect our legal rights', 'Data the request or claim requires', 'Legal obligation and legitimate interests'],
           ]}
         />
@@ -290,6 +292,7 @@ const SECTIONS: LegalSection[] = [
             ['Hostinger', 'Website hosting and email services', 'Website data and emails'],
             ['Google', 'Gmail email service', 'Emails you send us and our replies'],
             ['Google (sign-in)', 'You choose to sign in with your Google Account', 'Google knows you signed in to GearBnB'],
+            ['Meta Platforms (Meta Pixel)', 'Count website visits and measure our Facebook and Instagram ads, only if you accept cookies', 'Pages you visit, your IP address, browser and device data, and cookie identifiers'],
             ['Government bodies, courts and law enforcement', 'Meet legal duties', 'Data the law requires'],
             ['Accountants and lawyers', 'Tax, accounting and legal advice', 'Data needed for their work'],
             ['A buyer or partner in a business sale or merger', 'Transfer the business', 'Business records'],
@@ -317,7 +320,8 @@ const SECTIONS: LegalSection[] = [
       <p>
         Hostinger and Google run servers in several countries. Your data might be stored or processed outside the
         Philippines. We stay responsible for your data when a provider handles the data for us. We choose providers with
-        security measures to protect your data during any transfer.
+        security measures to protect your data during any transfer. If you accept cookies, Meta also processes the
+        data Meta Pixel collects on servers outside the Philippines, including in the United States.
       </p>
     ),
   },
@@ -392,10 +396,21 @@ const SECTIONS: LegalSection[] = [
           headers={['Type', 'Purpose', 'Status']}
           rows={[
             ['Essential', 'Keep you signed in, hold your cart and keep the site secure', 'In use'],
-            ['Analytics', 'Measure site traffic and show us which pages visitors use', 'Not in use today'],
-            ['Advertising', 'Show you ads on other sites', 'Not in use'],
+            ['Analytics and advertising (Meta Pixel)', 'Count visits, see which pages visitors use and measure our Facebook and Instagram ads', 'In use only if you accept'],
           ]}
         />
+        <p>
+          Our website uses Meta Pixel, a tool from Meta Platforms. Meta Pixel runs only if you tap Accept on our cookie
+          banner. It sets cookies and sends Meta data about your visit, such as the pages you view, your IP address and
+          your browser. We use this data to count visits and to see how well our Facebook and Instagram ads work. Meta
+          handles this data under its own privacy policy.
+        </p>
+        <p>
+          You are allowed to change your choice at any time with the Cookie Settings link at the bottom of every page.
+          You are also allowed to control ad tracking in your Facebook settings under Ad Preferences, block cookies in
+          your browser, or use a browser setting or extension which blocks tracking. The rest of our site keeps working
+          if you decline or block Meta Pixel.
+        </p>
         <p>
           We plan to add Google Analytics. Before we do we will update this policy and ask for your consent where the
           law requires.
@@ -458,8 +473,9 @@ const SECTIONS: LegalSection[] = [
       <p>
         Our site links to services from other companies. These include Google Sign-In, Google Maps for our pickup
         location and Messenger, Facebook, Instagram and TikTok for messages. GCash, your bank and Grab also handle data
-        when you use their services. Each company controls its own data and follows its own privacy policy. Read those
-        policies before you use the services.
+        when you use their services. If you accept cookies, Meta Pixel on our site sends visit data to Meta. See{' '}
+        <SectionLink id="cookies">section&nbsp;12</SectionLink>. Each company controls its own data and follows its own
+        privacy policy. Read those policies before you use the services.
       </p>
     ),
   },
@@ -526,7 +542,7 @@ export default function PrivacyPolicy() {
   return (
     <LegalLayout
       title="Privacy Policy"
-      updated="September 2026"
+      updated="October 2026"
       lead="This policy explains how GearBnB Camping Gear Rental collects, uses, stores, shares and protects your personal data. We follow the Data Privacy Act of 2012 (Republic Act No. 10173) and its Implementing Rules and Regulations. Read this policy before you create an account, book a rental or request an event quote."
       sections={SECTIONS}
     />

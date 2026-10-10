@@ -15,6 +15,7 @@ import { ID_VERIFICATION_FAQ, type FaqEntry } from '../utils/productFaq';
 import GalleryNav, { useSwipe } from './GalleryNav';
 import GearDetailsDialog from './GearDetailsDialog';
 import { GearPlaceholderIcon } from './icons';
+import { useProductViewOpen } from '../utils/productView';
 import ImageLightbox, { type LightboxImage } from './ImageLightbox';
 import PackageContents from './PackageContents';
 import ProductFaqSection from './ProductFaqSection';
@@ -108,6 +109,7 @@ export default function PackageDetailsDialog({
   onToggleSelected,
   onClose,
 }: PackageDetailsDialogProps) {
+  useProductViewOpen();
   const { gearKinds } = useCatalog();
   // Same promo rule as the package card, for each price tier: discounted once the promo covers
   // packages and the tier meets the minimum, unless a start date outside the promo's dates is set.

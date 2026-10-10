@@ -15,6 +15,7 @@ import { useCatalog } from '../context/useCatalog';
 import GalleryNav, { useSwipe } from './GalleryNav';
 import FormattedDescription from './FormattedDescription';
 import { GearPlaceholderIcon } from './icons';
+import { useProductViewOpen } from '../utils/productView';
 import ImageLightbox, { type LightboxImage } from './ImageLightbox';
 import ProductFaqSection from './ProductFaqSection';
 import { AddOnRow, QuantityStepper } from '../pages/PathBCatalog';
@@ -93,6 +94,7 @@ interface GearDetailsDialogProps {
  * this feature's own design discussion for what a real per-product URL would additionally buy.
  */
 export default function GearDetailsDialog({ kind, quantity, onQuantityChange, onClose, addOnsSection, viewOnly }: GearDetailsDialogProps) {
+  useProductViewOpen();
   const gallery: LightboxImage[] =
     kind.images && kind.images.length > 0
       ? kind.images.map((src) => ({ src, alt: kind.name }))

@@ -52,7 +52,7 @@ export default function BackToTop() {
       type="button"
       onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
       aria-label="Back to top"
-      className={`fixed right-4 z-40 flex h-11 w-11 items-center justify-center rounded-full border border-line bg-surface text-ink-muted shadow-lg transition-colors hover:bg-surface-strong hover:text-ink sm:right-6 ${
+      className={`hide-in-product-view fixed right-4 z-40 flex h-11 w-11 items-center justify-center rounded-full border border-line bg-surface text-ink-muted shadow-lg transition-colors hover:bg-surface-strong hover:text-ink sm:right-6 ${
         lifted ? 'bottom-[10.25rem]' : 'bottom-[5.5rem] sm:bottom-[5.75rem]'
       }`}
     >

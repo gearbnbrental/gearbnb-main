@@ -12,11 +12,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Camping Gear Rental in the Philippines | GearBnB</title>
     <meta name="description" content="Explore camping gear rental in the Philippines, serving Metro Manila, Las Piñas, and nearby cities. Find quality gear and book for your next adventure." />
-    <!-- Meta Pixel Code. Only runs on the live site (gearbnbrental.com), so local development and
-         previews never send test traffic to the pixel. Page changes inside the site are tracked by
-         MetaPixelPageViews in src/App.tsx (the site switches pages without a full reload). -->
+    <!-- Meta Pixel Code. Loads ONLY after the visitor taps "Accept" on the cookie banner
+         (src/components/CookieConsent.tsx), and only on the live site (gearbnbrental.com), so local
+         development and previews never send test traffic. A returning visitor who already accepted
+         gets it straight away here; the banner calls window.gearbnbLoadPixel() on Accept. Page
+         changes inside the site are tracked by MetaPixelPageViews in src/App.tsx. -->
     <script>
-      if (/(^|\.)gearbnbrental\.com$/.test(location.hostname)) {
+      window.gearbnbLoadPixel = function () {
+        if (!/(^|\.)gearbnbrental\.com$/.test(location.hostname) || window.fbq) return;
         !function(f,b,e,v,n,t,s)
         {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
         n.callMethod.apply(n,arguments):n.queue.push(arguments)};
@@ -27,15 +30,14 @@
         'https://connect.facebook.net/en_US/fbevents.js');
         fbq('init', '1784119539456234');
         fbq('track', 'PageView');
-      }
+      };
+      try {
+        if (localStorage.getItem('gearbnb-cookie-consent') === 'granted') window.gearbnbLoadPixel();
+      } catch (e) {}
     </script>
     <!-- End Meta Pixel Code -->
   </head>
   <body>
-    <!-- Meta Pixel fallback for visitors without JavaScript (must be in <body>, not <head>). -->
-    <noscript><img height="1" width="1" style="display:none" alt=""
-    src="https://www.facebook.com/tr?id=1784119539456234&ev=PageView&noscript=1"
-    /></noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

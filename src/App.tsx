@@ -1,6 +1,9 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, type ComponentType } from 'react';
 import { BrowserRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import BackToTop from './components/BackToTop';
+import CookieConsent from './components/CookieConsent';
+import AccessibilityWidget from './components/AccessibilityWidget';
+import { readCookieConsent } from './utils/cookieConsent';
 import ErrorBoundary from './components/ErrorBoundary';
 import FloatingHelp from './components/FloatingHelp';
 import Footer from './components/Footer';
@@ -117,12 +120,6 @@ function ScrollToTop() {
   return null;
 }
 
-declare global {
-  interface Window {
-    fbq?: (...args: unknown[]) => void;
-  }
-}
-
 /**
  * Meta Pixel PageView for each page change inside the site. The snippet in index.html already
  * counts the first page; the site then switches pages without reloading, so later pages would
@@ -136,7 +133,8 @@ function MetaPixelPageViews() {
       firstPage.current = false;
       return;
     }
-    window.fbq?.('track', 'PageView');
+    // Only with the visitor's consent (the pixel isn't even loaded without it).
+    if (readCookieConsent() === 'granted') window.fbq?.('track', 'PageView');
   }, [pathname]);
   return null;
 }
@@ -152,6 +150,8 @@ function App() {
               <VerificationGate />
               <ScrollToTop />
               <MetaPixelPageViews />
+              <CookieConsent />
+              <AccessibilityWidget />
               <Navbar />
 
               <ErrorBoundary>

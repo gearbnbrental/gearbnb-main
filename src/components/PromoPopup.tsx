@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { usePromo } from '../context/PromoContext';
 import { formatPromoOffer } from '../utils/promo';
 import { PROMO_COPY } from '../config/promoCopy';
+import { readA11ySettings } from '../utils/accessibility';
 
 const SHOW_DELAY_MS = 1000;
 /** The animation's own background green, shown while it downloads: the animation itself opens on
@@ -41,7 +42,9 @@ export default function PromoPopup() {
   const hasPromo = promo !== null;
 
   useEffect(() => {
-    if (!hasPromo || alreadySeenThisSession()) return;
+    // Never auto-open the animated ad for someone who switched on Stop Animations (or the Seizure
+    // Safety / ADHD profiles) in the accessibility panel.
+    if (!hasPromo || alreadySeenThisSession() || readA11ySettings().stopAnimations) return;
     // Opens 1 second after arrival (counted from when the homepage opened, not from when the promo
     // answer came back), without waiting for the 2.5MB animation to finish downloading: it starts
     // downloading now and plays in place as soon as it arrives, over its own green background.

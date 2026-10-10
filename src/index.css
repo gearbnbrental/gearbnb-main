@@ -54,3 +54,95 @@ body {
     animation: none;
   }
 }
+
+/* ---------------------------------------------------------------------------------------------
+ * Accessibility panel (src/components/AccessibilityWidget.tsx, src/utils/accessibility.ts).
+ * Each setting adds a class on <html>; everything is scoped to the site (#root) so the panel
+ * itself (rendered outside #root, with .a11y-widget) stays readable whatever is switched on.
+ * ------------------------------------------------------------------------------------------- */
+html.a11y-readable-font #root,
+html.a11y-readable-font #root * {
+  font-family: Arial, Helvetica, Verdana, sans-serif !important;
+}
+html.a11y-highlight-titles #root :is(h1, h2, h3, h4, h5, h6) {
+  outline: 3px solid #2d5a46 !important;
+  outline-offset: 3px;
+}
+html.a11y-highlight-links #root a {
+  text-decoration: underline !important;
+  outline: 2px solid #f59e0b !important;
+  outline-offset: 2px;
+}
+html.a11y-align-left #root :is(p, li, h1, h2, h3, h4, h5, h6, dt, dd, label, blockquote) { text-align: left !important; }
+html.a11y-align-center #root :is(p, li, h1, h2, h3, h4, h5, h6, dt, dd, label, blockquote) { text-align: center !important; }
+html.a11y-align-right #root :is(p, li, h1, h2, h3, h4, h5, h6, dt, dd, label, blockquote) { text-align: right !important; }
+html.a11y-line-height #root :is(p, li, h1, h2, h3, h4, h5, h6, span, a, dt, dd, label, small) {
+  line-height: var(--a11y-line-height) !important;
+}
+html.a11y-letter-spacing #root * {
+  letter-spacing: var(--a11y-letter-spacing) !important;
+}
+
+/* Dark contrast inverts the whole page (a filter on <html>); photos and the accessibility panel's
+ * own parts are inverted back so they look normal. Applied to each floating part of the panel
+ * (.a11y-invert-back), never to a wrapper: a filter on a wrapper would pin its fixed-position
+ * children to the wrapper instead of the screen, and the corner button would disappear. */
+html.a11y-dark-contrast :is(img, video, picture, iframe):not(.a11y-invert-back img),
+html.a11y-dark-contrast .a11y-invert-back {
+  filter: invert(1) hue-rotate(180deg);
+}
+html.a11y-light-contrast body,
+html.a11y-light-contrast #root,
+html.a11y-light-contrast #root *:not(img):not(video):not(svg):not(path):not(picture) {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  border-color: #000000 !important;
+}
+html.a11y-text-color #root :is(p, li, span, a, label, dd, dt, small, td, th, button) {
+  color: var(--a11y-text-color) !important;
+}
+html.a11y-title-color #root :is(h1, h2, h3, h4, h5, h6) {
+  color: var(--a11y-title-color) !important;
+}
+html.a11y-bg-color body,
+html.a11y-bg-color #root,
+html.a11y-bg-color #root :is(main, section) {
+  background-color: var(--a11y-bg-color) !important;
+}
+
+html.a11y-hide-images #root :is(img, picture, video) {
+  visibility: hidden !important;
+}
+html.a11y-stop-animations *,
+html.a11y-stop-animations *::before,
+html.a11y-stop-animations *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}
+html.a11y-highlight-hover #root :is(a, button, p, li, h1, h2, h3, h4, h5, h6, img, input, select, textarea, label):hover {
+  outline: 2px dashed #2d5a46 !important;
+  outline-offset: 2px;
+}
+html.a11y-highlight-focus *:focus,
+html.a11y-highlight-focus *:focus-visible {
+  outline: 3px solid #f59e0b !important;
+  outline-offset: 3px !important;
+}
+html.a11y-cursor-black,
+html.a11y-cursor-black * {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24'%3E%3Cpath d='M4 2l15 11-6.5 1 3.8 7.2-2.6 1.3-3.8-7.3L4 20z' fill='%23000' stroke='%23fff' stroke-width='1.2' stroke-linejoin='round'/%3E%3C/svg%3E") 6 3, auto !important;
+}
+html.a11y-cursor-white,
+html.a11y-cursor-white * {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24'%3E%3Cpath d='M4 2l15 11-6.5 1 3.8 7.2-2.6 1.3-3.8-7.3L4 20z' fill='%23fff' stroke='%23000' stroke-width='1.2' stroke-linejoin='round'/%3E%3C/svg%3E") 6 3, auto !important;
+}
+
+/* Phones only: the floating corner buttons step aside while a product view (package, gear or
+   add-on details) is open, so they don't crowd its busy screen. Desktop keeps them.
+   See src/utils/productView.ts. */
+@media (width < 40rem) {
+  html[data-product-view] .hide-in-product-view {
+    display: none !important;
+  }
+}

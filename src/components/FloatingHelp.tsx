@@ -64,7 +64,7 @@ export default function FloatingHelp() {
 
   return (
     <div
-      className={`fixed right-4 z-50 sm:right-6 ${liftedForStickyFooter ? 'bottom-24 sm:bottom-24' : 'bottom-5 sm:bottom-6'}`}
+      className={`hide-in-product-view fixed right-4 z-50 sm:right-6 ${liftedForStickyFooter ? 'bottom-24 sm:bottom-24' : 'bottom-5 sm:bottom-6'}`}
       style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
     >
       {/* Trigger comes BEFORE the panel in DOM order (even though the panel renders visually

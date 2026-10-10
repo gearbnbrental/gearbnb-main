@@ -2,6 +2,7 @@
 import { CONTACT_EMAIL, MESSENGER_URL } from '../config/social';
 import { ChatBubbleIcon, MailIcon } from './icons';
 import SocialLinks from './SocialLinks';
+import { openCookieSettings } from '../utils/cookieConsent';
 
 /**
  * The single site-wide footer, mounted once in App.tsx below every route. Previously this markup
@@ -127,6 +128,9 @@ export default function Footer() {
             </button>
             <button type="button" onClick={() => navigate('/privacy-policy')} className="w-fit text-left text-sm text-white hover:opacity-80">
               Privacy Policy
+            </button>
+            <button type="button" onClick={openCookieSettings} className="w-fit text-left text-sm text-white hover:opacity-80">
+              Cookie Settings
             </button>
           </div>
 
