@@ -107,7 +107,7 @@ export default function TripDetailsForm() {
       </label>
 
       <label className="flex max-w-xs flex-col gap-1.5">
-        <span className="text-sm font-medium text-ink">Preferred Time</span>
+        <span className="text-sm font-medium text-ink">Preferred Time for Pick Up / Delivery</span>
         <input
           type="time"
           required

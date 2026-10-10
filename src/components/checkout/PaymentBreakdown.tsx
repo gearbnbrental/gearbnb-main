@@ -416,7 +416,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
     const returnAt = toTimestamp(tripDetails.returnDate, tripDetails.preferredTime);
 
     if (!pickupAt || !returnAt) {
-      setSubmitError('Please fill in your rental start/return dates and preferred time in Trip Details.');
+      setSubmitError('Please fill in your rental start/return dates and preferred time for pick up / delivery in Trip Details.');
       return;
     }
     if (!tripDetails.destination.trim()) {

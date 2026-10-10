@@ -597,6 +597,15 @@ export interface RmsMyBooking {
   returnSettlement?: RmsReturnSettlement | null;
   /** `null` when the booking has no discount; absent on an older RMS response (treated the same). */
   discount?: RmsBookingDiscount | null;
+  /** When staff confirmed the gear handover; null before pickup. `pickupAt` stays the BOOKED pickup.
+   *  Optional: an older RMS response won't have these three fields. */
+  pickedUpAt?: string | null;
+  /** Whole minutes between the booked pickup and pickedUpAt: positive = collected late, negative =
+   *  early; null before handover. */
+  pickupDifferenceMinutes?: number | null;
+  /** The return time before the RMS moved it (to keep the booked length after a late or early
+   *  pickup, or a staff edit); null if it never moved. `returnAt` is always the current, correct one. */
+  originalReturnAt?: string | null;
 }
 
 /** Read-only — safe to retry a transient failure (see withReadRetry). Never used for a mutation. */

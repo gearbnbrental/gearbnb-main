@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   describeDeposit,
+  describePickupDifference,
+  returnMoved,
   rentalFeePill,
   classifyMyBookingsLoadError,
   getBookingStatusLabel,
@@ -379,5 +381,30 @@ describe('"Pay security deposit" goes to the Security Deposit section', () => {
       securityDeposit: { requiredCentavos: 90000, verifiedCentavos: 0, verified: false, proofStatus: null, reviewNote: null, amountClaimedCentavos: null },
     } as unknown as RmsMyBooking;
     expect(getNextStep(booking).cta).toEqual({ label: 'Pay security deposit', targetId: 'security-deposit-b1' });
+  });
+});
+
+describe('pickup handover wording', () => {
+  it('says how much later or earlier than booked, in hours and minutes', () => {
+    expect(describePickupDifference(720)).toBe('12 hours later than booked');
+    expect(describePickupDifference(-360)).toBe('6 hours earlier than booked');
+    expect(describePickupDifference(80)).toBe('1 hour 20 minutes later than booked');
+    expect(describePickupDifference(1)).toBe('1 minute later than booked');
+    expect(describePickupDifference(-45)).toBe('45 minutes earlier than booked');
+  });
+
+  it('says nothing extra under a minute, or when the RMS sent no difference', () => {
+    expect(describePickupDifference(0)).toBeNull();
+    expect(describePickupDifference(null)).toBeNull();
+    expect(describePickupDifference(undefined)).toBeNull();
+  });
+});
+
+describe('returnMoved', () => {
+  it('is true only when the RMS sent an original return that differs from the current one', () => {
+    expect(returnMoved({ returnAt: '2026-10-15T09:00:00.000Z', originalReturnAt: '2026-10-14T21:00:00.000Z' })).toBe(true);
+    expect(returnMoved({ returnAt: '2026-10-15T09:00:00.000Z', originalReturnAt: '2026-10-15T09:00:00.000Z' })).toBe(false);
+    expect(returnMoved({ returnAt: '2026-10-15T09:00:00.000Z', originalReturnAt: null })).toBe(false);
+    expect(returnMoved({ returnAt: '2026-10-15T09:00:00.000Z' })).toBe(false);
   });
 });

@@ -224,8 +224,40 @@ function formatTime(value: Date): string {
  *  remains solely the RMS's, via its own pickTierPrice formula). Rounds up to the nearest whole
  *  day for the common "N Day(s)" phrasing customers expect; falls back to an hour count for a
  *  same-day rental shorter than 24 hours rather than reading "0 Days". */
-function formatRentalDuration(pickupAt: string, returnAt: string): string | null {
-  const start = new Date(pickupAt);
+/** "1 hour 20 minutes" style wording for a whole number of minutes (always positive). */
+function formatHoursMinutes(totalMinutes: number): string {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  const parts = [];
+  if (hours > 0) parts.push(`${hours} hour${hours === 1 ? '' : 's'}`);
+  if (minutes > 0) parts.push(`${minutes} minute${minutes === 1 ? '' : 's'}`);
+  return parts.join(' ');
+}
+
+/** "12 hours later than booked" / "6 hours earlier than booked", from the RMS's own
+ *  pickupDifferenceMinutes. Null when there's no difference to mention (missing, or under a
+ *  minute). */
+export function describePickupDifference(minutes: number | null | undefined): string | null {
+  if (minutes === null || minutes === undefined || !Number.isFinite(minutes)) return null;
+  const whole = Math.trunc(minutes);
+  if (whole === 0) return null;
+  return `${formatHoursMinutes(Math.abs(whole))} ${whole > 0 ? 'later' : 'earlier'} than booked`;
+}
+
+/** Whether the RMS moved this booking's return time (originalReturnAt set and a different instant
+ *  from returnAt). The site never computes a return time itself; it only reports the RMS's. */
+export function returnMoved(booking: Pick<RmsMyBooking, 'returnAt' | 'originalReturnAt'>): boolean {
+  if (!booking.originalReturnAt) return false;
+  const before = Date.parse(booking.originalReturnAt);
+  const now = Date.parse(booking.returnAt);
+  return !Number.isNaN(before) && !Number.isNaN(now) && before !== now;
+}
+
+/** Rental length from when the rental started to the (current) return time. Callers pass the
+ *  actual handover time (pickedUpAt) once there is one: measuring from the booked pickup after a
+ *  late pickup would overstate it (a 3 day rental collected 12 hours late would read "4 Days"). */
+function formatRentalDuration(startAt: string, returnAt: string): string | null {
+  const start = new Date(startAt);
   const end = new Date(returnAt);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) return null;
 
@@ -1326,6 +1358,8 @@ function BookingCard({
    *  customer on an open card. */
   defaultOpen: boolean;
 }) {
+  // Measured from the actual handover once there is one (see formatRentalDuration).
+  const rentalLength = formatRentalDuration(booking.pickedUpAt ?? booking.pickupAt, booking.returnAt);
   const statusStyle = STATUS_STYLES[booking.status] ?? 'bg-surface-strong text-ink-muted';
   const nextStep = getNextStep(booking);
   const [detailsOpen, setDetailsOpen] = useState(defaultOpen);
@@ -1419,15 +1453,28 @@ function BookingCard({
                 <div className="min-w-0">
                   <p className="text-xs text-ink-faint">Pickup</p>
                   <p className="break-words text-sm font-medium text-ink">{formatDateTime(booking.pickupAt)}</p>
+                  {/* Only once staff confirmed the handover; the times and the difference are the
+                      RMS's own, never worked out here. */}
+                  {booking.pickedUpAt && (
+                    <p className="mt-0.5 break-words text-xs text-ink-muted">
+                      Picked up {formatDateTime(booking.pickedUpAt)}
+                      {describePickupDifference(booking.pickupDifferenceMinutes) &&
+                        ` (${describePickupDifference(booking.pickupDifferenceMinutes)})`}
+                    </p>
+                  )}
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs text-ink-faint">Return</p>
                   <p className="break-words text-sm font-medium text-ink">
                     {formatDateTime(booking.returnAt)}
-                    {formatRentalDuration(booking.pickupAt, booking.returnAt) && (
-                      <span className="font-normal text-ink-muted"> &middot; {formatRentalDuration(booking.pickupAt, booking.returnAt)}</span>
-                    )}
+                    {rentalLength && <span className="font-normal text-ink-muted"> &middot; {rentalLength}</span>}
                   </p>
+                  {returnMoved(booking) && booking.originalReturnAt && (
+                    <p className="mt-0.5 break-words text-xs text-ink-muted">
+                      Return time updated from {formatDateTime(booking.originalReturnAt)} to {formatDateTime(booking.returnAt)} so your
+                      rental keeps its full length.
+                    </p>
+                  )}
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs text-ink-faint">Rental Kit</p>
