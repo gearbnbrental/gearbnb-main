@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, type ComponentType } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, type ComponentType } from 'react';
 import { BrowserRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import BackToTop from './components/BackToTop';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -117,6 +117,30 @@ function ScrollToTop() {
   return null;
 }
 
+declare global {
+  interface Window {
+    fbq?: (...args: unknown[]) => void;
+  }
+}
+
+/**
+ * Meta Pixel PageView for each page change inside the site. The snippet in index.html already
+ * counts the first page; the site then switches pages without reloading, so later pages would
+ * otherwise never be counted. Does nothing where the pixel isn't loaded (local development).
+ */
+function MetaPixelPageViews() {
+  const { pathname } = useLocation();
+  const firstPage = useRef(true);
+  useEffect(() => {
+    if (firstPage.current) {
+      firstPage.current = false;
+      return;
+    }
+    window.fbq?.('track', 'PageView');
+  }, [pathname]);
+  return null;
+}
+
 function App() {
   return (
     <AuthProvider>
@@ -127,6 +151,7 @@ function App() {
             <div className="min-h-screen">
               <VerificationGate />
               <ScrollToTop />
+              <MetaPixelPageViews />
               <Navbar />
 
               <ErrorBoundary>

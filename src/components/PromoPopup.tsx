@@ -76,7 +76,9 @@ export default function PromoPopup() {
         role="dialog"
         aria-modal="true"
         aria-label={description}
-        className="relative w-full max-w-sm"
+        // Bigger on wider screens (up to 512px on desktop); phones keep the full-width-minus-margin
+        // size. The artwork is 800px, so it stays sharp at these sizes.
+        className="relative w-full max-w-sm sm:max-w-md lg:max-w-lg"
         onClick={(e) => e.stopPropagation()}
       >
         <Link
@@ -95,7 +97,8 @@ export default function PromoPopup() {
             className="block h-full w-full"
           />
         </Link>
-        <p className="mt-2 text-center text-xs text-white">
+        {/* A soft dark backing so the white text stays readable over whatever is behind it. */}
+        <p className="mx-auto mt-2 w-fit rounded-full bg-black/55 px-3 py-1 text-center text-xs text-white">
           {PROMO_COPY.termsApply}
         </p>
         <button
