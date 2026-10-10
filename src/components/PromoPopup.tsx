@@ -5,6 +5,9 @@ import { formatPromoOffer } from '../utils/promo';
 import { PROMO_COPY } from '../config/promoCopy';
 
 const SHOW_DELAY_MS = 1000;
+/** The animation's own background green, shown while it downloads: the animation itself opens on
+ *  plain green, so the popup can appear right on time without looking empty or broken. */
+const ARTWORK_BACKGROUND = '#083d1f';
 const PROMO_IMAGE = '/images/promos/first-time-renter-15-off-v3.webp';
 const SEEN_KEY = 'gearbnb-promo-first-time-15-off-seen';
 
@@ -27,7 +30,7 @@ function markSeen() {
 /**
  * Homepage promo popup. Appears only while the RMS reports a live promo this visitor can get (and
  * before its booking deadline, which usePromo already enforces), 1 second after the homepage
- * opens, once per browser session; clicking the artwork goes to the catalog. Closes via the ×
+ * opens (the artwork fills in as it downloads), once per browser session; clicking the artwork goes to the catalog. Closes via the ×
  * button, a click on the backdrop, or Escape. Disappears at once if the promo goes away (it ended,
  * or the visitor signed in as a returning renter).
  */
@@ -39,30 +42,16 @@ export default function PromoPopup() {
 
   useEffect(() => {
     if (!hasPromo || alreadySeenThisSession()) return;
-    // Opens once BOTH the 1-second delay (counted from arrival, not from when the promo answer
-    // came back) has passed and the animation has finished downloading, so a slow connection
-    // never shows a blank or half-loaded popup — it just appears a bit later.
-    let cancelled = false;
+    // Opens 1 second after arrival (counted from when the homepage opened, not from when the promo
+    // answer came back), without waiting for the 2.5MB animation to finish downloading: it starts
+    // downloading now and plays in place as soon as it arrives, over its own green background.
+    new Image().src = PROMO_IMAGE;
     const remainingDelay = Math.max(0, mountedAt.current + SHOW_DELAY_MS - Date.now());
-    const delay = new Promise<void>((resolve) => window.setTimeout(resolve, remainingDelay));
-    const loaded = new Promise<void>((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve();
-      img.onerror = () => reject();
-      img.src = PROMO_IMAGE;
-    });
-    Promise.all([delay, loaded])
-      .then(() => {
-        if (cancelled) return;
-        setOpen(true);
-        markSeen();
-      })
-      .catch(() => {
-        // Image failed to load — skip the popup rather than show a broken one.
-      });
-    return () => {
-      cancelled = true;
-    };
+    const timer = window.setTimeout(() => {
+      setOpen(true);
+      markSeen();
+    }, remainingDelay);
+    return () => window.clearTimeout(timer);
   }, [hasPromo]);
 
   useEffect(() => {
@@ -90,13 +79,20 @@ export default function PromoPopup() {
         className="relative w-full max-w-sm"
         onClick={(e) => e.stopPropagation()}
       >
-        <Link to="/catalog" onClick={() => setOpen(false)} className="block overflow-hidden rounded-2xl shadow-2xl">
+        <Link
+          to="/catalog"
+          onClick={() => setOpen(false)}
+          className="block aspect-square overflow-hidden rounded-2xl shadow-2xl"
+          style={{ backgroundColor: ARTWORK_BACKGROUND }}
+        >
           <img
             src={PROMO_IMAGE}
             alt={`${description} Rent now.`}
             width={800}
             height={800}
-            className="block h-auto w-full"
+            // If the artwork can't load at all, close rather than leave an empty green square.
+            onError={() => setOpen(false)}
+            className="block h-full w-full"
           />
         </Link>
         <p className="mt-2 text-center text-xs text-white">

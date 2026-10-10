@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 export interface ConfirmDialogProps {
   open: boolean;
@@ -65,7 +66,10 @@ export default function ConfirmDialog({
     }
   }
 
-  return (
+  // Rendered at the end of <body> (a portal): some callers sit inside the sticky site header
+  // (e.g. Log Out), whose backdrop blur makes a `fixed` child position itself against the header
+  // instead of the screen, leaving the dialog floating off-centre near the top.
+  return createPortal(
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
       onClick={() => !submitting && onCancel()}
@@ -109,6 +113,7 @@ export default function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

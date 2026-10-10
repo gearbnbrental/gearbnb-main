@@ -1358,8 +1358,10 @@ function BookingCard({
    *  customer on an open card. */
   defaultOpen: boolean;
 }) {
-  // Measured from the actual handover once there is one (see formatRentalDuration).
-  const rentalLength = formatRentalDuration(booking.pickedUpAt ?? booking.pickupAt, booking.returnAt);
+  // The actual handover time, only when the RMS sent a real timestamp (a malformed value is
+  // ignored rather than printed). The rental length is measured from it once there is one.
+  const pickedUpAt = booking.pickedUpAt && !Number.isNaN(Date.parse(booking.pickedUpAt)) ? booking.pickedUpAt : null;
+  const rentalLength = formatRentalDuration(pickedUpAt ?? booking.pickupAt, booking.returnAt);
   const statusStyle = STATUS_STYLES[booking.status] ?? 'bg-surface-strong text-ink-muted';
   const nextStep = getNextStep(booking);
   const [detailsOpen, setDetailsOpen] = useState(defaultOpen);
@@ -1455,9 +1457,9 @@ function BookingCard({
                   <p className="break-words text-sm font-medium text-ink">{formatDateTime(booking.pickupAt)}</p>
                   {/* Only once staff confirmed the handover; the times and the difference are the
                       RMS's own, never worked out here. */}
-                  {booking.pickedUpAt && (
+                  {pickedUpAt && (
                     <p className="mt-0.5 break-words text-xs text-ink-muted">
-                      Picked up {formatDateTime(booking.pickedUpAt)}
+                      Picked up {formatDateTime(pickedUpAt)}
                       {describePickupDifference(booking.pickupDifferenceMinutes) &&
                         ` (${describePickupDifference(booking.pickupDifferenceMinutes)})`}
                     </p>
