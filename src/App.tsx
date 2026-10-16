@@ -56,6 +56,7 @@ const MyBookings = lazyWithRetry(() => import('./pages/MyBookings'));
 const PathACatalog = lazyWithRetry(() => import('./pages/PathACatalog'));
 const PathBCatalog = lazyWithRetry(() => import('./pages/PathBCatalog'));
 const PrivacyPolicy = lazyWithRetry(() => import('./pages/PrivacyPolicy'));
+const DataDeletion = lazyWithRetry(() => import('./pages/DataDeletion'));
 const Profile = lazyWithRetry(() => import('./pages/Profile'));
 const ResetPassword = lazyWithRetry(() => import('./pages/ResetPassword'));
 const Terms = lazyWithRetry(() => import('./pages/Terms'));
@@ -204,6 +205,7 @@ function App() {
                       path="/privacy-policy"
                       element={<PrivacyPolicy />}
                     />
+                    <Route path="/data-deletion" element={<DataDeletion />} />
                   </Routes>
                 </Suspense>
               </ErrorBoundary>

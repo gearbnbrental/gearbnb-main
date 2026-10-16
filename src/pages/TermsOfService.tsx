@@ -70,6 +70,24 @@ const SECTIONS: LegalSection[] = [
           <li>Give true, complete and current information.</li>
           <li>Keep your login details private if you create an account. You are responsible for activity under your account.</li>
         </LegalList>
+        <p><Strong>Signing in with Google or Facebook</Strong></p>
+        <LegalList>
+          <li>
+            You are allowed to create your account or sign in with your Google Account or your Facebook account. When
+            you do, you let Google or Facebook share your name, email address and profile picture with us. Our{' '}
+            <Link className={legalLinkClass} to="/privacy-policy#google">Privacy Policy</Link> explains how we use this
+            data.
+          </li>
+          <li>Google's and Meta's own terms also apply to your Google Account and your Facebook account.</li>
+          <li>
+            GearBnB is not affiliated with, endorsed by or sponsored by Google or Meta. Google and Meta are not
+            responsible for GearBnB's services.
+          </li>
+          <li>
+            You are allowed to delete your account and your data at any time. See our{' '}
+            <Link className={legalLinkClass} to="/data-deletion">User Data Deletion page</Link>.
+          </li>
+        </LegalList>
       </>
     ),
   },
@@ -357,7 +375,7 @@ export default function TermsOfService() {
   return (
     <LegalLayout
       title="Terms of Service"
-      updated="September 2026"
+      updated="October 2026"
       lead={
         <>
           These Terms govern your use of gearbnbrental.com and your rental of camping gear from GearBnB. Read them

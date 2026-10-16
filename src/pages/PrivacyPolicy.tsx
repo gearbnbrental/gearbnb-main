@@ -1,5 +1,6 @@
 import { usePageMeta } from '../hooks/usePageMeta';
 import { PAGE_META } from '../config/pageMeta';
+import { Link } from 'react-router-dom';
 import LegalLayout, {
   LegalContact,
   LegalList,
@@ -21,6 +22,10 @@ const NPC_LINK = (
   <a className={legalLinkClass} href="https://privacy.gov.ph" target="_blank" rel="noopener noreferrer">privacy.gov.ph</a>
 );
 
+const DataDeletionLink = () => (
+  <Link className={legalLinkClass} to="/data-deletion">User Data Deletion page</Link>
+);
+
 const SECTIONS: LegalSection[] = [
   {
     id: 'summary',
@@ -35,6 +40,7 @@ const SECTIONS: LegalSection[] = [
           <li><Strong>How long we keep the data.</Strong> 90 days for booking records, payment records, verification documents and website technical data. We keep tax and accounting records for the period the law requires.</li>
           <li><Strong>Your rights.</Strong> You are allowed to access, correct, block or delete your data and to withdraw your consent. Email {DPO_EMAIL}.</li>
           <li><Strong>Google sign-in.</Strong> If you sign in with Google we receive your name, email address and profile picture. We use this data only to run your GearBnB account. We do not sell the data or use the data for advertising. See <SectionLink id="google">section&nbsp;5</SectionLink>.</li>
+          <li><Strong>Facebook Login.</Strong> If you sign in with Facebook we receive your name, email address and profile picture. We use this data only to run your GearBnB account. We do not sell the data or use the data for advertising. See <SectionLink id="google">section&nbsp;5</SectionLink>.</li>
           <li><Strong>Payments.</Strong> We do not use a payment provider. You pay by GCash or bank transfer and we record each payment by hand.</li>
           <li><Strong>Meta Pixel.</Strong> With your consent, our website uses Meta Pixel to count visits and measure our Facebook and Instagram ads. You choose on our cookie banner. See <SectionLink id="cookies">section&nbsp;12</SectionLink>.</li>
         </LegalList>
@@ -75,7 +81,7 @@ const SECTIONS: LegalSection[] = [
         <p>This policy applies to:</p>
         <LegalList>
           <li>Visitors to gearbnbrental.com.</li>
-          <li>People who create an account or sign in with Google.</li>
+          <li>People who create an account or sign in with Google or Facebook.</li>
           <li>People who book or rent gear from us.</li>
           <li>People who request an event quote.</li>
           <li>People who contact us by email, phone or social media message.</li>
@@ -103,6 +109,7 @@ const SECTIONS: LegalSection[] = [
         <LegalList>
           <li><Strong>Account details.</Strong> The details you use to create and sign in to your account.</li>
           <li><Strong>Google sign-in data.</Strong> If you choose to sign in with Google we receive your name, email address and profile picture from Google. See <SectionLink id="google">section&nbsp;5</SectionLink>.</li>
+          <li><Strong>Facebook Login data.</Strong> If you choose to sign in with Facebook we receive your name, email address and profile picture from Facebook. See <SectionLink id="google">section&nbsp;5</SectionLink>.</li>
           <li><Strong>Contact details.</Strong> Your full name, email address, mobile number and home address.</li>
           <li><Strong>Booking details.</Strong> The gear or package you choose, your rental dates, how you will collect the gear and any special requests.</li>
           <li><Strong>Rental agreement.</Strong> Your signed Rental Agreement and its booking details.</li>
@@ -127,7 +134,7 @@ const SECTIONS: LegalSection[] = [
   },
   {
     id: 'google',
-    title: 'Google Sign-In and Google user data',
+    title: 'Google Sign-In, Facebook Login and the data we receive',
     body: (
       <>
         <p>
@@ -195,6 +202,45 @@ const SECTIONS: LegalSection[] = [
           </a>
           , including the Limited Use requirements.
         </p>
+
+        <p><Strong>Facebook Login</Strong></p>
+        <p>
+          You are also allowed to sign in to GearBnB with your Facebook account. Facebook shows you what it will share
+          before you continue. We receive only your public profile and email address:
+        </p>
+        <LegalList>
+          <li>Your name.</li>
+          <li>Your email address.</li>
+          <li>Your Facebook profile picture.</li>
+          <li>A unique identifier for your Facebook account.</li>
+        </LegalList>
+        <p>
+          We do not access your posts, friends, photos, messages or any other data in your Facebook account. We use
+          the data only to create and run your GearBnB account: to sign you in, fill in your name and email and contact
+          you about your bookings. We do not sell the data. We do not use the data for advertising or to build
+          advertising profiles. We do not give the data to data brokers. Signing in with Facebook does not turn on
+          Meta Pixel. Meta Pixel runs only if you accept cookies.
+        </p>
+        <p>
+          We share Facebook Login data only with the service providers that run GearBnB for us, under the same rules
+          as the rest of your data, and where the law requires it. See <SectionLink id="share">section&nbsp;8</SectionLink>.
+          Our use of data from Facebook follows the{' '}
+          <a className={legalLinkClass} href="https://developers.facebook.com/terms/" target="_blank" rel="noopener noreferrer">
+            Meta Platform Terms
+          </a>
+          .
+        </p>
+        <p><Strong>How to delete your Facebook Login data</Strong></p>
+        <p>
+          We keep Facebook Login data while your GearBnB account stays open. To delete the data, email {DPO_EMAIL} and
+          ask us to delete your account. We confirm your identity and delete the data. Step-by-step instructions are on
+          our <DataDeletionLink />. You are also allowed to remove GearBnB from your Facebook account at any time in
+          Facebook's{' '}
+          <a className={legalLinkClass} href="https://www.facebook.com/settings?tab=business_tools" target="_blank" rel="noopener noreferrer">
+            Apps and Websites settings
+          </a>
+          . Removing GearBnB there stops new data from Facebook but does not delete the data we already hold.
+        </p>
       </>
     ),
   },
@@ -244,7 +290,7 @@ const SECTIONS: LegalSection[] = [
         <LegalTable
           headers={['Purpose', 'Data we use', 'Legal basis']}
           rows={[
-            ['Create and manage your account, including Google sign-in', 'Account details, contact details and Google sign-in data', 'Contract and consent'],
+            ['Create and manage your account, including Google and Facebook sign-in', 'Account details, contact details and Google or Facebook sign-in data', 'Contract and consent'],
             ['Verify your identity and eligibility', 'Contact details and verification documents', 'Consent and legitimate interests'],
             ['Process your booking and schedule pickup and return', 'Contact and booking details', 'Contract'],
             ['Confirm your payment and settle your deposit', 'Payment records and condition records', 'Contract'],
@@ -292,6 +338,7 @@ const SECTIONS: LegalSection[] = [
             ['Hostinger', 'Website hosting and email services', 'Website data and emails'],
             ['Google', 'Gmail email service', 'Emails you send us and our replies'],
             ['Google (sign-in)', 'You choose to sign in with your Google Account', 'Google knows you signed in to GearBnB'],
+            ['Meta Platforms (Facebook Login)', 'You choose to sign in with your Facebook account', 'Facebook knows you signed in to GearBnB'],
             ['Meta Platforms (Meta Pixel)', 'Count website visits and measure our Facebook and Instagram ads, only if you accept cookies', 'Pages you visit, your IP address, browser and device data, and cookie identifiers'],
             ['Government bodies, courts and law enforcement', 'Meet legal duties', 'Data the law requires'],
             ['Accountants and lawyers', 'Tax, accounting and legal advice', 'Data needed for their work'],
@@ -338,7 +385,7 @@ const SECTIONS: LegalSection[] = [
             ['Payment records', '90 days after your rental ends'],
             ['Verification documents', '90 days after your rental ends'],
             ['Website technical data', '90 days after we collect the data'],
-            ['Account details and Google sign-in data', 'While your account stays open. We delete the data when you ask us to delete your account'],
+            ['Account details and Google or Facebook sign-in data', 'While your account stays open. We delete the data when you ask us to delete your account'],
             ['Tax and accounting records', 'The period Philippine law requires'],
             ['Data tied to an open dispute, damage claim or legal duty', 'Until the matter ends'],
           ]}
@@ -459,8 +506,8 @@ const SECTIONS: LegalSection[] = [
       <>
         <p>
           Email {DPO_EMAIL} to withdraw your consent, close your account or ask us to delete your data. We confirm your
-          identity and delete the data we hold. This includes Google user data. We tell you about any data the law
-          requires us to keep.
+          identity and delete the data we hold. This includes Google user data and Facebook Login data. We tell you about any data the law
+          requires us to keep. Step-by-step instructions are on our <DataDeletionLink />.
         </p>
         <p>Deleting your verification documents means we are unable to process a new booking for you until you send new documents.</p>
       </>
@@ -471,7 +518,7 @@ const SECTIONS: LegalSection[] = [
     title: 'Other websites and platforms',
     body: (
       <p>
-        Our site links to services from other companies. These include Google Sign-In, Google Maps for our pickup
+        Our site links to services from other companies. These include Google Sign-In, Facebook Login, Google Maps for our pickup
         location and Messenger, Facebook, Instagram and TikTok for messages. GCash, your bank and Grab also handle data
         when you use their services. If you accept cookies, Meta Pixel on our site sends visit data to Meta. See{' '}
         <SectionLink id="cookies">section&nbsp;12</SectionLink>. Each company controls its own data and follows its own

@@ -164,6 +164,21 @@ function GoogleIcon({ className }: { className?: string }) {
   );
 }
 
+function FacebookIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <path
+        fill="#1877F2"
+        d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.05V9.41c0-3.02 1.79-4.69 4.53-4.69 1.31 0 2.68.24 2.68.24v2.97h-1.51c-1.49 0-1.96.93-1.96 1.89v2.26h3.33l-.53 3.49h-2.8V24C19.61 23.1 24 18.1 24 12.07Z"
+      />
+      <path
+        fill="#fff"
+        d="m16.67 15.56.53-3.49h-3.33V9.81c0-.96.47-1.89 1.96-1.89h1.51V4.96s-1.37-.24-2.68-.24c-2.74 0-4.53 1.67-4.53 4.69v2.66H7.08v3.49h3.05V24a12.1 12.1 0 0 0 3.74 0v-8.44h2.8Z"
+      />
+    </svg>
+  );
+}
+
 /** Shared outer shell — centers a single elevated card vertically and horizontally in the
  * viewport (accounting for the sticky navbar above it), and gives it the same desktop two-column
  * split (a hero image beside the content) whether that content is the auth form or the
@@ -190,7 +205,7 @@ export default function Login() {
   // Set by AuthRequiredMessage (and any other auth-gated action) so the customer always sees why
   // they landed on this page instead of the one they wanted — never a bare, unexplained redirect.
   const authReason = locationState?.reason ?? null;
-  const { user, needsEmailVerification, signUp, signIn, signInWithGoogle, signOut, resendEmailConfirmation } =
+  const { user, needsEmailVerification, signUp, signIn, signInWithGoogle, signInWithFacebook, signOut, resendEmailConfirmation } =
     useAuth();
 
   // Captured once, synchronously, on this component's very first render — before Supabase's own
@@ -243,7 +258,8 @@ export default function Login() {
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [googleSubmitting, setGoogleSubmitting] = useState(false);
+  // Which sign-in provider is redirecting right now (both buttons stay disabled meanwhile).
+  const [oauthSubmitting, setOauthSubmitting] = useState<'google' | 'facebook' | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   // True between "Sign Up" submit and the customer actually confirming — see performSignup.
   const [showSignupConfirm, setShowSignupConfirm] = useState(false);
@@ -303,15 +319,15 @@ export default function Login() {
   const passwordMismatch = mode === 'signup' && confirmPassword.length > 0 && password !== confirmPassword;
   const passwordStrength = getPasswordStrength(password);
 
-  async function handleGoogleClick() {
+  async function handleOAuthClick(provider: 'google' | 'facebook') {
     setFormError(null);
-    setGoogleSubmitting(true);
-    // On success this navigates the whole page away to Google and back — there's no local state
-    // to update here for that case. Only a failure (e.g. the provider isn't enabled yet) returns.
-    const result = await signInWithGoogle(redirectTo);
+    setOauthSubmitting(provider);
+    // On success this navigates the whole page away to Google/Facebook and back — there's no local
+    // state to update here for that case. Only a failure (e.g. the provider isn't enabled yet) returns.
+    const result = await (provider === 'google' ? signInWithGoogle : signInWithFacebook)(redirectTo);
     if (result.error) {
       setFormError(result.error);
-      setGoogleSubmitting(false);
+      setOauthSubmitting(null);
     }
   }
 
@@ -729,12 +745,22 @@ export default function Login() {
 
         <button
           type="button"
-          onClick={handleGoogleClick}
-          disabled={googleSubmitting || submitting}
+          onClick={() => handleOAuthClick('google')}
+          disabled={oauthSubmitting !== null || submitting}
           className="flex h-11 w-full items-center justify-center gap-2.5 rounded-lg border border-line bg-surface px-4 text-sm font-semibold text-ink shadow-sm transition-colors hover:bg-surface-strong disabled:cursor-not-allowed disabled:opacity-60"
         >
           <GoogleIcon className="h-4.5 w-4.5" />
-          {googleSubmitting ? 'Connecting…' : 'Continue with Google'}
+          {oauthSubmitting === 'google' ? 'Connecting…' : 'Continue with Google'}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleOAuthClick('facebook')}
+          disabled={oauthSubmitting !== null || submitting}
+          className="-mt-2 flex h-11 w-full items-center justify-center gap-2.5 rounded-lg border border-line bg-surface px-4 text-sm font-semibold text-ink shadow-sm transition-colors hover:bg-surface-strong disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <FacebookIcon className="h-4.5 w-4.5" />
+          {oauthSubmitting === 'facebook' ? 'Connecting…' : 'Continue with Facebook'}
         </button>
 
         <div className="flex items-center gap-3">
@@ -839,7 +865,7 @@ export default function Login() {
             type="submit"
             disabled={
               submitting ||
-              googleSubmitting ||
+              oauthSubmitting !== null ||
               lockoutRemainingSeconds > 0 ||
               (mode === 'signup' && (!isPasswordValid(password) || password !== confirmPassword))
             }

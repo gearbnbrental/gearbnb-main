@@ -46,6 +46,10 @@ interface AuthContextValue {
    *  guaranteed to already be reachable (it's literally the page this button is clicked from), so
    *  `redirectPath` is stashed here and consumed by Login.tsx once the session actually lands. */
   signInWithGoogle: (redirectPath?: string) => Promise<AuthResult>;
+  /** Same flow as signInWithGoogle, through Facebook Login (Supabase's Facebook provider). Facebook
+   *  shares the name, email and profile picture; an account with no email on Facebook is refused
+   *  by Supabase and gets a plain message (see friendlyAuthError). */
+  signInWithFacebook: (redirectPath?: string) => Promise<AuthResult>;
   signOut: () => Promise<void>;
   /** Re-sends the signup confirmation email via Supabase's own `resend` API — never a second
    *  email system. Only meaningful for an account that signed up but hasn't confirmed its email
@@ -226,6 +230,15 @@ export function friendlyAuthError(message: string): string {
   // flow that always means the link is spent, so it must never surface as raw SDK text.
   if (normalized.includes('auth session missing') || normalized.includes('session not found')) {
     return 'Your password reset link has expired or is no longer valid. Please request a new one.';
+  }
+  // Facebook account registered with a phone number only: Supabase can't create an account
+  // without an email, and the raw text names neither Facebook nor a fix.
+  if (normalized.includes('error getting user email from external provider')) {
+    return "Your Facebook account doesn't share an email address with us. Add an email to your Facebook account, or sign up with your email instead.";
+  }
+  // A sign-in provider not switched on yet in Supabase (Authentication → Providers).
+  if (normalized.includes('provider is not enabled') || normalized.includes('unsupported provider')) {
+    return "This sign-in option isn't available right now. Please log in with your email instead.";
   }
   // Supabase rejects reusing the current password on some projects — actionable, not an error the
   // customer should have to decode.
@@ -445,6 +458,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signInWithGoogle(redirectPath = '/'): Promise<AuthResult> {
+    // See the comment in startOAuth on why Google always shows the account chooser.
+    return startOAuth('google', redirectPath, { prompt: 'select_account' });
+  }
+
+  async function signInWithFacebook(redirectPath = '/'): Promise<AuthResult> {
+    // Facebook already shows "Continue as <name>" with a way to switch accounts, so it needs no
+    // extra parameter. Supabase's Facebook provider asks for the email permission by default.
+    return startOAuth('facebook', redirectPath);
+  }
+
+  async function startOAuth(
+    provider: 'google' | 'facebook',
+    redirectPath: string,
+    queryParams?: Record<string, string>,
+  ): Promise<AuthResult> {
     // Same identity architecture as email/password: Supabase issues the same shape of session and
     // access token regardless of provider, and the RMS resolves the customer from that token's
     // verified auth user id exactly the same way either way (see linkOrCreateCustomer server-side)
@@ -459,7 +487,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // project but is a separate application (see resolveCustomerOrigin). Also always /login rather
     // than redirectPath itself — see this function's own doc comment on the interface above.
     const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
+      provider,
       options: {
         redirectTo: `${resolveCustomerOrigin()}/login`,
         // Without this, Google silently re-authenticates using whatever Google account session
@@ -470,8 +498,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // own separate Supabase auth.users row, and nothing on this screen would show the mismatch
         // until a booking under the wrong account turns up. Forcing the chooser every time costs
         // one extra click but makes "which Google account am I using" an explicit choice instead
-        // of an invisible one.
-        queryParams: { prompt: 'select_account' },
+        // of an invisible one. (Google only; signInWithGoogle passes it.)
+        queryParams,
       },
     });
     if (error) return { error: friendlyAuthError(error.message) };
@@ -569,6 +597,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signUp,
       signIn,
       signInWithGoogle,
+      signInWithFacebook,
       signOut,
       resendEmailConfirmation,
       requestPasswordReset,

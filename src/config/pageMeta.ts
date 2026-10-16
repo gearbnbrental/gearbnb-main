@@ -96,6 +96,10 @@ export const PAGE_META = {
     title: 'Terms of Service | GearBnB',
     description: 'The terms for using gearbnbrental.com and renting camping gear from GearBnB.',
   },
+  dataDeletion: {
+    title: 'User Data Deletion | GearBnB',
+    description: 'How to delete your GearBnB account and personal data, including data from Facebook Login and Google Sign-In.',
+  },
 } satisfies Record<string, PageMeta>;
 
 /** The public pages that get their own pre-built HTML file, by URL path. Private pages (cart,
@@ -109,4 +113,5 @@ export const PRERENDERED_PAGES: { path: string; meta: PageMeta }[] = [
   { path: '/about-us', meta: PAGE_META.about },
   { path: '/privacy-policy', meta: PAGE_META.privacy },
   { path: '/terms-of-service', meta: PAGE_META.terms },
+  { path: '/data-deletion', meta: PAGE_META.dataDeletion },
 ];
