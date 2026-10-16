@@ -118,7 +118,7 @@ export default function PathSelectionCards({ roomyOnMobile = false }: { roomyOnM
         cta="Explore Packages"
         // The client's actual "Choose Package" photo — same optimized file already registered in
         // the Camp Setups gallery (see campSetups.ts's 'choose-package-camp-setup' entry).
-        image="/images/camp-setups/choose-package-camp-setup.jpg"
+        image="/images/camp-setups/choose-package-camp-setup.webp"
         roomyOnMobile={roomyOnMobile}
       />
       <PathCard
@@ -129,7 +129,7 @@ export default function PathSelectionCards({ roomyOnMobile = false }: { roomyOnM
         cta="Start Building"
         // The client's actual "BYO" photo — same file already registered in the Camp Setups
         // gallery as 'byo-camp-setup'.
-        image="/images/camp-setups/byo-camp-setup.jpg"
+        image="/images/camp-setups/byo-camp-setup.webp"
         roomyOnMobile={roomyOnMobile}
       />
     </div>

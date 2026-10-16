@@ -167,7 +167,7 @@ export default function Navbar() {
               instead of shrinking. */}
           <Link to="/" className="flex shrink-0 items-center gap-2 sm:gap-2.5">
             <img
-              src="/brand_assets/GEARBNB_logo.png"
+              src="/brand_assets/gearbnb-logo-128.webp"
               alt=""
               className="h-8 w-8 rounded-full shadow-sm sm:h-10 sm:w-10 lg:h-12 lg:w-12"
             />

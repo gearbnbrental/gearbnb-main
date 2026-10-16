@@ -2,7 +2,7 @@ export type CampSetupCategory = 'glamping' | 'solo' | 'group';
 
 export interface CampSetupPhoto {
   id: string;
-  /** Path under public/, e.g. '/images/camp-setups/photo-1.jpg'. */
+  /** Path under public/, e.g. '/images/camp-setups/photo-1.webp'. */
   src: string;
   /** Short setup title shown as a caption under the thumbnail. */
   title: string;
@@ -45,7 +45,7 @@ export interface CampSetupPhoto {
 export const CAMP_SETUP_PHOTOS: CampSetupPhoto[] = [
   {
     id: 'camp-setup-1',
-    src: '/images/camp-setups/camp-setup-1.jpg',
+    src: '/images/camp-setups/camp-setup-1.webp',
     title: 'Black Dog Tent with Canopy',
     alt: 'Black Dog tent with its canopy extended over a seating and table area, set up in a grassy clearing',
     badge: 'Black Dog',
@@ -54,7 +54,7 @@ export const CAMP_SETUP_PHOTOS: CampSetupPhoto[] = [
   },
   {
     id: 'camp-setup-2',
-    src: '/images/camp-setups/camp-setup-2.jpg',
+    src: '/images/camp-setups/camp-setup-2.webp',
     title: 'Shaded Tent Setup',
     alt: 'Naturehike-style tent pitched in the shade of large trees, with folding chairs and a cooler set up alongside',
     badge: 'Naturehike',
@@ -63,7 +63,7 @@ export const CAMP_SETUP_PHOTOS: CampSetupPhoto[] = [
   },
   {
     id: 'camp-setup-3',
-    src: '/images/camp-setups/camp-setup-3.jpg',
+    src: '/images/camp-setups/camp-setup-3.webp',
     title: 'Forest Camp in the Pines',
     alt: 'Small tarp shelter pitched on a misty, pine-forested hillside',
     badge: 'Ultralight Setup',
@@ -72,7 +72,7 @@ export const CAMP_SETUP_PHOTOS: CampSetupPhoto[] = [
   },
   {
     id: 'camp-setup-4',
-    src: '/images/camp-setups/camp-setup-4.jpg',
+    src: '/images/camp-setups/camp-setup-4.webp',
     title: 'Black Dog Tent Setup',
     alt: 'Black Dog tent on a grassy site with camping chairs and gear boxes in front',
     badge: 'Black Dog',
@@ -81,7 +81,7 @@ export const CAMP_SETUP_PHOTOS: CampSetupPhoto[] = [
   },
   {
     id: 'camp-setup-5',
-    src: '/images/camp-setups/camp-setup-5.jpg',
+    src: '/images/camp-setups/camp-setup-5.webp',
     title: 'Black Dog Tent with Cooking Setup',
     alt: 'Black Dog tent with its door open, camping chairs and a cooking setup arranged outside under palm trees',
     badge: 'Black Dog',
@@ -90,7 +90,7 @@ export const CAMP_SETUP_PHOTOS: CampSetupPhoto[] = [
   },
   {
     id: 'camp-setup-6',
-    src: '/images/camp-setups/camp-setup-6.jpg',
+    src: '/images/camp-setups/camp-setup-6.webp',
     title: 'Cozy Solo Camp Setup',
     alt: 'Small dome tent with a folding table, chairs, and a fan, set up in front of a banana plantation',
     badge: 'Solo/Couple',
@@ -99,7 +99,7 @@ export const CAMP_SETUP_PHOTOS: CampSetupPhoto[] = [
   },
   {
     id: 'byo-camp-setup',
-    src: '/images/camp-setups/byo-camp-setup.jpg',
+    src: '/images/camp-setups/byo-camp-setup.webp',
     title: 'Build Your Own Kit',
     alt: 'A Build Your Own setup: tent awning with a row of folding chairs, a cooler, fans, and cooking gear arranged underneath',
     badge: 'Build Your Own',
@@ -108,7 +108,7 @@ export const CAMP_SETUP_PHOTOS: CampSetupPhoto[] = [
   },
   {
     id: 'choose-package-camp-setup',
-    src: '/images/camp-setups/choose-package-camp-setup.jpg',
+    src: '/images/camp-setups/choose-package-camp-setup.webp',
     title: 'Choose a Package',
     alt: 'A cabin-style tent with a canopy awning, folding chairs, a cooler, and a cooking setup, shaded by large trees',
     badge: 'Glamping',

@@ -9,7 +9,7 @@ const SHOW_DELAY_MS = 1000;
 /** The animation's own background green, shown while it downloads: the animation itself opens on
  *  plain green, so the popup can appear right on time without looking empty or broken. */
 const ARTWORK_BACKGROUND = '#083d1f';
-const PROMO_IMAGE = '/images/promos/first-time-renter-15-off-v3.webp';
+const PROMO_IMAGE = '/images/promos/first-time-renter-15-off-v4.webp';
 const SEEN_KEY = 'gearbnb-promo-first-time-15-off-seen';
 
 function alreadySeenThisSession(): boolean {

@@ -484,7 +484,7 @@ export default function LandingPage() {
        * Static: no scroll-driven show/hide, no fixed/sticky positioning. */}
       <section className="relative">
         <img
-          src="/images/background_landpage.png"
+          src="/images/landing-hero.webp"
           alt=""
           className="absolute inset-0 h-full w-full object-cover"
         />
@@ -765,7 +765,7 @@ export default function LandingPage() {
              * balanced side-by-side pairing with the benefit-card grid there. */}
             <div className="h-44 w-44 overflow-hidden rounded-full drop-shadow-2xl sm:h-80 sm:w-80">
               <img
-                src="/brand_assets/GEARBNB_logo.png"
+                src="/brand_assets/gearbnb-logo-960.webp"
                 alt="GearBnB"
                 className="h-full w-full scale-150 object-cover"
               />

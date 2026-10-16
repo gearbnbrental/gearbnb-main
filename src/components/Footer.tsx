@@ -65,7 +65,7 @@ export default function Footer() {
         <div className="grid gap-5 sm:grid-cols-2 sm:gap-8 lg:grid-cols-5">
           <div className="flex flex-col gap-2 sm:gap-3">
             <div className="flex items-center gap-2">
-              <img src="/brand_assets/GEARBNB_logo.png" alt="" className="h-7 w-7 rounded-full sm:h-8 sm:w-8" />
+              <img src="/brand_assets/gearbnb-logo-128.webp" alt="" className="h-7 w-7 rounded-full sm:h-8 sm:w-8" />
               <span className="font-serif text-base font-bold text-white">GearBnB</span>
             </div>
             <p className="text-sm text-white">Making camping memorable with easy and reliable rentals.</p>

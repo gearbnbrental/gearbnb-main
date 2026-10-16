@@ -183,12 +183,12 @@ export default function AboutUs() {
   return (
     <div className="flex flex-col">
       {/* Hero — uses the client-provided AboutUS_2 reference photo (copied from
-          Reference UI/AboutUS_2.png to public/images/about-us-2.png, also reused by My Bookings'
+          Reference UI/AboutUS_2.png to public/images/about-us-hero.webp, also reused by My Bookings'
           own header banner) rather than a stock/invented image, darkened for readable white text,
           matching the reference's large-photo-with-overlay hero treatment. */}
       <section className="relative isolate overflow-hidden">
         <img
-          src="/images/about-us-2.png"
+          src="/images/about-us-hero.webp"
           alt="A tent and camp chairs set up beside a mountain river with a waterfall in the background"
           className="absolute inset-0 h-full w-full object-cover"
         />
@@ -312,7 +312,7 @@ export default function AboutUs() {
       <section className="px-5 py-10 sm:px-6 sm:py-20">
         <div className="relative mx-auto isolate flex w-full max-w-5xl min-h-[220px] items-center overflow-hidden rounded-2xl sm:min-h-[260px]">
           <img
-            src="/images/camp-setups/camp-setup-3.jpg"
+            src="/images/camp-setups/camp-setup-3.webp"
             alt="A quiet forest campsite in the mist"
             loading="lazy"
             className="absolute inset-0 h-full w-full object-cover"
@@ -379,7 +379,7 @@ export default function AboutUs() {
               is unchanged. */}
           <div className="flex-1">
             <img
-              src="/images/camp-setups/camp-setup-6.jpg"
+              src="/images/camp-setups/camp-setup-6.webp"
               alt="A Naturehike tent camp setup rented from GearBnB"
               loading="lazy"
               className="aspect-video w-full rounded-2xl object-cover shadow-sm sm:aspect-[4/3] lg:aspect-[3/4]"
@@ -455,7 +455,7 @@ export default function AboutUs() {
           more evenly since the text here is centered rather than left-anchored. */}
       <section className="relative isolate overflow-hidden">
         <img
-          src="/images/background_landpage.png"
+          src="/images/landing-hero.webp"
           alt="A GearBnB tent and camp chairs set up beside a lake at sunrise"
           className="absolute inset-0 h-full w-full object-cover"
         />

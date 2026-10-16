@@ -98,7 +98,7 @@ export default function FloatingHelp() {
            * the panel's only close control (never duplicated below). */}
           <div className="flex items-center justify-between gap-2 bg-brand-forest px-4 py-3">
             <div className="flex items-center gap-2">
-              <img src="/brand_assets/GEARBNB_logo.png" alt="" className="h-6 w-6 rounded-full" />
+              <img src="/brand_assets/gearbnb-logo-128.webp" alt="" className="h-6 w-6 rounded-full" />
               <span className="font-serif text-sm font-bold text-white">GearBnB</span>
             </div>
             <button
