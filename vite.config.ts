@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-import { ORGANIZATION_JSON_LD, OG_IMAGE_PATH, PRERENDERED_PAGES, SITE_NAME, SITE_URL, type PageMeta } from './src/config/pageMeta.ts'
+import { ORGANIZATION_JSON_LD, OG_IMAGE_PATH, OG_IMAGE_VERSION, PRERENDERED_PAGES, SITE_NAME, SITE_URL, type PageMeta } from './src/config/pageMeta.ts'
 
 /**
  * Keeps the CSP `script-src` hash in the emitted _headers/.htaccess equal to the inline script
@@ -65,7 +65,10 @@ const pageFileName = (path: string) => path.slice(1).replace(/\//g, '--') + '.ht
  * <meta name="description"> that index.html ships with. */
 function withPageMeta(html: string, path: string, meta: PageMeta): string {
   const url = SITE_URL + (path === '/' ? '/' : path)
-  const image = SITE_URL + OG_IMAGE_PATH
+  // The version makes Facebook and Hostinger's CDN fetch the image again: both cache by URL for
+  // days, so a replaced picture under the same file name kept showing the old one. Bump it
+  // whenever a share image changes.
+  const image = SITE_URL + (meta.image ?? OG_IMAGE_PATH) + '?v=' + OG_IMAGE_VERSION
   const title = escapeHtml(meta.title)
   const description = escapeHtml(meta.description)
 
@@ -85,6 +88,9 @@ function withPageMeta(html: string, path: string, meta: PageMeta): string {
         `<meta property="og:description" content="${description}" />`,
         `<meta property="og:url" content="${url}" />`,
         `<meta property="og:image" content="${image}" />`,
+        `<meta property="og:image:width" content="1200" />`,
+        `<meta property="og:image:height" content="630" />`,
+        `<meta property="og:image:alt" content="${title}" />`,
         `<meta name="twitter:card" content="summary_large_image" />`,
         `<meta name="twitter:title" content="${title}" />`,
         `<meta name="twitter:description" content="${description}" />`,

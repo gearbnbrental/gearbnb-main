@@ -9,8 +9,10 @@
 
 export const SITE_URL = 'https://gearbnbrental.com';
 export const SITE_NAME = 'GearBnB';
-/** Shared link-preview image (1200px wide) for every page. */
+/** Default link-preview image (1200x630) for any page that doesn't set its own `image`. */
 export const OG_IMAGE_PATH = '/images/og-image.jpg';
+/** Bump when any share image changes, so Facebook and the CDN fetch the new one. */
+export const OG_IMAGE_VERSION = '2';
 export const LOGO_PATH = '/brand_assets/GEARBNB_logo.png';
 
 /**
@@ -47,6 +49,8 @@ export const ORGANIZATION_JSON_LD = {
 export interface PageMeta {
   title: string;
   description: string;
+  /** This page's own link-preview image (1200x630, path under public/). Defaults to OG_IMAGE_PATH. */
+  image?: string;
 }
 
 export const PAGE_META = {
@@ -59,21 +63,25 @@ export const PAGE_META = {
     title: 'Camping Kits for Rent in Metro Manila | GearBnB',
     description:
       'Browse and rent camping gears in Metro Manila. Explore our selection of quality outdoor equipment and find the perfect gear for your next adventure.',
+    image: '/images/og-packages.jpg',
   },
   packages: {
     title: 'Camping Gear for Rent in Metro Manila | GearBnB',
     description:
       'Choose camping gear for rent in Metro Manila and find ready-to-go packages for solo trips, couples, and groups. Book your gear and get outdoors!',
+    image: '/images/og-packages.jpg',
   },
   buildYourOwn: {
     title: 'Camping Gear Rental in Metro Manila | GearBnB',
     description:
       'Customize your adventure with camping gear rental in Metro Manila. Pick the gear you need, build your own package, and enjoy the outdoors your way.',
+    image: '/images/og-build-your-own.jpg',
   },
   events: {
     title: 'Camping Gear Rental for Events & Team Building | GearBnB',
     description:
       'Plan your team-building or big event with camping gear rental. Get quality camping gear for groups and make your outdoor event hassle-free.',
+    image: '/images/og-plan-an-event.jpg',
   },
   about: {
     title: 'Camping Gear Rental in Las Piñas, Metro Manila | GearBnB',
