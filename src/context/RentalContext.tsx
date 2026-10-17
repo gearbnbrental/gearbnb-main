@@ -1349,7 +1349,10 @@ export function isVerificationComplete(docs: VerificationDocs, isByoBooking: boo
   // A slot is complete when its upload finished OR it uses a document saved from an earlier booking.
   const documentsComplete = REQUIRED_VERIFICATION_DOCUMENTS.every((key) => isSlotFilled(docs.documents[key]));
   const agreementsComplete = isByoBooking ? docs.byoAgreementAccepted : docs.termsAccepted;
-  return contactComplete && documentsComplete && agreementsComplete && docs.confirmed;
+  // Complete as soon as everything is in — no separate "save" press. A returning renter whose saved
+  // documents fill every slot is complete once contact details and the agreement are there.
+  // (`docs.confirmed` still records the Save press, for the button's own label only.)
+  return contactComplete && documentsComplete && agreementsComplete;
 }
 
 interface RentalTotals {

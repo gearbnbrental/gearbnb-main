@@ -443,8 +443,17 @@ describe('isVerificationComplete', () => {
     expect(isVerificationComplete(makeVerificationDocs({ termsAccepted: false }), false)).toBe(false);
   });
 
-  it('fails when the section has not been confirmed', () => {
-    expect(isVerificationComplete(makeVerificationDocs({ confirmed: false }), false)).toBe(false);
+  it('is complete without a separate save press once everything is in', () => {
+    expect(isVerificationComplete(makeVerificationDocs({ confirmed: false }), false)).toBe(true);
+  });
+
+  it('counts saved documents (no new upload) as filled slots', () => {
+    const saved = { name: 'Saved', size: 0, type: '', storagePath: null, savedDocument: { uploadedAt: '2026-01-01', verifiedAt: '2026-01-02', expiresAt: '2027-01-01', fromBookingNumber: 'GB-1' } };
+    const docs = makeVerificationDocs({
+      confirmed: false,
+      documents: { idType1: saved, idType2: saved, verificationVideo: saved, proofOfBilling: saved },
+    });
+    expect(isVerificationComplete(docs, false)).toBe(true);
   });
 
   it('accepts any file type in a slot — the gate is artifact-agnostic', () => {

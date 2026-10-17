@@ -417,14 +417,14 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
       return;
     }
     // Identity verification is a hard gate: contact details, every required document slot
-    // successfully uploaded, terms (and, for a BYO booking, the BYO Rental Agreement) acceptance,
-    // and an explicit save of that section. Artifact-agnostic by design — it never inspects what
+    // filled (uploaded, or a saved document), and terms (and, for a BYO booking, the BYO Rental
+    // Agreement) acceptance. Artifact-agnostic by design — it never inspects what
     // kind of file fills a slot.
     if (!isVerificationComplete(verificationDocs, isByoOnly)) {
       setSubmitError(
         isByoOnly
-          ? 'Please complete the Identity Verification section above, all documents, contact details, Terms & Conditions acceptance, and BYO Rental Agreement acceptance are required, then save that section before confirming.'
-          : 'Please complete the Identity Verification section above, all documents, contact details, and Terms & Conditions acceptance are required, then save that section before confirming.',
+          ? 'Please complete the Identity Verification section above, all documents, contact details, Terms & Conditions acceptance, and BYO Rental Agreement acceptance are required.'
+          : 'Please complete the Identity Verification section above, all documents, contact details, and Terms & Conditions acceptance are required.',
       );
       return;
     }

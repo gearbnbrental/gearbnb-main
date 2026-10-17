@@ -504,6 +504,27 @@ export default function VerificationUpload({ onSubmit }: VerificationUploadProps
   // after the rental are offered. Same helper the availability checks use.
   const returnAt = toAvailabilityTimestamp(cart.tripDetails.returnDate, cart.tripDetails.preferredTime);
 
+  // A returning renter's contact details come from their account (name and phone saved at sign-up or
+  // in Profile, and the account email), so saved documents plus these can complete this section with
+  // nothing to type. Only EMPTY fields are filled, once per visit, so anything typed (or cleared to
+  // retype) here is never overwritten.
+  const contactPrefilledRef = useRef(false);
+  useEffect(() => {
+    if (!user || contactPrefilledRef.current) return;
+    contactPrefilledRef.current = true;
+    const meta = user.user_metadata ?? {};
+    const accountName = typeof meta.full_name === 'string' ? meta.full_name.trim() : '';
+    const accountPhone = typeof meta.phone === 'string' ? meta.phone.trim().replace(/^\+63/, '0') : '';
+    const accountEmail = user.email ?? '';
+    const fill: Partial<Pick<VerificationDocs, 'fullName' | 'phone' | 'email'>> = {};
+    if (!verificationDocs.fullName.trim() && accountName) fill.fullName = accountName;
+    if (!verificationDocs.phone.trim() && accountPhone) fill.phone = accountPhone;
+    if (!verificationDocs.email.trim() && accountEmail) fill.email = accountEmail;
+    if (Object.keys(fill).length > 0) updateVerificationDocs(fill);
+    // Runs once per visit by design (see contactPrefilledRef); the field values are read at that moment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, updateVerificationDocs]);
+
   useEffect(() => {
     if (!userId) return;
     let cancelled = false;
@@ -859,11 +880,13 @@ export default function VerificationUpload({ onSubmit }: VerificationUploadProps
         disabled={!canSubmit}
         className="w-full rounded-lg bg-brand-forest px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-forest-dark disabled:cursor-not-allowed disabled:bg-surface-strong"
       >
+        {/* The section counts as complete as soon as everything is in (see isVerificationComplete);
+            this button just moves on to the Payment Summary. */}
         {anyUploadInProgress
           ? 'Uploading documents…'
-          : verificationDocs.confirmed
-            ? 'Verification Details Saved ✓'
-            : 'Save Verification Details'}
+          : canSubmit
+            ? 'Verification Complete ✓ Continue'
+            : 'Complete the details above to continue'}
       </button>
 
       <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
