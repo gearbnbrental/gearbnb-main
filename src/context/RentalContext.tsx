@@ -25,6 +25,7 @@ import type {
 import { expandGearKinds } from '../utils/gearVariants';
 import { reconcileGearLine } from '../utils/gearReconcile';
 import { dropStaleTripDates } from '../utils/duration';
+import { isSlotFilled } from '../utils/savedDocuments';
 import { useCatalog } from './useCatalog';
 import { useAuth } from './AuthContext';
 
@@ -1148,7 +1149,8 @@ export const REQUIRED_VERIFICATION_DOCUMENTS: VerificationDocumentKey[] = [
  */
 export function isVerificationComplete(docs: VerificationDocs, isByoBooking: boolean): boolean {
   const contactComplete = Boolean(docs.fullName.trim() && docs.phone.trim() && docs.email.trim());
-  const documentsComplete = REQUIRED_VERIFICATION_DOCUMENTS.every((key) => docs.documents[key]?.storagePath);
+  // A slot is complete when its upload finished OR it uses a document saved from an earlier booking.
+  const documentsComplete = REQUIRED_VERIFICATION_DOCUMENTS.every((key) => isSlotFilled(docs.documents[key]));
   const agreementsComplete = isByoBooking ? docs.byoAgreementAccepted : docs.termsAccepted;
   return contactComplete && documentsComplete && agreementsComplete && docs.confirmed;
 }

@@ -265,6 +265,10 @@ const SECTIONS: LegalSection[] = [
           <li>Match the person in the video to the person on your IDs.</li>
           <li>Confirm your name and address match your proof of billing.</li>
           <li>Keep a record for loss, theft, damage or payment claims.</li>
+          <li>
+            Reuse your verified documents when you book again, so you do not upload them again. We reuse them only while
+            we still hold them. You can replace any of them at any time.
+          </li>
         </LegalList>
         <p>We do not use these documents for advertising. We do not use these documents for any purpose outside this policy.</p>
         <p><Strong>How we protect these documents</Strong></p>

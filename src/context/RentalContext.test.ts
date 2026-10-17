@@ -415,6 +415,24 @@ describe('isVerificationComplete', () => {
     expect(isVerificationComplete(stillUploading, false)).toBe(false);
   });
 
+  it('passes when a slot uses a document saved from an earlier booking (nothing uploaded for it)', () => {
+    const docs = makeVerificationDocs();
+    const saved = {
+      ...docs,
+      documents: {
+        ...docs.documents,
+        idType1: {
+          name: 'Saved document',
+          size: 0,
+          type: '',
+          storagePath: null,
+          savedDocument: { uploadedAt: '2026-10-01T00:00:00.000Z', verifiedAt: '2026-10-02T00:00:00.000Z', expiresAt: '2026-12-30T00:00:00.000Z', fromBookingNumber: 'GB-2026-1001-01' },
+        },
+      },
+    };
+    expect(isVerificationComplete(saved, false)).toBe(true);
+  });
+
   it('fails when terms are not accepted', () => {
     expect(isVerificationComplete(makeVerificationDocs({ termsAccepted: false }), false)).toBe(false);
   });

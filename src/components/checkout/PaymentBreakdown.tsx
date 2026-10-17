@@ -15,12 +15,12 @@ import {
   useRental,
 } from '../../context/RentalContext';
 import { REQUIRED_VERIFICATION_DOCUMENTS } from '../../context/RentalContext';
+import { buildVerificationPayload, clearSavedSlots } from '../../utils/savedDocuments';
 import { toAvailabilityTimestamp, toTimestamp } from '../../utils/duration';
 import { formatCurrency } from '../../utils/format';
 import {
   classifyBookingSubmitError,
   ensureFreshSession,
-  VERIFICATION_KIND_MAP,
   submitBookingToRms,
   toRmsBrand,
   type RmsAvailabilityIssue,
@@ -148,7 +148,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
-  const { cart, totals } = useRental();
+  const { cart, totals, updateVerificationDocs } = useRental();
   // Scoped to only what's checked for checkout on the Cart page — an unchecked package or BYO
   // item saved for later must never appear in the itemized breakdown or the booking submission.
   const selectedCart = filterCartToSelection(cart);
@@ -615,11 +615,8 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
         {
           contact: { fullName: verificationDocs.fullName, phone: verificationDocs.phone },
           booking,
-          verificationDocuments: REQUIRED_VERIFICATION_DOCUMENTS.map((key) => ({
-            kind: VERIFICATION_KIND_MAP[key],
-            // Safe: isVerificationComplete already required a non-null storagePath for every key.
-            storagePath: verificationDocs.documents[key]!.storagePath!,
-          })),
+          // Each slot is an upload, or a request to reuse the customer's saved document (the RMS checks it again).
+          verificationDocuments: buildVerificationPayload(verificationDocs.documents, REQUIRED_VERIFICATION_DOCUMENTS),
         },
         idempotencyKeyRef.current,
       );
@@ -662,6 +659,13 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
       } else if (failure.kind === 'duplicate') {
         setSubmitError(
           `You already have a booking request for the same items and dates${failure.bookingNumber ? ` (${failure.bookingNumber})` : ''}. Please check My Bookings instead of submitting another request.`,
+        );
+      } else if (failure.kind === 'saved_document_unavailable') {
+        // A saved document stopped being usable between loading this page and booking (it expired or was
+        // removed). Empty exactly those slots so the customer uploads them again; nothing else is lost.
+        updateVerificationDocs({ documents: clearSavedSlots(verificationDocs.documents, failure.kinds), confirmed: false });
+        setSubmitError(
+          'One of your saved documents can no longer be used. Please go back to Identity Verification and upload it again, then submit.',
         );
       } else {
         setSubmitError(failure.message);

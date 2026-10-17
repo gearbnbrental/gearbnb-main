@@ -11,7 +11,22 @@ import { REQUIRED_VERIFICATION_DOCUMENTS, filterCartToSelection, useRental } fro
 import { supabase } from '../../supabase';
 import type { VerificationDocs, VerificationDocumentKey } from '../../types/gearbnb';
 import { BYO_RENTAL_AGREEMENT_URL, TERMS_AND_CONDITIONS_URL } from '../../config/legalDocuments';
-import { VERIFICATION_BUCKET, VERIFICATION_KIND_MAP, ensureFreshSession } from '../../utils/rmsApi';
+import { toAvailabilityTimestamp } from '../../utils/duration';
+import {
+  VERIFICATION_BUCKET,
+  VERIFICATION_KIND_MAP,
+  ensureFreshSession,
+  fetchSavedDocuments,
+  type RmsSavedDocument,
+} from '../../utils/rmsApi';
+import {
+  applySavedDocuments,
+  describeSavedDocument,
+  dropUnusableSavedSlots,
+  isSlotFilled,
+  reusableFor,
+  savedDocumentMeta,
+} from '../../utils/savedDocuments';
 
 type DocumentKey = VerificationDocumentKey;
 export type ExpectedKind = 'image' | 'video' | 'document';
@@ -401,6 +416,34 @@ export function DocumentDropzone({
   );
 }
 
+/** A slot filled by a document the customer already saved: nothing to upload, with a way to replace it. */
+export function SavedDocumentCard({ title, details, onReplace }: { title: string; details: string; onReplace: () => void }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-sm font-medium text-ink">
+        {title}
+        <RequiredMark />
+      </span>
+      <div className="flex flex-col gap-2 rounded-xl border border-brand-forest/30 bg-brand-forest/10 p-4">
+        <div className="flex items-start gap-2 text-accent">
+          <CheckCircleIcon className="mt-0.5 h-5 w-5 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold">Using your saved document</p>
+            <p className="text-xs">{details}</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onReplace}
+          className="self-start text-xs font-semibold text-accent underline underline-offset-2 hover:text-brand-forest-dark"
+        >
+          Replace with a new file
+        </button>
+      </div>
+    </div>
+  );
+}
+
 interface VerificationUploadProps {
   onSubmit?: () => void;
 }
@@ -448,6 +491,46 @@ export default function VerificationUpload({ onSubmit }: VerificationUploadProps
       trackedUrls.forEach((url) => URL.revokeObjectURL(url));
     };
   }, []);
+
+  // Documents this customer already has saved from an earlier booking (the RMS keeps approved ones for a limited
+  // time after upload). They are filled in automatically, once, so a returning renter does not upload them
+  // again; every one can be replaced. A failed lookup just means the form asks for uploads, exactly as before.
+  const [saved, setSaved] = useState<{ retentionDays: number; documents: RmsSavedDocument[] } | null>(null);
+  const savedAppliedRef = useRef(false);
+  // Slots the customer chose to replace: never refilled automatically.
+  const replacedRef = useRef<Set<DocumentKey>>(new Set());
+  const userId = user?.id;
+  // The booking's return time (midnight when no time is chosen yet), so only documents that will still be held
+  // after the rental are offered. Same helper the availability checks use.
+  const returnAt = toAvailabilityTimestamp(cart.tripDetails.returnDate, cart.tripDetails.preferredTime);
+
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    fetchSavedDocuments(returnAt)
+      .then((result) => {
+        if (cancelled) return;
+        savedAppliedRef.current = false; // a fresh answer (e.g. for new dates) is applied again
+        setSaved(result);
+      })
+      .catch(() => {
+        // Nothing saved, or the lookup failed: the customer uploads as usual.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, returnAt]);
+
+  useEffect(() => {
+    if (!saved || savedAppliedRef.current) return;
+    savedAppliedRef.current = true;
+    // First drop any saved document that no longer qualifies for these dates (the customer may have changed them),
+    // then fill the EMPTY slots, so anything the customer already uploaded is left alone.
+    const pruned = dropUnusableSavedSlots(verificationDocs.documents, saved.documents);
+    const { documents, filled } = applySavedDocuments(pruned, saved.documents, replacedRef.current);
+    const changed = filled.length > 0 || Object.keys(pruned).some((k) => pruned[k as DocumentKey] !== verificationDocs.documents[k as DocumentKey]);
+    if (changed) updateVerificationDocs({ documents, confirmed: false });
+  }, [saved, verificationDocs.documents, updateVerificationDocs]);
 
   function handleContactChange(
     field: keyof Pick<VerificationDocs, 'fullName' | 'phone' | 'email'>,
@@ -539,6 +622,43 @@ export default function VerificationUpload({ onSubmit }: VerificationUploadProps
     });
   }
 
+  /** "Replace": drops the saved document from this slot so a new file can be uploaded instead. */
+  function handleReplaceSaved(key: DocumentKey) {
+    replacedRef.current.add(key);
+    setDocumentSlot(key, null);
+  }
+
+  /** Back to the saved document after having chosen to replace it. */
+  function handleUseSaved(key: DocumentKey) {
+    const doc = reusableFor(key, saved?.documents ?? null);
+    const meta = doc ? savedDocumentMeta(doc) : null;
+    if (!meta) return;
+    replacedRef.current.delete(key);
+    uploadGenerationRef.current[key] += 1; // drop any in-flight upload for this slot
+    const previousUrl = previews[key];
+    if (previousUrl) {
+      URL.revokeObjectURL(previousUrl);
+      objectUrlsRef.current.delete(previousUrl);
+    }
+    setFiles((prev) => ({ ...prev, [key]: null }));
+    setPreviews((prev) => ({ ...prev, [key]: null }));
+    setFileErrors((prev) => ({ ...prev, [key]: null }));
+    setUploading((prev) => ({ ...prev, [key]: false }));
+    updateVerificationDocs({ documents: { ...verificationDocs.documents, [key]: meta }, confirmed: false });
+  }
+
+  /** "Upload new documents instead": drops every saved document in one go. */
+  function handleReplaceAllSaved() {
+    const documents = { ...verificationDocs.documents };
+    for (const slot of DOCUMENT_SLOTS) {
+      if (documents[slot.key]?.savedDocument) {
+        replacedRef.current.add(slot.key);
+        documents[slot.key] = null;
+      }
+    }
+    updateVerificationDocs({ documents, confirmed: false });
+  }
+
   function handleTermsChange(accepted: boolean) {
     updateVerificationDocs({ termsAccepted: accepted, confirmed: false });
   }
@@ -547,9 +667,9 @@ export default function VerificationUpload({ onSubmit }: VerificationUploadProps
     updateVerificationDocs({ byoAgreementAccepted: accepted, confirmed: false });
   }
 
-  const allDocumentsUploaded = REQUIRED_VERIFICATION_DOCUMENTS.every(
-    (key) => verificationDocs.documents[key]?.storagePath,
-  );
+  // Filled by an upload that finished, or by a saved document.
+  const allDocumentsUploaded = REQUIRED_VERIFICATION_DOCUMENTS.every((key) => isSlotFilled(verificationDocs.documents[key]));
+  const savedInUseCount = DOCUMENT_SLOTS.filter((slot) => verificationDocs.documents[slot.key]?.savedDocument).length;
   const anyUploadInProgress = REQUIRED_VERIFICATION_DOCUMENTS.some((key) => uploading[key]);
   const contactInfoComplete = Boolean(
     verificationDocs.fullName.trim() && verificationDocs.phone.trim() && verificationDocs.email.trim(),
@@ -618,21 +738,63 @@ export default function VerificationUpload({ onSubmit }: VerificationUploadProps
             Upload 2 valid government IDs, a short video verification, and proof of billing.
           </p>
         </div>
+        {savedInUseCount > 0 && saved && (
+          <div className="flex flex-col gap-2 rounded-xl border border-brand-forest/30 bg-brand-forest/10 p-4 text-sm text-accent">
+            <p>
+              <span className="font-semibold">Welcome back! </span>
+              We filled in {savedInUseCount === 1 ? 'a document' : `${savedInUseCount} documents`} you already verified on an earlier
+              booking, so you don&apos;t have to upload {savedInUseCount === 1 ? 'it' : 'them'} again. Our team will still see{' '}
+              {savedInUseCount === 1 ? 'it' : 'them'} with your booking. We keep your documents for {saved.retentionDays} days after you
+              upload them. You can replace any of them below.
+            </p>
+            <button
+              type="button"
+              onClick={handleReplaceAllSaved}
+              className="self-start text-xs font-semibold underline underline-offset-2 hover:text-brand-forest-dark"
+            >
+              Upload new documents instead
+            </button>
+          </div>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
-          {DOCUMENT_SLOTS.map((slot) => (
-            <DocumentDropzone
-              key={slot.key}
-              config={slot}
-              file={files[slot.key]}
-              previewUrl={previews[slot.key]}
-              error={fileErrors[slot.key]}
-              uploading={uploading[slot.key]}
-              uploaded={Boolean(verificationDocs.documents[slot.key]?.storagePath)}
-              persistedFileName={verificationDocs.documents[slot.key]?.name ?? null}
-              onSelect={(file) => handleDocumentSelect(slot, file)}
-              onRemove={() => handleDocumentRemove(slot.key)}
-            />
-          ))}
+          {DOCUMENT_SLOTS.map((slot) => {
+            const meta = verificationDocs.documents[slot.key];
+            if (meta?.savedDocument) {
+              return (
+                <SavedDocumentCard
+                  key={slot.key}
+                  title={slot.title}
+                  details={describeSavedDocument(meta.savedDocument)}
+                  onReplace={() => handleReplaceSaved(slot.key)}
+                />
+              );
+            }
+            const reusable = !meta && !uploading[slot.key] ? reusableFor(slot.key, saved?.documents ?? null) : null;
+            return (
+              <div key={slot.key} className="flex flex-col gap-1.5">
+                <DocumentDropzone
+                  config={slot}
+                  file={files[slot.key]}
+                  previewUrl={previews[slot.key]}
+                  error={fileErrors[slot.key]}
+                  uploading={uploading[slot.key]}
+                  uploaded={Boolean(meta?.storagePath)}
+                  persistedFileName={meta?.name ?? null}
+                  onSelect={(file) => handleDocumentSelect(slot, file)}
+                  onRemove={() => handleDocumentRemove(slot.key)}
+                />
+                {reusable && (
+                  <button
+                    type="button"
+                    onClick={() => handleUseSaved(slot.key)}
+                    className="self-start text-xs font-medium text-accent underline underline-offset-2"
+                  >
+                    Use my saved {slot.title} instead
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
       </section>
 

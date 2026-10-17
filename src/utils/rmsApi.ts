@@ -76,13 +76,15 @@ export class RmsApiError extends Error {
   code?: string;
   /** Present alongside DUPLICATE_BOOKING_REQUEST: the customer's OWN existing booking's number. */
   bookingNumber?: string;
+  /** Present alongside SAVED_DOCUMENT_UNAVAILABLE: which document kinds could not be reused (e.g. GOV_ID_1). */
+  kinds?: string[];
 
   constructor(
     message: string,
     status: number,
     fields?: Record<string, string[]>,
     retryAfterMs?: number,
-    extra?: { code?: string; bookingNumber?: string },
+    extra?: { code?: string; bookingNumber?: string; kinds?: string[] },
   ) {
     super(message);
     this.status = status;
@@ -90,12 +92,16 @@ export class RmsApiError extends Error {
     this.retryAfterMs = retryAfterMs;
     this.code = extra?.code;
     this.bookingNumber = extra?.bookingNumber;
+    this.kinds = extra?.kinds;
   }
 }
 
 export type BookingSubmitFailure =
   | { kind: 'duplicate'; bookingNumber?: string }
   | { kind: 'inventory_conflict' }
+  /** A saved document the customer chose to reuse can no longer be used (it expired or was removed) between the
+   *  moment the page loaded and the moment of booking. `kinds` are the RMS document kinds to upload again. */
+  | { kind: 'saved_document_unavailable'; kinds: RmsVerificationDocumentKind[] }
   | { kind: 'other'; message: string };
 
 /**
@@ -109,6 +115,10 @@ export type BookingSubmitFailure =
 export function classifyBookingSubmitError(err: unknown): BookingSubmitFailure {
   if (err instanceof RmsApiError && err.status === 409) {
     if (err.code === 'DUPLICATE_BOOKING_REQUEST') return { kind: 'duplicate', bookingNumber: err.bookingNumber };
+    if (err.code === 'SAVED_DOCUMENT_UNAVAILABLE') {
+      const valid = new Set<string>(Object.values(VERIFICATION_KIND_MAP));
+      return { kind: 'saved_document_unavailable', kinds: (err.kinds ?? []).filter((k): k is RmsVerificationDocumentKind => valid.has(k)) };
+    }
     if (!err.code && /no longer available/i.test(err.message)) return { kind: 'inventory_conflict' };
   }
   return { kind: 'other', message: describeRmsError(err) };
@@ -232,7 +242,7 @@ async function rmsFetch<T>(path: string, options: RmsFetchOptions = {}): Promise
   }
 
   if (!response.ok) {
-    const body = (data ?? {}) as { error?: string; fields?: Record<string, string[]>; code?: string; bookingNumber?: string };
+    const body = (data ?? {}) as { error?: string; fields?: Record<string, string[]>; code?: string; bookingNumber?: string; kinds?: unknown };
     // Only meaningful on a 429 (see RMS's own checkRateLimit) — a plain integer number of seconds
     // per the standard Retry-After header, never trusted beyond that single well-formed shape.
     const retryAfterHeader = response.headers.get('Retry-After');
@@ -241,6 +251,7 @@ async function rmsFetch<T>(path: string, options: RmsFetchOptions = {}): Promise
     throw new RmsApiError(body.error ?? 'The request could not be completed.', response.status, body.fields, retryAfterMs, {
       code: typeof body.code === 'string' ? body.code : undefined,
       bookingNumber: typeof body.bookingNumber === 'string' ? body.bookingNumber : undefined,
+      kinds: Array.isArray(body.kinds) ? body.kinds.filter((k): k is string => typeof k === 'string') : undefined,
     });
   }
 
@@ -348,7 +359,10 @@ export interface RmsBookingSubmission {
      *  Always separate from estimatedRentalFeeCentavos, which stays the normal, pre-discount fee. */
     estimatedDiscountCentavos?: number;
   };
-  verificationDocuments: { kind: string; storagePath: string }[];
+  /** One entry per required document: a file the customer just uploaded (`storagePath`), or a request to reuse
+   *  the document they already have saved from an earlier booking (`reuseSaved`). The RMS re-checks the saved
+   *  one at booking time and refuses with SAVED_DOCUMENT_UNAVAILABLE if it can no longer be used. */
+  verificationDocuments: ({ kind: string; storagePath: string } | { kind: string; reuseSaved: true })[];
 }
 
 /**
@@ -1156,4 +1170,28 @@ export function fetchPublicPromo(signal?: AbortSignal) {
  *  in). Rate limited by the RMS, so callers debounce it and never retry automatically. */
 export function fetchPromoQuote(input: RmsAvailabilityRequest, signal?: AbortSignal) {
   return rmsFetch<RmsPromoQuote>('/api/customer/promo/quote', { method: 'POST', body: input, requireAuth: false, signal });
+}
+
+/** One of the four required documents, as the customer's own saved copy: a state and dates, never a file or a link.
+ *  `AVAILABLE` can be reused on a new booking; the others explain why not. */
+export interface RmsSavedDocument {
+  kind: RmsVerificationDocumentKind;
+  state: 'AVAILABLE' | 'EXPIRING' | 'NOT_VERIFIED' | 'NONE';
+  uploadedAt: string | null;
+  verifiedAt: string | null;
+  expiresAt: string | null;
+  fromBookingNumber: string | null;
+}
+
+/**
+ * The documents the signed-in customer already has on file from earlier bookings (GET
+ * /api/customer/saved-documents), so a returning renter does not upload them again. Read-only. A failure just
+ * means the site asks for uploads as it always has, so callers treat any error as "nothing saved".
+ */
+export async function fetchSavedDocuments(
+  /** The booking's return time, when known, so the RMS only offers documents it will still hold after the rental. */
+  returnAt?: string | null,
+): Promise<{ retentionDays: number; documents: RmsSavedDocument[] }> {
+  const query = returnAt ? `?returnAt=${encodeURIComponent(returnAt)}` : '';
+  return withReadRetry(() => rmsFetch<{ retentionDays: number; documents: RmsSavedDocument[] }>(`/api/customer/saved-documents${query}`));
 }

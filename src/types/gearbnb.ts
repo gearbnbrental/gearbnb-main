@@ -325,6 +325,18 @@ export interface VerificationFileMeta {
   size: number;
   type: string;
   storagePath: string | null;
+  /** Set when this slot uses a document the customer already has saved from an earlier booking instead of a
+   *  new upload (then `storagePath` stays null: nothing is uploaded, the RMS makes the booking its own copy).
+   *  Only dates are kept here, never a file or a link. */
+  savedDocument?: SavedDocumentInfo;
+}
+
+/** What the site shows about a saved document the customer is reusing. */
+export interface SavedDocumentInfo {
+  uploadedAt: string;
+  verifiedAt: string | null;
+  expiresAt: string;
+  fromBookingNumber: string | null;
 }
 
 /** Customer identity verification state captured during checkout. */
