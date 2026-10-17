@@ -13,5 +13,7 @@ export function reconcileGearLine(selection: BookableGearSelection, fresh: Booka
   if (!fresh) return undefined;
   const quantity = Math.min(selection.quantity, fresh.quantity);
   if (quantity <= 0) return undefined;
-  return { ...fresh, quantity, availableCount: Math.max(fresh.availableCount, quantity) };
+  // A Build Your Own line keeps the dates it was added for (the catalog knows nothing about them).
+  const dates = selection.startDate !== undefined ? { startDate: selection.startDate, returnDate: selection.returnDate } : {};
+  return { ...fresh, ...dates, quantity, availableCount: Math.max(fresh.availableCount, quantity) };
 }

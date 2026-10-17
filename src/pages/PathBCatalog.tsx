@@ -12,8 +12,12 @@ import { useAuth } from '../context/AuthContext';
 import { useCatalog } from '../context/useCatalog';
 import {
   byoGearKey,
+  byoLineDates,
+  byoLineKey,
   calculateRentalDurationDays,
+  cartForDates,
   getGearKindPrice,
+  sameDates,
   useRental,
 } from '../context/RentalContext';
 import type {
@@ -34,7 +38,7 @@ import {
   MAX_BOOKING_DATE,
   TODAY,
 } from '../utils/duration';
-import { formatCurrency } from '../utils/format';
+import { formatCurrency, formatTripDate } from '../utils/format';
 import { toRmsBrand, type RmsAvailabilityRequest, type RmsAvailabilityResult } from '../utils/rmsApi';
 import { useAvailabilityCheck } from '../hooks/useAvailabilityCheck';
 import { resolveGearVariant, sizeCapacityToShow } from '../utils/gearVariants';
@@ -50,6 +54,7 @@ import ByoPromoProgress from '../components/promo/ByoPromoProgress';
 import { BarPromoNote, BarRentalFee } from '../components/promo/PromoTotals';
 import { gearCardPromoNote, gearCardPromoSaving } from '../utils/promoDisplay';
 import GearPriceBlock from '../components/promo/GearPriceBlock';
+import { useStickyBarRef } from '../utils/stickyBar';
 
 /** Mirrors the RMS's own customer-safe display-name construction
  * (src/server/availability/service.ts's kindDisplayName) exactly, so an
@@ -309,6 +314,10 @@ interface GearCardProps {
    *  the normal price crossed off, the discounted price and "✓ You save ₱X (15%)" instead of
    *  promoNote. */
   promoSaving: { centavos: number; percent: string | null } | null;
+  /** The other dates this gear is already in the cart for ("Oct 22, 2026 – Oct 24, 2026"), shown as
+   *  a note. It can still be added for the dates being browsed: each dates gets its own cart line,
+   *  checked for availability on its own dates. */
+  alsoInCartFor: string[];
   onQuantityChange: (next: number) => void;
   onAddOnQuantityChange: (addOn: BookableAddOn, next: number) => void;
 }
@@ -325,6 +334,7 @@ function GearCard({
   unavailableForDates,
   promoNote,
   promoSaving,
+  alsoInCartFor,
   onQuantityChange,
   onAddOnQuantityChange,
 }: GearCardProps) {
@@ -462,6 +472,11 @@ function GearCard({
             own `hidden` toggle. Also a column whenever the promo price stack shows (crossed-off
             price, discounted price, "You save"): beside even the small "+" it wrapped into a
             sliver on a phone. */}
+        {alsoInCartFor.length > 0 && (
+          <p className="mt-auto pt-1 text-[11px] font-medium leading-snug text-ink-muted sm:text-xs">
+            Also in your cart for {alsoInCartFor.join(' and ')}
+          </p>
+        )}
         <div
           className={`mt-auto flex gap-1.5 pt-1 sm:flex-row sm:items-end sm:justify-between sm:gap-2 sm:pt-2 ${
             isSelected || promoSaving ? 'flex-col items-start' : 'flex-row items-center justify-between'
@@ -574,6 +589,8 @@ function GearCard({
 }
 
 export default function PathBCatalog() {
+  // Lets the floating corner buttons sit just above this page's sticky bar, whatever its height.
+  const stickyBarRef = useStickyBarRef();
   usePageMeta(PAGE_META.buildYourOwn.title, PAGE_META.buildYourOwn.description);
   const navigate = useNavigate();
   const location = useLocation();
@@ -612,13 +629,37 @@ export default function PathBCatalog() {
   // `activeColor` below).
   const [chosenColor, setChosenColor] = useState<string | null>(null);
   const cartItemCount = cart.selectedKits.length + cart.selectedItems.length + cart.byoGears.length;
-  const isUnlocked = totals.rentalDurationDays > 0;
-  const hasDuration = calculateRentalDurationDays(cart.tripDetails) > 0;
+  // The duration being browsed (the cart's own totals describe what's checked for checkout, which
+  // can be for other dates).
+  const browsingDays = calculateRentalDurationDays(cart.tripDetails);
+  const hasDuration = browsingDays > 0;
+  const isUnlocked = hasDuration;
 
-  const gearSelections = useMemo(
-    () => new Map(cart.byoGears.map((gear) => [byoGearKey(gear), gear.quantity])),
-    [cart.byoGears],
+  // Each cart line keeps the dates it was added for, so this page only treats lines added for the
+  // dates being browsed (or not dated yet) as "in your cart"; lines for other dates are labelled
+  // instead, and left out of the stock and availability checks for these dates.
+  const browsingDates = useMemo(
+    () => ({ startDate: cart.tripDetails.startDate, returnDate: cart.tripDetails.returnDate }),
+    [cart.tripDetails.startDate, cart.tripDetails.returnDate],
   );
+  const cartForTheseDates = useMemo(() => cartForDates(cart, browsingDates), [cart, browsingDates]);
+  const gearSelections = useMemo(
+    () => new Map(cartForTheseDates.byoGears.map((gear) => [byoGearKey(gear), gear.quantity])),
+    [cartForTheseDates.byoGears],
+  );
+  // Other dates each gear is already in the cart for, shown on its card as a note.
+  const gearAlsoInCartFor = useMemo(() => {
+    const labels = new Map<string, string[]>();
+    for (const gear of cart.byoGears) {
+      const dates = byoLineDates(gear);
+      const start = formatTripDate(dates.startDate);
+      const end = formatTripDate(dates.returnDate);
+      if (!start || !end || sameDates(dates, browsingDates)) continue;
+      const key = byoGearKey(gear);
+      labels.set(key, [...(labels.get(key) ?? []), `${start} – ${end}`]);
+    }
+    return labels;
+  }, [cart.byoGears, browsingDates]);
 
   // Real, date-scoped availability for whatever the customer has already selected — checked
   // against the RMS's actual inventory/assignment data, never computed locally, and never checked
@@ -628,26 +669,26 @@ export default function PathBCatalog() {
   // retry/timeout lifecycle now lives in the shared useAvailabilityCheck hook — this only builds
   // the request object (or null, when there's nothing to check yet).
   const byoAvailabilityRequest: RmsAvailabilityRequest | null = useMemo(() => {
-    if (!isUnlocked || cart.byoGears.length === 0) return null;
+    if (!isUnlocked || cartForTheseDates.byoGears.length === 0) return null;
     // toAvailabilityTimestamp, not a hardcoded midnight literal — this runs before the customer
     // ever reaches Trip Details (falls back to midnight until Preferred Time has a real value),
     // but sends the exact same timestamp the final booking submission would once one exists.
-    // dates are already known-valid here (isUnlocked requires totals.rentalDurationDays > 0), so
+    // dates are already known-valid here (isUnlocked requires a browsing duration), so
     // these can never actually be null.
     const pickupAt = toAvailabilityTimestamp(cart.tripDetails.startDate, cart.tripDetails.preferredTime)!;
     const returnAt = toAvailabilityTimestamp(cart.tripDetails.returnDate, cart.tripDetails.preferredTime)!;
-    const bookingGears = cart.byoGears.map((g) => ({
+    const bookingGears = cartForTheseDates.byoGears.map((g) => ({
       category: g.category,
       brand: toRmsBrand(g.brand),
       model: g.model,
       quantity: g.quantity,
       ...(g.color ? { color: g.color } : {}),
     }));
-    const addOns = Object.values(cart.byoAddOns)
+    const addOns = Object.values(cartForTheseDates.byoAddOns)
       .flat()
       .map((a) => ({ category: a.category, brand: toRmsBrand(a.brand), model: a.model, quantity: a.quantity }));
     return { pickupAt, returnAt, bookingGears, addOns };
-  }, [isUnlocked, cart.tripDetails.startDate, cart.tripDetails.returnDate, cart.tripDetails.preferredTime, cart.byoGears, cart.byoAddOns]);
+  }, [isUnlocked, cart.tripDetails.startDate, cart.tripDetails.returnDate, cart.tripDetails.preferredTime, cartForTheseDates.byoGears, cartForTheseDates.byoAddOns]);
 
   const byoAvailabilityCheck = useAvailabilityCheck(byoAvailabilityRequest);
   // Preserves the exact pre-existing local shape every consumer below already reads
@@ -1058,12 +1099,14 @@ export default function PathBCatalog() {
                         // through unchanged.
                         const kind = resolveGearVariant(baseKind, supportsColorFilter(baseKind) ? activeColor : undefined);
                         const key = byoGearKey(kind);
+                        // This gear's cart line for the dates being browsed (add-ons hang off it).
+                        const lineKey = byoLineKey(kind, browsingDates);
                         return (
                           <GearCard
                             key={key}
                             kind={kind}
                             quantity={gearSelections.get(key) ?? 0}
-                            addOnSelections={cart.byoAddOns[key] ?? []}
+                            addOnSelections={cart.byoAddOns[lineKey] ?? []}
                             tripDetails={cart.tripDetails}
                             hasDuration={hasDuration}
                             showUpsell={selectedPreset === '48h'}
@@ -1072,6 +1115,7 @@ export default function PathBCatalog() {
                             unavailableForDates={unavailableNames.has(kindDisplayName(kind))}
                             promoNote={gearCardPromoNote(basketPromo, kind.category)}
                             promoSaving={gearCardPromoSaving(basketPromo, kind.category, hasDuration ? getGearKindPrice(kind, cart.tripDetails) : null)}
+                            alsoInCartFor={gearAlsoInCartFor.get(key) ?? []}
                             onQuantityChange={(next) => {
                               const current = gearSelections.get(key) ?? 0;
                               if (next > current && !requireAuth()) return;
@@ -1079,9 +1123,9 @@ export default function PathBCatalog() {
                             }}
                             onAddOnQuantityChange={(addOn, next) => {
                               const current =
-                                (cart.byoAddOns[key] ?? []).find((a) => byoGearKey(a) === byoGearKey(addOn))?.quantity ?? 0;
+                                (cart.byoAddOns[lineKey] ?? []).find((a) => byoGearKey(a) === byoGearKey(addOn))?.quantity ?? 0;
                               if (next > current && !requireAuth()) return;
-                              setByoAddOnQuantity(key, addOn, next);
+                              setByoAddOnQuantity(lineKey, addOn, next);
                             }}
                           />
                         );
@@ -1134,14 +1178,14 @@ export default function PathBCatalog() {
         )}
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur">
+      <div ref={stickyBarRef} className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-5 py-3 sm:px-6">
           <div className="flex flex-col">
             <span className="text-xs font-medium uppercase tracking-wide text-ink-faint">
               {cartItemCount} item{cartItemCount === 1 ? '' : 's'} selected
               {isUnlocked && (
                 <span className="ml-1.5 text-ink-faint">
-                  &bull; {totals.rentalDurationDays}-day rental
+                  &bull; {browsingDays}-day rental
                 </span>
               )}
             </span>

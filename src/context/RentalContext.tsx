@@ -16,6 +16,7 @@ import type {
   CartState,
   CheckoutSelection,
   DateRange,
+  EntryDates,
   IndividualItem,
   PackageKit,
   TripDetails,
@@ -71,6 +72,7 @@ const initialCartState: CartState = {
   itemExtras: {},
   byoGears: [],
   byoAddOns: {},
+  entryDates: {},
   tripDetails: initialTripDetails,
   verificationDocs: initialVerificationDocs,
   checkoutSelection: initialCheckoutSelection,
@@ -84,6 +86,103 @@ export function byoGearKey(gear: { category: string; brand: string; model: strin
   // A color-pinned line (Black vs Khaki of the same kind) is its own cart line; a line without a
   // color keeps exactly the key it always had, so carts saved before colors existed still match.
   return `${gear.category}|${gear.brand}|${gear.model ?? ''}${gear.color ? `|${gear.color}` : ''}`;
+}
+
+/** Key into CartState.entryDates for a package (by its cart id). A package's add-ons use it too. */
+export function kitDatesKey(kitId: string): string {
+  return `kit:${kitId}`;
+}
+
+const NO_DATES: EntryDates = { startDate: '', returnDate: '' };
+
+/** The dates a cart entry was added for ('' dates when unknown). */
+export function entryDatesFor(cart: Pick<CartState, 'entryDates'>, key: string): EntryDates {
+  // `?.` as well: a cart object from before this field existed (e.g. one still in memory across a
+  // hot reload) must read as "no dates", never crash the page.
+  return cart.entryDates?.[key] ?? NO_DATES;
+}
+
+/** `tripDetails` with one entry's own dates swapped in — for pricing or showing that entry. */
+export function tripDetailsForEntry(cart: Pick<CartState, 'entryDates' | 'tripDetails'>, key: string): TripDetails {
+  return { ...cart.tripDetails, ...entryDatesFor(cart, key) };
+}
+
+export function sameDates(a: EntryDates, b: EntryDates): boolean {
+  return a.startDate === b.startDate && a.returnDate === b.returnDate;
+}
+
+function hasDates(dates: EntryDates): boolean {
+  return Boolean(dates.startDate && dates.returnDate);
+}
+
+/**
+ * Identifies one Build Your Own LINE: the gear (byoGearKey) plus the dates it's rented for, so the
+ * same tent can be in the cart once for one weekend and again for another. A line with no dates
+ * keeps the plain gear key (what every line used before lines had dates). Used for checkout
+ * selection (CheckoutSelection.byoGearKeys) and as the key into byoAddOns.
+ */
+export function byoLineKey(gear: { category: string; brand: string; model: string | null; color?: string }, dates: EntryDates): string {
+  const base = byoGearKey(gear);
+  return hasDates(dates) ? `${base}@${dates.startDate}~${dates.returnDate}` : base;
+}
+
+/** The dates a Build Your Own line was added for ('' when unknown). */
+export function byoLineDates(gear: Pick<BookableGearSelection, 'startDate' | 'returnDate'>): EntryDates {
+  return { startDate: gear.startDate ?? '', returnDate: gear.returnDate ?? '' };
+}
+
+/** byoLineKey of a line already in the cart (its own dates). */
+export function byoLineKeyOf(gear: BookableGearSelection): string {
+  return byoLineKey(gear, byoLineDates(gear));
+}
+
+/** The dates a BYO quantity change applies to: a cart line's own, else the dates being browsed. */
+function byoDatesForChange(gear: BookableGearKind | BookableGearSelection, tripDetails: TripDetails): EntryDates {
+  const line = gear as Partial<BookableGearSelection>;
+  return line.startDate !== undefined && line.returnDate !== undefined
+    ? { startDate: line.startDate, returnDate: line.returnDate }
+    : { startDate: tripDetails.startDate, returnDate: tripDetails.returnDate };
+}
+
+/**
+ * The one date range shared by everything checked for checkout, or why there isn't one: `mixed`
+ * when checked entries were added for different dates (one booking has one date range), `missing`
+ * when a checked entry has no dates. Individual (legacy) items carry no dates of their own and are
+ * blocked from checkout separately, so they're ignored here.
+ */
+export function selectionDates(
+  cart: Pick<CartState, 'entryDates' | 'selectedKits' | 'byoGears' | 'checkoutSelection'>,
+): { dates: EntryDates | null; mixed: boolean; missing: boolean } {
+  const selected = filterCartToSelection(cart as CartState);
+  const all = [
+    ...selected.selectedKits.map((kit) => entryDatesFor(cart, kitDatesKey(kit.id))),
+    ...selected.byoGears.map(byoLineDates),
+  ];
+  const dated = all.filter(hasDates);
+  const missing = dated.length < all.length;
+  const first = dated[0] ?? null;
+  const mixed = dated.some((dates) => !sameDates(dates, first!));
+  return { dates: !mixed && !missing ? first : null, mixed, missing };
+}
+
+/** Only the entries of a cart added for `dates` (plus any with no dates) — what the catalog shows
+ *  as "in your cart" and counts against stock while those dates are being browsed. */
+export function cartForDates<T extends Pick<CartState, 'entryDates' | 'selectedKits' | 'byoGears' | 'byoAddOns' | 'packageAddOns'>>(
+  cart: T,
+  dates: EntryDates,
+): T {
+  const matches = (entry: EntryDates) => !hasDates(entry) || sameDates(entry, dates);
+  const selectedKits = cart.selectedKits.filter((kit) => matches(entryDatesFor(cart, kitDatesKey(kit.id))));
+  const byoGears = cart.byoGears.filter((gear) => matches(byoLineDates(gear)));
+  const keptLineKeys = new Set(byoGears.map(byoLineKeyOf));
+  const keptKitIds = new Set(selectedKits.map((kit) => kit.id));
+  return {
+    ...cart,
+    selectedKits,
+    byoGears,
+    byoAddOns: Object.fromEntries(Object.entries(cart.byoAddOns).filter(([key]) => keptLineKeys.has(key))),
+    packageAddOns: Object.fromEntries(Object.entries(cart.packageAddOns).filter(([kitId]) => keptKitIds.has(kitId))),
+  };
 }
 
 /** Guest (not-logged-in) cart storage key — unchanged from before this file supported per-account
@@ -116,6 +215,8 @@ interface PersistedCart {
   itemExtras: Record<string, string[]>;
   byoGears: BookableGearSelection[];
   byoAddOns: Record<string, BookableAddOnSelection[]>;
+  /** Absent in carts saved before entries had their own dates — see loadPersistedCart. */
+  entryDates?: Record<string, EntryDates>;
   tripDetails: TripDetails;
   verificationContact: Pick<VerificationDocs, 'fullName' | 'phone' | 'email'>;
   /** The customer's own include/exclude-from-checkout choices — persisted (unlike verification
@@ -138,6 +239,7 @@ const EMPTY_PERSISTED_CART: Omit<PersistedCart, 'tripDetails'> = {
   itemExtras: {},
   byoGears: [],
   byoAddOns: {},
+  entryDates: {},
   verificationContact: EMPTY_VERIFICATION_CONTACT,
   checkoutSelection: initialCheckoutSelection,
 };
@@ -169,7 +271,7 @@ export function sanitizeCheckoutSelection(
 ): CheckoutSelection {
   const validKitIds = new Set(restored.selectedKits.map((kit) => kit.id));
   const validItemIds = new Set(restored.selectedItems.map((item) => item.id));
-  const validByoGearKeys = new Set(restored.byoGears.map((gear) => byoGearKey(gear)));
+  const validByoGearKeys = new Set(restored.byoGears.map(byoLineKeyOf));
 
   if (!persisted) {
     // Kits/items/byoGears keep the pre-existing "everything restored starts selected" behavior —
@@ -244,21 +346,57 @@ function loadPersistedCart(storageKey: string): CartState {
       const sanitized = gears.filter((gear) => Number.isInteger(gear?.quantity) && gear.quantity > 0);
       if (sanitized.length > 0) packageAddOns[kitId] = sanitized;
     }
+    // The dates the whole cart used before entries had their own: what a package or a Build Your Own
+    // line saved before then was booked for, so nothing moves on upgrade. Unlike tripDetails, past
+    // dates are kept rather than cleared: the cart shows them and checkout asks for new ones,
+    // instead of an entry silently losing its dates.
+    const legacyDates: EntryDates = {
+      startDate: typeof parsed.tripDetails?.startDate === 'string' ? parsed.tripDetails.startDate : '',
+      returnDate: typeof parsed.tripDetails?.returnDate === 'string' ? parsed.tripDetails.returnDate : '',
+    };
     // Sanitized here, at hydration, rather than relying solely on REVALIDATE_AGAINST_CATALOG:
     // that pass deliberately leaves byoGears untouched whenever the (no-mock-fallback) gear
     // catalog hasn't loaded yet or failed to — correct for not wiping a legitimate BYO selection
     // on a transient outage, but it means a corrupted quantity (negative, zero, non-integer —
     // whether from manual localStorage tampering or a bug elsewhere) could otherwise sit in the
     // cart, priced and totaled as-is, for as long as the gear catalog stays unavailable.
-    const byoGears = (Array.isArray(parsed.byoGears) ? parsed.byoGears : []).filter(
-      (gear) => Number.isInteger(gear?.quantity) && gear.quantity > 0,
-    );
-    const validByoGearKeys = new Set(byoGears.map((gear) => byoGearKey(gear)));
+    // A line saved without dates takes the legacy dates; `rekey` maps its old (gear-only) key to its
+    // new line key so its add-ons and checkout choice follow it.
+    const rekey = new Map<string, string>();
+    const byoGears = (Array.isArray(parsed.byoGears) ? parsed.byoGears : [])
+      .filter((gear) => Number.isInteger(gear?.quantity) && gear.quantity > 0)
+      .map((gear) => {
+        if (typeof gear.startDate === 'string' && typeof gear.returnDate === 'string') return gear;
+        const dated = { ...gear, startDate: legacyDates.startDate, returnDate: legacyDates.returnDate };
+        rekey.set(byoGearKey(gear), byoLineKeyOf(dated));
+        return dated;
+      });
+    const newKey = (key: string) => rekey.get(key) ?? key;
+    const validByoGearKeys = new Set(byoGears.map(byoLineKeyOf));
     const byoAddOns: Record<string, BookableAddOnSelection[]> = {};
-    for (const [key, addOns] of Object.entries(parsed.byoAddOns ?? {})) {
+    for (const [savedKey, addOns] of Object.entries(parsed.byoAddOns ?? {})) {
+      const key = newKey(savedKey);
       if (!validByoGearKeys.has(key) || !Array.isArray(addOns)) continue;
       const sanitized = addOns.filter((a) => Number.isInteger(a?.quantity) && a.quantity > 0);
       if (sanitized.length > 0) byoAddOns[key] = sanitized;
+    }
+    const savedSelection = parsed.checkoutSelection
+      ? {
+          ...parsed.checkoutSelection,
+          byoGearKeys: Array.isArray(parsed.checkoutSelection.byoGearKeys) ? parsed.checkoutSelection.byoGearKeys.map(newKey) : [],
+          byoAddOnKeys: Object.fromEntries(
+            Object.entries(parsed.checkoutSelection.byoAddOnKeys ?? {}).map(([key, keys]) => [newKey(key), keys]),
+          ),
+        }
+      : undefined;
+    const entryDates: Record<string, EntryDates> = {};
+    for (const kit of selectedKits) {
+      const key = kitDatesKey(kit.id);
+      const saved = parsed.entryDates?.[key];
+      entryDates[key] =
+        saved && typeof saved.startDate === 'string' && typeof saved.returnDate === 'string'
+          ? { startDate: saved.startDate, returnDate: saved.returnDate }
+          : legacyDates;
     }
     return {
       ...initialCartState,
@@ -269,12 +407,13 @@ function loadPersistedCart(storageKey: string): CartState {
       itemExtras: parsed.itemExtras ?? {},
       byoGears,
       byoAddOns,
+      entryDates,
       tripDetails: dropStaleTripDates({ ...initialTripDetails, ...parsed.tripDetails }),
       // Only the plain contact fields restore — documents/confirmed/the agreement checkboxes
       // stay at their initial (empty) values exactly as before, so a stale unconfirmed upload
       // reference can never sit in the restored cart. See PersistedCart's own doc comment.
       verificationDocs: { ...initialVerificationDocs, ...parsed.verificationContact },
-      checkoutSelection: sanitizeCheckoutSelection(parsed.checkoutSelection, {
+      checkoutSelection: sanitizeCheckoutSelection(savedSelection, {
         selectedKits,
         selectedItems,
         packageAddOns,
@@ -305,6 +444,7 @@ function persistCart(storageKey: string, cart: CartState): void {
             itemExtras: cart.itemExtras,
             byoGears: cart.byoGears,
             byoAddOns: cart.byoAddOns,
+            entryDates: cart.entryDates,
             tripDetails: cart.tripDetails,
             verificationContact: {
               fullName: cart.verificationDocs.fullName,
@@ -432,6 +572,11 @@ function cartReducer(state: CartState, action: CartAction): CartState {
       return {
         ...state,
         selectedKits: [...state.selectedKits, action.kit],
+        // Booked for the dates being browsed right now; later date-picker changes don't move it.
+        entryDates: {
+          ...state.entryDates,
+          [kitDatesKey(action.kit.id)]: { startDate: state.tripDetails.startDate, returnDate: state.tripDetails.returnDate },
+        },
         checkoutSelection: {
           ...state.checkoutSelection,
           kitIds: withSelected(state.checkoutSelection.kitIds, action.kit.id),
@@ -450,11 +595,14 @@ function cartReducer(state: CartState, action: CartAction): CartState {
       const packageAddOnKeys = Object.fromEntries(
         Object.entries(state.checkoutSelection.packageAddOnKeys).filter(([kitId]) => kitId !== action.kitId),
       );
+      const entryDates = { ...state.entryDates };
+      delete entryDates[kitDatesKey(action.kitId)];
       return {
         ...state,
         selectedKits: state.selectedKits.filter((kit) => kit.id !== action.kitId),
         kitExtras,
         packageAddOns,
+        entryDates,
         checkoutSelection: {
           ...state.checkoutSelection,
           kitIds: withoutSelected(state.checkoutSelection.kitIds, action.kitId),
@@ -555,8 +703,12 @@ function cartReducer(state: CartState, action: CartAction): CartState {
     // Build Your Own: quantity 0 removes the gear (and any add-ons selected for it); a positive
     // quantity upserts the full kind snapshot, mirroring how ADD_KIT stores the whole PackageKit.
     case 'SET_BYO_GEAR_QUANTITY': {
-      const key = byoGearKey(action.gear);
-      const withoutGear = state.byoGears.filter((g) => byoGearKey(g) !== key);
+      // Which LINE: a line already in the cart (e.g. from the cart page) carries its own dates; gear
+      // straight from the catalog is for the dates being browsed. Same gear, different dates = a
+      // separate line (see byoLineKey).
+      const dates = byoDatesForChange(action.gear, state.tripDetails);
+      const key = byoLineKey(action.gear, dates);
+      const withoutGear = state.byoGears.filter((g) => byoLineKeyOf(g) !== key);
 
       if (action.quantity <= 0) {
         const byoAddOns = { ...state.byoAddOns };
@@ -577,7 +729,7 @@ function cartReducer(state: CartState, action: CartAction): CartState {
 
       return {
         ...state,
-        byoGears: [...withoutGear, { ...action.gear, quantity: action.quantity }],
+        byoGears: [...withoutGear, { ...action.gear, quantity: action.quantity, startDate: dates.startDate, returnDate: dates.returnDate }],
         checkoutSelection: {
           ...state.checkoutSelection,
           byoGearKeys: withSelected(state.checkoutSelection.byoGearKeys, key),
@@ -600,7 +752,7 @@ function cartReducer(state: CartState, action: CartAction): CartState {
     // Add-ons only make sense attached to a gear the customer has actually selected; the UI never
     // offers this control otherwise, but the reducer stays defensive rather than trusting that.
     case 'SET_BYO_ADDON_QUANTITY': {
-      if (!state.byoGears.some((g) => byoGearKey(g) === action.gearKey)) return state;
+      if (!state.byoGears.some((g) => byoLineKeyOf(g) === action.gearKey)) return state;
 
       const addOnKey = byoGearKey(action.addOn);
       const existing = state.byoAddOns[action.gearKey] ?? [];
@@ -693,6 +845,7 @@ function cartReducer(state: CartState, action: CartAction): CartState {
     }
 
     case 'UPDATE_TRIP_DETAILS': {
+      // Only the dates being browsed (and trip details). Entries already in the cart keep their own.
       return { ...state, tripDetails: { ...state.tripDetails, ...action.details } };
     }
     case 'UPDATE_VERIFICATION_DOCS': {
@@ -737,7 +890,7 @@ function cartReducer(state: CartState, action: CartAction): CartState {
       if (gearLookup) {
         byoAddOns = {};
         for (const gear of byoGears) {
-          const key = byoGearKey(gear);
+          const key = byoLineKeyOf(gear);
           const selectedAddOns = state.byoAddOns[key] ?? [];
           const addOnLookup = new Map(gear.compatibleAddOns.map((addOn) => [byoGearKey(addOn), addOn]));
           const nextAddOns = selectedAddOns
@@ -761,7 +914,7 @@ function cartReducer(state: CartState, action: CartAction): CartState {
       // customer.
       const kitIdSet = new Set(selectedKits.map((kit) => kit.id));
       const itemIdSet = new Set(selectedItems.map((item) => item.id));
-      const byoGearKeySet = new Set(byoGears.map((gear) => byoGearKey(gear)));
+      const byoGearKeySet = new Set(byoGears.map(byoLineKeyOf));
 
       // Package extra-inventory gets the same treatment byoGears above already receives: dropped
       // when its parent package is gone, and — once the gear catalog has actually loaded — each
@@ -822,7 +975,7 @@ function cartReducer(state: CartState, action: CartAction): CartState {
         kitExtras === state.kitExtras &&
         itemExtras === state.itemExtras &&
         byoGears.length === state.byoGears.length &&
-        byoGears.every((gear, index) => gear.quantity === state.byoGears[index]?.quantity && byoGearKey(gear) === byoGearKey(state.byoGears[index])) &&
+        byoGears.every((gear, index) => gear.quantity === state.byoGears[index]?.quantity && byoLineKeyOf(gear) === byoLineKeyOf(state.byoGears[index])) &&
         JSON.stringify(byoAddOns) === JSON.stringify(state.byoAddOns) &&
         packageAddOns === state.packageAddOns &&
         JSON.stringify(checkoutSelection) === JSON.stringify(state.checkoutSelection);
@@ -840,9 +993,12 @@ function cartReducer(state: CartState, action: CartAction): CartState {
         .filter((item) => !itemIdSet.has(item.id))
         .map((item) => item.name);
       const droppedGearNames = gearLookup
-        ? state.byoGears.filter((gear) => !byoGearKeySet.has(byoGearKey(gear))).map((gear) => gear.name)
+        ? state.byoGears.filter((gear) => !byoGearKeySet.has(byoLineKeyOf(gear))).map((gear) => gear.name)
         : [];
       const removedItemNames = [...droppedKitNames, ...droppedItemNames, ...droppedGearNames];
+
+      const keptEntryKeys = new Set(selectedKits.map((kit) => kitDatesKey(kit.id)));
+      const entryDates = Object.fromEntries(Object.entries(state.entryDates ?? {}).filter(([key]) => keptEntryKeys.has(key)));
 
       return {
         ...state,
@@ -853,6 +1009,7 @@ function cartReducer(state: CartState, action: CartAction): CartState {
         itemExtras,
         byoGears,
         byoAddOns,
+        entryDates,
         checkoutSelection,
         removedItemNames: removedItemNames.length > 0 ? removedItemNames : state.removedItemNames,
       };
@@ -886,7 +1043,7 @@ function cartReducer(state: CartState, action: CartAction): CartState {
         checkoutSelection: {
           kitIds: state.selectedKits.map((kit) => kit.id),
           itemIds: state.selectedItems.map((item) => item.id),
-          byoGearKeys: state.byoGears.map((gear) => byoGearKey(gear)),
+          byoGearKeys: state.byoGears.map(byoLineKeyOf),
           packageAddOnKeys,
           byoAddOnKeys,
         },
@@ -922,7 +1079,7 @@ export function filterCartToSelection(cart: CartState): CartState {
 
   const selectedKits = cart.selectedKits.filter((kit) => kitIdSet.has(kit.id));
   const selectedItems = cart.selectedItems.filter((item) => itemIdSet.has(item.id));
-  const byoGears = cart.byoGears.filter((gear) => byoGearKeySet.has(byoGearKey(gear)));
+  const byoGears = cart.byoGears.filter((gear) => byoGearKeySet.has(byoLineKeyOf(gear)));
 
   const kitExtras = pruneExtras(cart.kitExtras, selectedKits, (kit) => kit.extras ?? []);
   const itemExtras = pruneExtras(cart.itemExtras, selectedItems, (item) => item.paidAddOns ?? []);
@@ -950,7 +1107,7 @@ export function filterCartToSelection(cart: CartState): CartState {
 }
 
 /** Whole rental days between startDate and returnDate; 0 if either date is missing/invalid. */
-export function calculateRentalDurationDays(tripDetails: TripDetails): number {
+export function calculateRentalDurationDays(tripDetails: Pick<TripDetails, 'startDate' | 'returnDate'>): number {
   const { startDate, returnDate } = tripDetails;
   if (!startDate || !returnDate) return 0;
 
@@ -1092,6 +1249,46 @@ export function calculateDueBeforeStart(cart: CartState): number {
     calculateByoGearsFee(cart) +
     calculateByoAddOnsFee(cart)
   );
+}
+
+/** The entries of `record` whose key is in `keys`. */
+function pickKeys<V>(record: Record<string, V>, keys: Set<string>): Record<string, V> {
+  return Object.fromEntries(Object.entries(record).filter(([key]) => keys.has(key)));
+}
+
+/**
+ * calculateDueBeforeStart with each package and BYO line priced for its OWN dates rather than one
+ * shared range: entries are grouped by the dates they were added for and each group is priced for
+ * those dates (an undated group, and legacy individual items, use the browsing dates).
+ */
+export function calculateDueBeforeStartByEntryDates(cart: CartState): number {
+  const kitDates = (kit: PackageKit) => entryDatesFor(cart, kitDatesKey(kit.id));
+  const groups = new Map<string, EntryDates>();
+  for (const dates of [...cart.selectedKits.map(kitDates), ...cart.byoGears.map(byoLineDates)]) {
+    groups.set(`${dates.startDate}|${dates.returnDate}`, dates);
+  }
+  if (groups.size === 0) return calculateDueBeforeStart(cart);
+  let total = 0;
+  let first = true;
+  for (const dates of groups.values()) {
+    const kits = cart.selectedKits.filter((kit) => sameDates(kitDates(kit), dates));
+    const lines = cart.byoGears.filter((gear) => sameDates(byoLineDates(gear), dates));
+    const kitIds = new Set(kits.map((kit) => kit.id));
+    const lineKeys = new Set(lines.map(byoLineKeyOf));
+    total += calculateDueBeforeStart({
+      ...cart,
+      selectedKits: kits,
+      kitExtras: pickKeys(cart.kitExtras, kitIds),
+      packageAddOns: pickKeys(cart.packageAddOns, kitIds),
+      byoGears: lines,
+      byoAddOns: pickKeys(cart.byoAddOns, lineKeys),
+      selectedItems: first ? cart.selectedItems : [],
+      itemExtras: first ? cart.itemExtras : {},
+      tripDetails: { ...cart.tripDetails, ...(hasDates(dates) ? dates : {}) },
+    });
+    first = false;
+  }
+  return total;
 }
 
 function rangesOverlap(a: DateRange, b: DateRange): boolean {
@@ -1277,10 +1474,11 @@ export function RentalProvider({ children }: { children: ReactNode }) {
       // Scoped to only what's checked for checkout — an unchecked package or BYO item saved for
       // later must never inflate the amount the customer is about to be asked to pay.
       const selectedCart = filterCartToSelection(cart);
+      const { dates } = selectionDates(cart);
       return {
-        rentalDurationDays: calculateRentalDurationDays(cart.tripDetails),
+        rentalDurationDays: dates ? calculateRentalDurationDays({ ...cart.tripDetails, ...dates }) : 0,
         dueToday: calculateDueToday(selectedCart),
-        dueBeforeStart: calculateDueBeforeStart(selectedCart),
+        dueBeforeStart: calculateDueBeforeStartByEntryDates(selectedCart),
       };
     },
     [cart],
@@ -1330,7 +1528,8 @@ export function RentalProvider({ children }: { children: ReactNode }) {
       setByoGearQuantity: (gear, quantity) => {
         // Only an increase needs a signed-in customer — lowering an existing selection (including
         // down to 0, i.e. removal) is never blocked, same as every other removal path here.
-        const current = cart.byoGears.find((g) => byoGearKey(g) === byoGearKey(gear))?.quantity ?? 0;
+        const key = byoLineKey(gear, byoDatesForChange(gear, cart.tripDetails));
+        const current = cart.byoGears.find((g) => byoLineKeyOf(g) === key)?.quantity ?? 0;
         if (quantity > current && !user) return false;
         dispatch({ type: 'SET_BYO_GEAR_QUANTITY', gear, quantity });
         return true;

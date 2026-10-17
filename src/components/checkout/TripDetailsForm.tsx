@@ -1,6 +1,6 @@
 ﻿import { useState, type ComponentType } from 'react';
 import { useRental } from '../../context/RentalContext';
-import { MAX_BOOKING_DATE, TODAY } from '../../utils/duration';
+import { Link } from 'react-router-dom';
 import type { FulfillmentType } from '../../types/gearbnb';
 import { CheckIcon, MapPinIcon, TruckIcon } from '../icons';
 
@@ -27,34 +27,11 @@ const FULFILLMENT_OPTIONS: FulfillmentOptionConfig[] = [
   },
 ];
 
-interface DateFieldProps {
-  label: string;
-  value: string;
-  min?: string;
-  onChange: (value: string) => void;
-}
-
-function DateField({ label, value, min, onChange }: DateFieldProps) {
-  return (
-    <label className="flex flex-col gap-1.5">
-      <span className="text-sm font-medium text-ink">{label}</span>
-      <input
-        type="date"
-        required
-        value={value}
-        min={min}
-        max={MAX_BOOKING_DATE}
-        onChange={(e) => onChange(e.target.value)}
-        className="rounded-lg border border-line px-3 py-2.5 text-sm text-ink shadow-sm outline-none transition-colors focus:border-brand-forest focus:ring-2 focus:ring-brand-forest/20"
-      />
-    </label>
-  );
-}
-
 export default function TripDetailsForm() {
   const { cart, updateTripDetails } = useRental();
   const { tripDetails } = cart;
   const isDelivery = tripDetails.fulfillmentType === 'delivery';
+  const hasDates = Boolean(tripDetails.startDate && tripDetails.returnDate);
 
   const [addressTouched, setAddressTouched] = useState(false);
   const showAddressError = isDelivery && addressTouched && tripDetails.deliveryAddress.trim() === '';
@@ -74,25 +51,21 @@ export default function TripDetailsForm() {
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 p-5 sm:p-6">
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold text-ink">Trip Details</h2>
-        <p className="text-sm text-ink-muted">Tell us when you need your gear and how you'd like to get it.</p>
+        <p className="text-sm text-ink-muted">Tell us where you're going and how you'd like to get your gear.</p>
       </div>
 
-      {/* grid-cols-2 at every width — same reasoning as Path A/B's own Rental Dates fields: two
-          native date inputs don't need a full-width row each on a phone. */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-4">
-        <DateField
-          label="Rental Start Date"
-          value={tripDetails.startDate}
-          min={TODAY}
-          onChange={(value) => updateTripDetails({ startDate: value })}
-        />
-        <DateField
-          label="Return Date"
-          value={tripDetails.returnDate}
-          min={tripDetails.startDate || TODAY}
-          onChange={(value) => updateTripDetails({ returnDate: value })}
-        />
-      </div>
+      {/* No date fields here on purpose: the rental dates are chosen in the catalog, where stock and
+          prices are checked for those exact dates, and shown read-only in the cart and the Booking
+          Summary below. Changing them here skipped those checks. */}
+      {!hasDates && (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          Your rental dates are missing.{' '}
+          <Link to="/cart" className="font-semibold underline underline-offset-2">
+            Go back to your cart
+          </Link>{' '}
+          and choose your dates in the catalog before booking.
+        </p>
+      )}
 
       <label className="flex flex-col gap-1.5">
         <span className="text-sm font-medium text-ink">Destination / Venue</span>

@@ -1,4 +1,5 @@
 ﻿import { useEffect, useRef, useState } from 'react';
+import { useStickyBarHeight } from '../utils/stickyBar';
 import { useLocation } from 'react-router-dom';
 import { MESSENGER_URL, TIKTOK_URL } from '../config/social';
 import { ChatBubbleIcon, TikTokIcon } from './icons';
@@ -11,12 +12,6 @@ function XMarkIcon({ className }: { className?: string }) {
   );
 }
 
-/** Routes whose own sticky bottom action bar (Cart's checkout footer, the catalog pages' cart
- * summary bar) would otherwise sit directly under this widget's default bottom-right position —
- * on these, the widget is lifted clear of that bar instead of overlapping its buttons. Exported so
- * BackToTop.tsx — which stacks directly above this widget — lifts by the same amount on the same
- * routes, rather than maintaining a second, potentially-drifting copy of this list. */
-export const STICKY_FOOTER_ROUTES = new Set(['/cart', '/catalog/camping-packages', '/catalog/build-your-own']);
 
 /**
  * Sitewide floating "Need Help?" contact widget — the one general-purpose support CTA, available
@@ -31,7 +26,9 @@ export default function FloatingHelp() {
   const panelRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
-  const liftedForStickyFooter = STICKY_FOOTER_ROUTES.has(location.pathname);
+  // On pages with a sticky bottom bar (the catalog cart summary, Cart's checkout footer) the widget
+  // sits just above it, following the bar's real height.
+  const stickyBarHeight = useStickyBarHeight();
 
   // A panel left open across a navigation would otherwise sit, now pointing at content the
   // customer never asked to see, on top of whatever page they just moved to.
@@ -64,8 +61,8 @@ export default function FloatingHelp() {
 
   return (
     <div
-      className={`hide-in-product-view fixed right-4 z-50 sm:right-6 ${liftedForStickyFooter ? 'bottom-24 sm:bottom-24' : 'bottom-5 sm:bottom-6'}`}
-      style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
+      className={`hide-in-product-view fixed right-4 z-50 sm:right-6 ${stickyBarHeight ? '' : 'bottom-5 sm:bottom-6'}`}
+      style={stickyBarHeight ? { bottom: stickyBarHeight + 12 } : { marginBottom: 'env(safe-area-inset-bottom)' }}
     >
       {/* Trigger comes BEFORE the panel in DOM order (even though the panel renders visually
        * above it via `absolute bottom-full`) — forward-Tab from this button must reach the

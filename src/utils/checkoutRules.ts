@@ -1,4 +1,5 @@
-import type { CartState } from '../types/gearbnb';
+import type { CartState, EntryDates } from '../types/gearbnb';
+import { localTodayISO } from './duration';
 
 /**
  * Why the items checked for checkout can't go through as one online booking, or null when they
@@ -26,6 +27,28 @@ export function checkoutBlocker(cart: Pick<CartState, 'selectedKits' | 'selected
   }
   if (hasPackage && hasKitExtras) {
     return "Package extras added the old way can't be booked online yet. Please remove them, or message us and we'll add them to your booking.";
+  }
+  return null;
+}
+
+/**
+ * Why the dates of what's checked for checkout don't work as one booking, or null when they do.
+ * `selection` is RentalContext's selectionDates(cart). One booking has one date range, so entries
+ * added for different dates are booked separately; an entry with no dates, or dates already past,
+ * has to be added again for new dates in the catalog.
+ */
+export function datesBlocker(
+  selection: { dates: EntryDates | null; mixed: boolean; missing: boolean },
+  today: string = localTodayISO(),
+): string | null {
+  if (selection.mixed) {
+    return 'The items you checked are for different rental dates. Check only items with the same dates to book them together, the others stay in your cart for another booking.';
+  }
+  if (selection.missing || !selection.dates) {
+    return 'Some items you checked have no rental dates. Remove them and add them again from the catalog with your dates.';
+  }
+  if (selection.dates.startDate < today) {
+    return 'The rental dates for the items you checked have already passed. Remove them and add them again from the catalog with new dates.';
   }
   return null;
 }

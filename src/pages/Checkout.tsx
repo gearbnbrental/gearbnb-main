@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AuthRequiredMessage from '../components/AuthRequiredMessage';
 import BackLink from '../components/BackLink';
@@ -7,6 +7,7 @@ import TripDetailsForm from '../components/checkout/TripDetailsForm';
 import VerificationUpload from '../components/checkout/VerificationUpload';
 import PaymentBreakdown from '../components/checkout/PaymentBreakdown';
 import { useAuth } from '../context/AuthContext';
+import { sameDates, selectionDates, useRental } from '../context/RentalContext';
 import { formatCurrency } from '../utils/format';
 import { PROMO_COPY } from '../config/promoCopy';
 import { formatCentavos } from '../utils/promo';
@@ -16,6 +17,13 @@ export default function Checkout() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const [submittedBooking, setSubmittedBooking] = useState<RmsBookingResult | null>(null);
+  // Checkout books what's checked for ITS dates (each cart entry keeps the dates it was added for),
+  // so the trip dates everything below reads are set to those, the same as the Cart page does.
+  const { cart, updateTripDetails } = useRental();
+  const checkedDates = selectionDates(cart).dates;
+  useEffect(() => {
+    if (checkedDates && !sameDates(checkedDates, cart.tripDetails)) updateTripDetails(checkedDates);
+  }, [checkedDates, cart.tripDetails, updateTripDetails]);
 
   // Checkout submits a real booking to the RMS, which always requires an authenticated customer
   // (see rmsFetch's requireAuth default) — gated here, before the customer invests any effort in

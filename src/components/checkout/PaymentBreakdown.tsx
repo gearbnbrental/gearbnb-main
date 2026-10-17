@@ -12,12 +12,13 @@ import {
   getItemPrice,
   getKitPrice,
   isVerificationComplete,
+  byoLineKeyOf,
   useRental,
 } from '../../context/RentalContext';
-import { REQUIRED_VERIFICATION_DOCUMENTS } from '../../context/RentalContext';
+import { REQUIRED_VERIFICATION_DOCUMENTS, selectionDates } from '../../context/RentalContext';
 import { buildVerificationPayload, clearSavedSlots } from '../../utils/savedDocuments';
 import { toAvailabilityTimestamp, toTimestamp } from '../../utils/duration';
-import { formatCurrency } from '../../utils/format';
+import { formatCurrency, formatTripDate } from '../../utils/format';
 import {
   classifyBookingSubmitError,
   ensureFreshSession,
@@ -34,22 +35,13 @@ import { clearAvailabilityCache, requestAvailabilityCheck, useAvailabilityCheck 
 import { cleanGearName } from '../../utils/gearName';
 import { describeAvailabilityIssue } from '../../utils/availabilityIssue';
 import { useBasketPromo } from '../../hooks/useBasketPromo';
-import { checkoutBlocker } from '../../utils/checkoutRules';
+import { checkoutBlocker, datesBlocker } from '../../utils/checkoutRules';
 import { usePromoQuote } from '../../hooks/usePromoQuote';
 import { promoLinesForCart } from '../../utils/promoCart';
 import { formatCentavos, type BasketPromoState } from '../../utils/promo';
 import { decideCheckoutSaving } from '../../utils/promoDisplay';
 import { PromoRentalFeeRows } from '../promo/PromoTotals';
 import CheckoutSavingLine from '../promo/CheckoutSavingLine';
-
-function formatDate(dateStr: string): string | null {
-  if (!dateStr) return null;
-  const date = new Date(dateStr);
-  if (Number.isNaN(date.getTime())) return null;
-  // dateStr is a plain yyyy-mm-dd calendar date, parsed as UTC midnight — formatted in UTC so it
-  // never shifts a day in a browser west of UTC.
-  return date.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-}
 
 /**
  * `crypto.randomUUID()` is restricted to secure contexts (HTTPS, or localhost) by every major
@@ -195,7 +187,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
   const hasPackageAddOns = hasPackage && Object.values(packageAddOns).some((gears) => gears.length > 0);
 
   const hasSelection = hasPackage || hasByoGear || selectedItems.length > 0;
-  const formattedStartDate = formatDate(tripDetails.startDate);
+  const formattedStartDate = formatTripDate(tripDetails.startDate);
 
   // A booking is either a package (optionally carrying extra rentable inventory, which the RMS now
   // validates, prices and reserves when sent as bookingGears[] alongside packageCode) or a Build
@@ -205,8 +197,9 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
   // it is never caught here. More than one package and the old individual-gear (pre-BYO) cart slot
   // remain unsupported — none of these are silently dropped: submission is blocked with an
   // explicit reason instead, per instruction not to discard checkout data quietly.
-  // Same rule the Cart already applies before the customer gets here (see checkoutBlocker).
-  const unsupportedReason = checkoutBlocker(selectedCart);
+  // Same rules the Cart already applies before the customer gets here (see checkoutBlocker and
+  // datesBlocker): one kind of booking, and one date range for everything in it.
+  const unsupportedReason = checkoutBlocker(selectedCart) ?? datesBlocker(selectionDates(cart));
 
   /** RMS-confirmed availability for the customer's actual current checkout selection — never
    *  trusted from whatever the catalog page last saw, since a package/gear can be reserved by
@@ -274,7 +267,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
   const checkoutAddOns: RmsBookingGearLine[] = hasPackage
     ? []
     : byoGears.flatMap((gear) =>
-        (byoAddOns[byoGearKey(gear)] ?? []).map(
+        (byoAddOns[byoLineKeyOf(gear)] ?? []).map(
           (addOn): RmsBookingGearLine => ({
             category: addOn.category,
             brand: toRmsBrand(addOn.brand),
@@ -577,7 +570,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
             }),
           ),
           addOns: byoGears.flatMap((gear) =>
-            (byoAddOns[byoGearKey(gear)] ?? []).map(
+            (byoAddOns[byoLineKeyOf(gear)] ?? []).map(
               (addOn): RmsBookingGearLine => ({
                 category: addOn.category,
                 brand: toRmsBrand(addOn.brand),
@@ -798,7 +791,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
               })}
 
               {byoGears.map((gear) => {
-                const key = byoGearKey(gear);
+                const key = byoLineKeyOf(gear);
                 return (
                   <BreakdownRow
                     key={key}
@@ -811,9 +804,9 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
               })}
 
               {byoGears.flatMap((gear) =>
-                (byoAddOns[byoGearKey(gear)] ?? []).map((addOn) => (
+                (byoAddOns[byoLineKeyOf(gear)] ?? []).map((addOn) => (
                   <BreakdownRow
-                    key={`${byoGearKey(gear)}::${byoGearKey(addOn)}`}
+                    key={`${byoLineKeyOf(gear)}::${byoGearKey(addOn)}`}
                     label={cleanGearName(addOn.name, { keepColor: true })}
                     sublabel={`${cleanGearName(gear.name, { keepColor: true })} add-on${addOn.quantity > 1 ? ` · ${addOn.quantity}×` : ''}`}
                     feeAmount={getGearKindPrice(addOn, tripDetails) * addOn.quantity}
@@ -883,8 +876,8 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
             <dt className="text-ink-muted">Rental Dates</dt>
             <dd className="text-right font-medium text-ink">
-              {formattedStartDate && formatDate(tripDetails.returnDate)
-                ? `${formattedStartDate} – ${formatDate(tripDetails.returnDate)}`
+              {formattedStartDate && formatTripDate(tripDetails.returnDate)
+                ? `${formattedStartDate} – ${formatTripDate(tripDetails.returnDate)}`
                 : 'Not yet set'}
               {totals.rentalDurationDays > 0 && ` · ${totals.rentalDurationDays}-day`}
             </dd>

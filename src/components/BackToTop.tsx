@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { STICKY_FOOTER_ROUTES } from './FloatingHelp';
+import { useStickyBarHeight } from '../utils/stickyBar';
 
 function ArrowUpIcon({ className }: { className?: string }) {
   return (
@@ -20,14 +20,14 @@ const SHOW_AFTER_PX = 480;
  * Sitewide "back to top" button (mounted once in App.tsx, same as FloatingHelp) — appears once the
  * customer has actually scrolled down a meaningful amount, and stacks directly above FloatingHelp
  * in the same bottom-right corner (never beside/overlapping it, and lifted clear of the same
- * sticky footer bars on the same routes — see STICKY_FOOTER_ROUTES) rather than introducing a
+ * sticky bottom bar when a page has one — see useStickyBarHeight) rather than introducing a
  * second floating-button position convention.
  */
 export default function BackToTop() {
   const location = useLocation();
   const [visible, setVisible] = useState(false);
 
-  const lifted = STICKY_FOOTER_ROUTES.has(location.pathname);
+  const stickyBarHeight = useStickyBarHeight();
 
   useEffect(() => {
     function handleScroll() {
@@ -52,8 +52,10 @@ export default function BackToTop() {
       type="button"
       onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
       aria-label="Back to top"
+      // Stacked above "Need Help?" (bar + 12px gap + its 44px height + 12px gap) when there's a bar.
+      style={stickyBarHeight ? { bottom: stickyBarHeight + 12 + 44 + 12 } : undefined}
       className={`hide-in-product-view fixed right-4 z-40 flex h-11 w-11 items-center justify-center rounded-full border border-line bg-surface text-ink-muted shadow-lg transition-colors hover:bg-surface-strong hover:text-ink sm:right-6 ${
-        lifted ? 'bottom-[10.25rem]' : 'bottom-[5.5rem] sm:bottom-[5.75rem]'
+        stickyBarHeight ? '' : 'bottom-[5.5rem] sm:bottom-[5.75rem]'
       }`}
     >
       <ArrowUpIcon className="h-5 w-5" />

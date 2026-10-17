@@ -1,5 +1,5 @@
 import {
-  byoGearKey,
+  byoLineKeyOf,
   filterCartToSelection,
   getGearKindPrice,
   getKitPrice,
@@ -31,7 +31,7 @@ export function promoLinesForCart(cart: CartState): PromoLine[] {
     })),
     ...selected.selectedKits.flatMap((kit) => (selected.packageAddOns[kit.id] ?? []).map(gearLine)),
     ...selected.byoGears.map(gearLine),
-    ...selected.byoGears.flatMap((gear) => (selected.byoAddOns[byoGearKey(gear)] ?? []).map(gearLine)),
+    ...selected.byoGears.flatMap((gear) => (selected.byoAddOns[byoLineKeyOf(gear)] ?? []).map(gearLine)),
   ];
 }
 

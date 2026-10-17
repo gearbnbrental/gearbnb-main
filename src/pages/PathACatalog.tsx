@@ -18,7 +18,7 @@ import { QuantityStepper } from './PathBCatalog';
 import SocialIconLink from '../components/SocialIconLink';
 import { useAuth } from '../context/AuthContext';
 import { useCatalog } from '../context/useCatalog';
-import { byoGearKey, getGearKindPrice, useRental } from '../context/RentalContext';
+import { byoGearKey, cartForDates, entryDatesFor, getGearKindPrice, kitDatesKey, sameDates, useRental } from '../context/RentalContext';
 import type { BookableGearKind, BookableGearSelection, DateRange, DurationPresetId, PackageKit } from '../types/gearbnb';
 import { cartStockUses, subtractStock } from '../utils/packageStock';
 import { decidePackageCheck, type PackageDateStock } from '../utils/packageDateStock';
@@ -33,7 +33,7 @@ import {
   MAX_BOOKING_DATE,
   TODAY,
 } from '../utils/duration';
-import { formatCurrency } from '../utils/format';
+import { formatCurrency, formatTripDate } from '../utils/format';
 import { toRmsBrand, type RmsAvailabilityIssue, type RmsAvailabilityRequest, type RmsBookingGearLine } from '../utils/rmsApi';
 import { useAvailabilityCheck } from '../hooks/useAvailabilityCheck';
 import { cleanGearName } from '../utils/gearName';
@@ -49,6 +49,7 @@ import YouSaveLine from '../components/promo/YouSaveLine';
 import GearPriceBlock from '../components/promo/GearPriceBlock';
 import { promoPickupAt } from '../utils/promoCart';
 import { describeAvailabilityIssue } from '../utils/availabilityIssue';
+import { useStickyBarRef } from '../utils/stickyBar';
 
 type PackageDuration = Extract<DurationPresetId, '48h' | '72h'>;
 
@@ -140,6 +141,13 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color }: Pac
   // Supabase row id — matching exactly what booking submission would send for this same selection.
   const effectivePackageCode = selectedEdition?.packageNumber ?? kit.packageNumber;
   const isSelected = cart.selectedKits.some((selected) => selected.id === effectiveId);
+  // In the cart for OTHER dates than the ones being browsed: still removable here, but labelled
+  // with its own dates so it's clear it won't follow the date picker (see CartState.entryDates).
+  const kitDates = entryDatesFor(cart, kitDatesKey(effectiveId));
+  const inCartForOtherDates =
+    isSelected && kitDates.startDate && kitDates.returnDate && !sameDates(kitDates, cart.tripDetails)
+      ? `${formatTripDate(kitDates.startDate)} – ${formatTripDate(kitDates.returnDate)}`
+      : null;
   const selectedExtraIds = cart.kitExtras[effectiveId] ?? [];
   // Extra inventory the customer attached to THIS package — sent alongside packageCode so the
   // RMS checks the package and every extra item against the same dates in one authoritative call
@@ -165,7 +173,7 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color }: Pac
   // first selected kit only, and renders nothing on a failed or empty gear catalog — so the hint
   // can never point at a section that isn't there.
   const showAddOnsHint =
-    cart.selectedKits[0]?.id === effectiveId &&
+    cartForDates(cart, cart.tripDetails).selectedKits[0]?.id === effectiveId &&
     (gearCatalogState === 'loading' || (gearCatalogState === 'ready' && gearKinds.length > 0));
 
   const displayImage = selectedEdition?.imageUrl || kit.imageUrl;
@@ -527,13 +535,18 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color }: Pac
         ) : isSelected ? (
           // Already in the cart — removable regardless of what a later availability re-check says,
           // so a customer can never get stuck unable to remove a selection that just went stale.
-          <button
-            type="button"
-            onClick={handleRemove}
-            className={`${ACTION_SIZE_CLASS} border border-brand-forest bg-brand-forest/10 text-accent transition-colors hover:bg-brand-forest/15`}
-          >
-            Remove from Cart
-          </button>
+          <div className="flex flex-col gap-1">
+            {inCartForOtherDates && (
+              <p className="text-center text-[11px] font-medium text-ink-muted sm:text-xs">In your cart for {inCartForOtherDates}</p>
+            )}
+            <button
+              type="button"
+              onClick={handleRemove}
+              className={`${ACTION_SIZE_CLASS} border border-brand-forest bg-brand-forest/10 text-accent transition-colors hover:bg-brand-forest/15`}
+            >
+              Remove from Cart
+            </button>
+          </div>
         ) : availability.status === 'checking' ? (
           <span className={ACTION_CLASS} aria-busy>
             Checking availability…
@@ -815,7 +828,8 @@ function PackageAddOnsSection({
   // 0 is hidden unless it's already in the cart, so it can still be lowered. The availability call
   // each package card makes on every cart change stays the final say, for dates and anything this
   // local subtraction can't see.
-  const stockUses = useMemo(() => cartStockUses(kits, cart), [kits, cart]);
+  // Only what's in the cart for the dates being browsed uses up stock for those dates.
+  const stockUses = useMemo(() => cartStockUses(kits, cartForDates(cart, cart.tripDetails)), [kits, cart]);
   const { gearKinds, hiddenByPackage } = useMemo(() => {
     const adjusted = subtractStock(catalogGearKinds, stockUses);
     const kept: BookableGearKind[] = [];
@@ -1046,9 +1060,13 @@ function PackageAddOnsSection({
 }
 
 export default function PathACatalog() {
+  // Lets the floating corner buttons sit just above this page's sticky bar, whatever its height.
+  const stickyBarRef = useStickyBarRef();
   usePageMeta(PAGE_META.packages.title, PAGE_META.packages.description);
   const { kits, catalogState, retryCatalog, packageDetailsFailed } = useCatalog();
   const { cart, totals, updateTripDetails } = useRental();
+  // The package in the cart for the dates being browsed, if any — what the extras section attaches to.
+  const kitForTheseDates = cartForDates(cart, cart.tripDetails).selectedKits[0] ?? null;
   const basketPromo = useBasketPromo();
   const [searchQuery, setSearchQuery] = useState('');
   // Free-text guest count, not a capacity dropdown — see the Group Size audit note below.
@@ -1447,8 +1465,10 @@ export default function PathACatalog() {
         {/* Appears directly below the packages the moment one is actually selected — the customer
             never has to leave for Build Your Own to add an extra light/bed/stove. Attached to the
             first selected kit, matching the one-package-per-booking rule checkout enforces. */}
-        {cart.selectedKits.length > 0 && (
-          <PackageAddOnsSection kitId={cart.selectedKits[0].id} kitName={cart.selectedKits[0].name} stockWindow={stockWindow} />
+        {/* Extras are priced and stock-checked for the dates being browsed, so they attach only to a
+            package in the cart for those same dates (a package booked for other dates keeps its own). */}
+        {kitForTheseDates && (
+          <PackageAddOnsSection kitId={kitForTheseDates.id} kitName={kitForTheseDates.name} stockWindow={stockWindow} />
         )}
 
         {/* Contextual help right where indecision actually happens — after browsing every
@@ -1491,7 +1511,7 @@ export default function PathACatalog() {
         </div>
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur">
+      <div ref={stickyBarRef} className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-5 py-3 sm:px-6">
           <div className="flex flex-col">
             <span className="text-xs font-medium uppercase tracking-wide text-ink-faint">

@@ -282,6 +282,11 @@ export interface BookableGearVariant {
  * `CartState.byoAddOns`, keyed the same way `kitExtras`/`itemExtras` key off their parent's id. */
 export interface BookableGearSelection extends BookableGearKind {
   quantity: number;
+  /** For a Build Your Own line: the rental dates it was added for. The same gear can be in the cart
+   *  more than once for different dates, so a BYO line is identified by gear + dates (byoLineKey).
+   *  Absent on package add-ons (they use their package's dates) and on carts saved before this. */
+  startDate?: string;
+  returnDate?: string;
 }
 
 /** A customer's selected quantity of one add-on compatible with a specific selected gear kind. */
@@ -364,16 +369,20 @@ export interface VerificationDocs {
 export interface CheckoutSelection {
   kitIds: string[];
   itemIds: string[];
+  /** Selected Build Your Own lines, by byoLineKey (gear + dates). */
   byoGearKeys: string[];
   /** Selected package add-on keys (byoGearKey(gear)), one array per parent kit id — the same
    *  include/exclude-from-checkout granularity as kitIds, one level down. An add-on can be excluded
    *  from checkout on its own, independent of its parent kit or any of that kit's other add-ons.
    *  Only meaningful for a kitId also present in kitIds. */
   packageAddOnKeys: Record<string, string[]>;
-  /** Selected BYO add-on keys (byoGearKey(addOn)), one array per parent BYO gear's byoGearKey —
+  /** Selected BYO add-on keys (byoGearKey(addOn)), one array per parent BYO line's byoLineKey —
    *  mirrors packageAddOnKeys, one level down from byoGearKeys. */
   byoAddOnKeys: Record<string, string[]>;
 }
+
+/** The rental dates one cart entry was added for (yyyy-mm-dd; both '' when not known). */
+export type EntryDates = Pick<TripDetails, 'startDate' | 'returnDate'>;
 
 /** The full shape of the shopping cart / booking flow state. */
 export interface CartState {
@@ -395,6 +404,13 @@ export interface CartState {
   byoGears: BookableGearSelection[];
   /** Selected add-ons per BYO gear, keyed by that gear's byoGearKey — mirrors kitExtras/itemExtras. */
   byoAddOns: Record<string, BookableAddOnSelection[]>;
+  /** The dates each package was added for (keyed `kit:<kitId>`, see kitDatesKey), so a package
+   *  booked for one weekend keeps its dates when gear is added later for another, instead of
+   *  following whatever the catalog date picker says now. A package's add-ons share its dates; Build
+   *  Your Own lines carry their own dates on the line itself (BookableGearSelection.startDate).
+   *  `tripDetails.startDate/returnDate` are the dates being browsed in the catalog (and, at checkout,
+   *  the dates of what's being booked). */
+  entryDates: Record<string, EntryDates>;
   tripDetails: TripDetails;
   verificationDocs: VerificationDocs;
   checkoutSelection: CheckoutSelection;

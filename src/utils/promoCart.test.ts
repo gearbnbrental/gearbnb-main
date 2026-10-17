@@ -40,6 +40,7 @@ const kit: PackageKit = {
 function cart(overrides: Partial<CartState>, startDate = '2099-10-20', returnDate = '2099-10-22'): CartState {
   return {
     selectedKits: [],
+    entryDates: {},
     kitExtras: {},
     packageAddOns: {},
     selectedItems: [],

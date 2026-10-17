@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { STICKY_FOOTER_ROUTES } from './FloatingHelp';
+import { useStickyBarHeight } from '../utils/stickyBar';
 import {
   A11Y_DEFAULTS,
   A11Y_PROFILES,
@@ -174,7 +174,7 @@ export default function AccessibilityWidget() {
   const location = useLocation();
   const navigate = useNavigate();
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const lifted = STICKY_FOOTER_ROUTES.has(location.pathname);
+  const stickyBarHeight = useStickyBarHeight();
 
   useEffect(() => {
     applyA11ySettings(settings);
@@ -234,16 +234,18 @@ export default function AccessibilityWidget() {
       {/* The client's own accessibility icon (public/images/accessibility-icon.png): a green
           circle with a white figure, transparent outside the circle. Kept small (36px) and tucked
           into the corner, in the page's side gutter below the content, so it stays out of the way
-          while scrolling; still above the 24px minimum tap size. On pages with the sticky cart bar
-          (65px tall) it sits just above the bar, with the same small gap. */}
+          while scrolling; still above the 24px minimum tap size. On pages with a sticky cart bar it
+          sits just above the bar, following the bar's real height (it grows once items or a promo
+          price show). */}
       <button
         ref={triggerRef}
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Accessibility settings"
         aria-expanded={open}
+        style={stickyBarHeight ? { bottom: stickyBarHeight + 8 } : undefined}
         className={`hide-in-product-view a11y-invert-back fixed left-1.5 z-50 h-9 w-9 transition-transform hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:left-3 ${
-          lifted ? 'bottom-[4.75rem]' : 'bottom-2 sm:bottom-3'
+          stickyBarHeight ? '' : 'bottom-2 sm:bottom-3'
         }`}
       >
         <img src="/images/accessibility-icon.png" alt="" width={36} height={36} className="h-9 w-9 drop-shadow-[0_2px_4px_rgba(0,0,0,0.25)]" />

@@ -1,21 +1,31 @@
-﻿import { useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { GearPlaceholderIcon } from '../components/icons';
 import { useAuth } from '../context/AuthContext';
 import {
   byoGearKey,
+  byoLineDates,
+  byoLineKeyOf,
+  calculateRentalDurationDays,
+  entryDatesFor,
   filterCartToSelection,
   getGearKindPrice,
   getItemPrice,
   getKitPrice,
+  kitDatesKey,
+  sameDates,
+  selectionDates,
+  tripDetailsForEntry,
   useRental,
 } from '../context/RentalContext';
+import type { EntryDates } from '../types/gearbnb';
 import { QuantityStepper } from './PathBCatalog';
-import { formatCurrency } from '../utils/format';
+import { formatCurrency, formatTripDate } from '../utils/format';
 import { cleanGearName } from '../utils/gearName';
 import { useBasketPromo } from '../hooks/useBasketPromo';
-import { checkoutBlocker } from '../utils/checkoutRules';
+import { checkoutBlocker, datesBlocker } from '../utils/checkoutRules';
 import { BarPromoNote, BarRentalFee } from '../components/promo/PromoTotals';
+import { useStickyBarRef } from '../utils/stickyBar';
 
 function CheckboxInput({
   checked,
@@ -102,6 +112,25 @@ function RemoveButton({ itemLabel, onConfirm }: { itemLabel: string; onConfirm: 
   );
 }
 
+/** "Oct 22, 2026 – Oct 24, 2026 · 2-day rental", or a prompt when the entry has no dates. */
+function EntryDatesLine({ dates, className = '' }: { dates: EntryDates; className?: string }) {
+  const start = formatTripDate(dates.startDate);
+  const end = formatTripDate(dates.returnDate);
+  const days = calculateRentalDurationDays(dates);
+  return (
+    <p className={`text-xs font-medium text-ink ${className}`}>
+      {start && end ? (
+        <>
+          {start} – {end}
+          {days > 0 && <span className="font-normal text-ink-muted"> · {days}-day rental</span>}
+        </>
+      ) : (
+        <span className="text-amber-700">No rental dates, remove and add again from the catalog</span>
+      )}
+    </p>
+  );
+}
+
 function Thumbnail({ src, alt }: { src: string; alt: string }) {
   const [failed, setFailed] = useState(false);
   return (
@@ -116,6 +145,8 @@ function Thumbnail({ src, alt }: { src: string; alt: string }) {
 }
 
 export default function Cart() {
+  // Lets the floating corner buttons sit just above this page's sticky bar, whatever its height.
+  const stickyBarRef = useStickyBarRef();
   const navigate = useNavigate();
   const { user } = useAuth();
   const {
@@ -134,7 +165,15 @@ export default function Cart() {
     setAllCheckoutSelected,
     dismissRemovedNotice,
     totals,
+    updateTripDetails,
   } = useRental();
+  const checkedDates = selectionDates(cart);
+  // What's checked for checkout is booked for ITS dates, so the shared trip dates (which the
+  // discount, the totals bar and checkout read) follow it. Entries keep their own dates either way.
+  const syncDates = checkedDates.dates;
+  useEffect(() => {
+    if (syncDates && !sameDates(syncDates, cart.tripDetails)) updateTripDetails(syncDates);
+  }, [syncDates, cart.tripDetails, updateTripDetails]);
   const basketPromo = useBasketPromo();
   const { selectedKits, selectedItems, kitExtras, packageAddOns, byoGears, byoAddOns, checkoutSelection, removedItemNames } =
     cart;
@@ -155,7 +194,19 @@ export default function Cart() {
   // Stops the customer HERE, before they fill in trip details and upload documents, when what's
   // checked can't go through as one booking (e.g. a Package and Build Your Own together) — the
   // same rule checkout enforces at the end (see checkoutBlocker).
-  const blocker = hasCheckedForCheckout ? checkoutBlocker(selectedCart) : null;
+  const blocker = hasCheckedForCheckout ? (checkoutBlocker(selectedCart) ?? datesBlocker(checkedDates)) : null;
+  // Build Your Own lines grouped by the dates they were added for, earliest first.
+  const byoDateGroups = (() => {
+    const groups = new Map<string, { dates: EntryDates; gears: typeof byoGears }>();
+    for (const gear of byoGears) {
+      const dates = byoLineDates(gear);
+      const id = `${dates.startDate}|${dates.returnDate}`;
+      const group = groups.get(id) ?? { dates, gears: [] };
+      group.gears.push(gear);
+      groups.set(id, group);
+    }
+    return [...groups.values()].sort((a, b) => (a.dates.startDate || '9999').localeCompare(b.dates.startDate || '9999'));
+  })();
   const totalUnitCount =
     selectedCart.selectedKits.length +
     selectedCart.selectedItems.length +
@@ -198,7 +249,7 @@ export default function Cart() {
   return (
     // pb-56 (not pb-28): extra safety margin for the true end of a long cart — this route lifts
     // the floating Need Help/Back to Top buttons clear of the sticky checkout bar (see
-    // STICKY_FOOTER_ROUTES), but with both visible (BackToTop appears past 480px scrolled,
+    // useStickyBarHeight), but with both visible (BackToTop appears past 480px scrolled,
     // stacking above Need Help) their combined footprint reaches ~208px above the viewport
     // bottom, more than pb-28 (112px) cleared. (The Terms & Conditions overlap this was originally
     // written to describe turned out to need a different fix — see the disclaimer's own comment
@@ -213,6 +264,7 @@ export default function Cart() {
         </div>
 
         {removedNotice}
+
 
         <div className="flex items-start justify-between gap-3">
           {/* The "Terms & Conditions" disclaimer used to sit alone at the very bottom of the page,
@@ -261,8 +313,9 @@ export default function Cart() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium text-ink">{kit.name}</p>
                       <p className="text-xs text-ink-faint">Package</p>
+                      <EntryDatesLine dates={entryDatesFor(cart, kitDatesKey(kit.id))} />
                       <p className="text-sm text-ink-muted">
-                        {formatCurrency(getKitPrice(kit, cart.tripDetails))} rental &middot;{' '}
+                        {formatCurrency(getKitPrice(kit, tripDetailsForEntry(cart, kitDatesKey(kit.id))))} rental &middot;{' '}
                         {formatCurrency(kit.depositAmount)} deposit
                       </p>
                     </div>
@@ -331,7 +384,7 @@ export default function Cart() {
                                 </span>
                               </span>
                               <span className="flex shrink-0 items-center gap-2">
-                                {formatCurrency(getGearKindPrice(gear, cart.tripDetails) * gear.quantity)}
+                                {formatCurrency(getGearKindPrice(gear, tripDetailsForEntry(cart, kitDatesKey(kit.id))) * gear.quantity)}
                                 <button
                                   type="button"
                                   onClick={() => setPackageAddOnQuantity(kit.id, gear, 0)}
@@ -386,99 +439,110 @@ export default function Cart() {
         {byoGears.length > 0 && (
           <section className="flex flex-col gap-3">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-muted">Build Your Own</h2>
-            {byoGears.map((gear) => {
-              const key = byoGearKey(gear);
-              const selectedAddOns = byoAddOns[key] ?? [];
-              const unitPrice = getGearKindPrice(gear, cart.tripDetails);
-              const isChecked = checkoutSelection.byoGearKeys.includes(key);
-              return (
-                <div
-                  key={key}
-                  className={`flex flex-col gap-3 rounded-xl border border-line bg-surface p-3 shadow-sm transition-opacity sm:p-4 ${isChecked ? '' : 'opacity-60'}`}
-                >
-                  <div className="flex flex-wrap items-center gap-3">
-                    <CheckboxInput
-                      checked={isChecked}
-                      onChange={() => toggleByoGearSelected(key)}
-                      label={`Include ${gear.name} in this checkout`}
-                    />
-                    <Thumbnail src={gear.imageUrl ?? ''} alt={gear.name} />
-                    {/* On phones this column claims the rest of the first line (everything but the
-                        checkbox and thumbnail — 6.5rem), so the quantity control and trash wrap onto
-                        their own line. With a plain min-w-0 it would shrink to nothing instead:
-                        at 375px the gear name was crushed to a single character. */}
-                    <div className="min-w-[calc(100%-6.5rem)] flex-1 sm:min-w-0">
-                      <p className="break-words font-medium text-ink sm:truncate">{cleanGearName(gear.name, { keepColor: true })}</p>
-                      <p className="text-xs text-ink-faint">Build Your Own &middot; {gear.category}</p>
-                      <p className="text-sm font-semibold text-accent">
-                        {formatCurrency(unitPrice)} <span className="text-xs font-normal text-ink-muted">each</span>
-                      </p>
-                    </div>
-                    <QuantityStepper
-                      value={gear.quantity}
-                      max={gear.availableCount}
-                      ariaLabel={cleanGearName(gear.name, { keepColor: true })}
-                      onChange={(next) => setByoGearQuantity(gear, next)}
-                    />
-                    <RemoveButton itemLabel={gear.name} onConfirm={() => setByoGearQuantity(gear, 0)} />
-                  </div>
-
-                  {gear.quantity > 1 && (
-                    <p className="text-xs text-ink-muted sm:pl-[5.75rem]">
-                      Subtotal: {formatCurrency(unitPrice * gear.quantity)}
-                    </p>
-                  )}
-
-                  {selectedAddOns.length > 0 && (
-                    <ul className="flex flex-col gap-2 border-t border-line-soft pt-2 sm:pl-[5.75rem]">
-                      {selectedAddOns.map((addOn) => {
-                        const addOnUnitPrice = getGearKindPrice(addOn, cart.tripDetails);
-                        const addOnKey = byoGearKey(addOn);
-                        // Independent of the gear's own checkbox above: unchecking this excludes
-                        // just this add-on from checkout while it (and its quantity) stay in the
-                        // cart — a separate, non-destructive action from the quantity stepper below
-                        // reaching 0, which still permanently removes it.
-                        const isAddOnChecked = (checkoutSelection.byoAddOnKeys[key] ?? []).includes(addOnKey);
-                        return (
-                          // Stacked on phones: name on its own line, price and quantity control
-                          // beneath it. Side by side, a 136px stepper plus the price left the name
-                          // only a few characters before it truncated.
-                          <li
-                            key={addOnKey}
-                            className={`flex flex-col gap-1.5 text-sm text-ink-muted transition-opacity sm:flex-row sm:items-center sm:justify-between sm:gap-2 ${isAddOnChecked ? '' : 'opacity-60'}`}
-                          >
-                            <span className="flex min-w-0 items-center gap-2 sm:truncate">
-                              <input
-                                type="checkbox"
-                                checked={isAddOnChecked}
-                                onChange={() => toggleByoAddOnSelected(key, addOnKey)}
-                                aria-label={`Include ${addOn.name} in this checkout`}
-                                className="h-3.5 w-3.5 shrink-0 rounded border-line text-accent focus:ring-brand-forest"
-                              />
-                              <span className="min-w-0 break-words sm:truncate">{cleanGearName(addOn.name, { keepColor: true })}</span>
-                            </span>
-                            <span className="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
-                              {formatCurrency(addOnUnitPrice * addOn.quantity)}
-                              <QuantityStepper
-                                value={addOn.quantity}
-                                max={Math.min(addOn.maxQuantity, addOn.availableCount)}
-                                ariaLabel={addOn.name}
-                                onChange={(next) => setByoAddOnQuantity(key, addOn, next)}
-                              />
-                            </span>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
+            {/* Grouped by rental dates: gear added for different dates is listed (and booked)
+                separately, each group under its own dates. */}
+            {byoDateGroups.map((group) => (
+              <div key={`${group.dates.startDate}|${group.dates.returnDate}`} className="flex flex-col gap-3">
+                <div className="flex items-center gap-2 border-b border-line pb-1.5">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Rental Dates</span>
+                  <EntryDatesLine dates={group.dates} />
                 </div>
-              );
-            })}
+                {group.gears.map((gear) => {
+                  const key = byoLineKeyOf(gear);
+                  const selectedAddOns = byoAddOns[key] ?? [];
+                  const entryTrip = { ...cart.tripDetails, ...byoLineDates(gear) };
+                  const unitPrice = getGearKindPrice(gear, entryTrip);
+                  const isChecked = checkoutSelection.byoGearKeys.includes(key);
+                  return (
+                    <div
+                      key={key}
+                      className={`flex flex-col gap-3 rounded-xl border border-line bg-surface p-3 shadow-sm transition-opacity sm:p-4 ${isChecked ? '' : 'opacity-60'}`}
+                    >
+                      <div className="flex flex-wrap items-center gap-3">
+                        <CheckboxInput
+                          checked={isChecked}
+                          onChange={() => toggleByoGearSelected(key)}
+                          label={`Include ${gear.name} in this checkout`}
+                        />
+                        <Thumbnail src={gear.imageUrl ?? ''} alt={gear.name} />
+                        {/* On phones this column claims the rest of the first line (everything but the
+                            checkbox and thumbnail — 6.5rem), so the quantity control and trash wrap onto
+                            their own line. With a plain min-w-0 it would shrink to nothing instead:
+                            at 375px the gear name was crushed to a single character. */}
+                        <div className="min-w-[calc(100%-6.5rem)] flex-1 sm:min-w-0">
+                          <p className="break-words font-medium text-ink sm:truncate">{cleanGearName(gear.name, { keepColor: true })}</p>
+                          <p className="text-xs text-ink-faint">Build Your Own &middot; {gear.category}</p>
+                          <p className="text-sm font-semibold text-accent">
+                            {formatCurrency(unitPrice)} <span className="text-xs font-normal text-ink-muted">each</span>
+                          </p>
+                        </div>
+                        <QuantityStepper
+                          value={gear.quantity}
+                          max={gear.availableCount}
+                          ariaLabel={cleanGearName(gear.name, { keepColor: true })}
+                          onChange={(next) => setByoGearQuantity(gear, next)}
+                        />
+                        <RemoveButton itemLabel={gear.name} onConfirm={() => setByoGearQuantity(gear, 0)} />
+                      </div>
+
+                      {gear.quantity > 1 && (
+                        <p className="text-xs text-ink-muted sm:pl-[5.75rem]">
+                          Subtotal: {formatCurrency(unitPrice * gear.quantity)}
+                        </p>
+                      )}
+
+                      {selectedAddOns.length > 0 && (
+                        <ul className="flex flex-col gap-2 border-t border-line-soft pt-2 sm:pl-[5.75rem]">
+                          {selectedAddOns.map((addOn) => {
+                            const addOnUnitPrice = getGearKindPrice(addOn, entryTrip);
+                            const addOnKey = byoGearKey(addOn);
+                            // Independent of the gear's own checkbox above: unchecking this excludes
+                            // just this add-on from checkout while it (and its quantity) stay in the
+                            // cart — a separate, non-destructive action from the quantity stepper below
+                            // reaching 0, which still permanently removes it.
+                            const isAddOnChecked = (checkoutSelection.byoAddOnKeys[key] ?? []).includes(addOnKey);
+                            return (
+                              // Stacked on phones: name on its own line, price and quantity control
+                              // beneath it. Side by side, a 136px stepper plus the price left the name
+                              // only a few characters before it truncated.
+                              <li
+                                key={addOnKey}
+                                className={`flex flex-col gap-1.5 text-sm text-ink-muted transition-opacity sm:flex-row sm:items-center sm:justify-between sm:gap-2 ${isAddOnChecked ? '' : 'opacity-60'}`}
+                              >
+                                <span className="flex min-w-0 items-center gap-2 sm:truncate">
+                                  <input
+                                    type="checkbox"
+                                    checked={isAddOnChecked}
+                                    onChange={() => toggleByoAddOnSelected(key, addOnKey)}
+                                    aria-label={`Include ${addOn.name} in this checkout`}
+                                    className="h-3.5 w-3.5 shrink-0 rounded border-line text-accent focus:ring-brand-forest"
+                                  />
+                                  <span className="min-w-0 break-words sm:truncate">{cleanGearName(addOn.name, { keepColor: true })}</span>
+                                </span>
+                                <span className="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
+                                  {formatCurrency(addOnUnitPrice * addOn.quantity)}
+                                  <QuantityStepper
+                                    value={addOn.quantity}
+                                    max={Math.min(addOn.maxQuantity, addOn.availableCount)}
+                                    ariaLabel={addOn.name}
+                                    onChange={(next) => setByoAddOnQuantity(key, addOn, next)}
+                                  />
+                                </span>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
           </section>
         )}
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur">
+      <div ref={stickyBarRef} className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur">
         <div className="mx-auto flex max-w-2xl flex-wrap items-center justify-between gap-3 px-5 py-3 sm:px-6">
           <div className="flex flex-col">
             <span className="text-xs font-medium uppercase tracking-wide text-ink-faint">

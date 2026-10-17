@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   byoGearKey,
+  byoLineKeyOf,
   calculateDueBeforeStart,
+  calculateDueBeforeStartByEntryDates,
+  cartForDates,
+  kitDatesKey,
+  selectionDates,
   calculateDueToday,
   calculateItemExtrasFee,
   calculateKitExtrasFee,
@@ -91,6 +96,7 @@ function makeVerificationDocs(overrides: Partial<VerificationDocs> = {}): Verifi
 function makeCart(overrides: Partial<CartState> = {}): CartState {
   return {
     selectedKits: [],
+    entryDates: {},
     kitExtras: {},
     packageAddOns: {},
     selectedItems: [],
@@ -463,5 +469,80 @@ describe('isVerificationComplete', () => {
 
   it('passes for a BYO booking once byoAgreementAccepted is also true', () => {
     expect(isVerificationComplete(makeVerificationDocs({ byoAgreementAccepted: true }), true)).toBe(true);
+  });
+});
+
+describe('per-entry rental dates', () => {
+  const weekendA = { startDate: '2099-10-22', returnDate: '2099-10-24' }; // 2 days -> 48h tier
+  const weekendB = { startDate: '2099-10-30', returnDate: '2099-11-02' }; // 3 days -> 72h tier
+  const kit = makeKit({ id: 'kit-1', pricing: { '48h': 2000, '72h': 2600 } });
+  const tentKind: BookableGearSelection = {
+    category: 'Tent',
+    brand: 'Coleman',
+    model: 'Dome',
+    name: 'Coleman Dome Tent',
+    pricing: { '48h': 300, '72h': 400 },
+    extraPerDayPrice: 50,
+    quantity: 2,
+    availableCount: 3,
+    canSelect: true,
+    imageUrl: null,
+    freeAccessories: [],
+    compatibleAddOns: [],
+  };
+  const tentA: BookableGearSelection = { ...tentKind, ...weekendA };
+  const tentB: BookableGearSelection = { ...tentKind, quantity: 1, ...weekendB };
+  const chairA: BookableGearSelection = { ...tentKind, category: 'Chair', brand: 'Naturehike', model: 'Moon', name: 'Moon Chair', pricing: { '48h': 100, '72h': 150 }, quantity: 1, ...weekendA };
+
+  it('gives the same gear on different dates its own cart line', () => {
+    expect(byoLineKeyOf(tentA)).not.toBe(byoLineKeyOf(tentB));
+    expect(byoLineKeyOf(tentA).startsWith(byoGearKey(tentKind))).toBe(true);
+    // A line with no dates keeps the plain gear key (what every saved cart used before).
+    expect(byoLineKeyOf(tentKind)).toBe(byoGearKey(tentKind));
+  });
+
+  it('prices each entry for its own dates, not the dates being browsed', () => {
+    const cart = makeCart({
+      selectedKits: [kit],
+      byoGears: [tentA, tentB],
+      entryDates: { [kitDatesKey('kit-1')]: weekendA },
+      // Browsing some other dates entirely must not change any price.
+      tripDetails: makeTripDetails({ startDate: '2099-12-01', returnDate: '2099-12-05' }),
+    });
+    // Package for 2 days (2000) + two tents for 2 days (2 x 300) + the same tent for 3 days (400).
+    expect(calculateDueBeforeStartByEntryDates(cart)).toBe(2000 + 600 + 400);
+  });
+
+  it('finds the one date range shared by what is checked, or flags mixed dates', () => {
+    const selection = (keys: string[]) => ({ kitIds: [], itemIds: [], byoGearKeys: keys, packageAddOnKeys: {}, byoAddOnKeys: {} });
+    const cart = makeCart({ byoGears: [tentA, tentB, chairA] });
+
+    const sameWeekend = { ...cart, checkoutSelection: selection([byoLineKeyOf(tentA), byoLineKeyOf(chairA)]) };
+    expect(selectionDates(sameWeekend)).toEqual({ dates: weekendA, mixed: false, missing: false });
+
+    const both = { ...cart, checkoutSelection: selection([byoLineKeyOf(tentA), byoLineKeyOf(tentB)]) };
+    expect(selectionDates(both)).toMatchObject({ dates: null, mixed: true });
+
+    const onlyB = { ...cart, checkoutSelection: selection([byoLineKeyOf(tentB)]) };
+    expect(selectionDates(onlyB).dates).toEqual(weekendB);
+
+    const undated = makeCart({ byoGears: [tentKind], checkoutSelection: selection([byoGearKey(tentKind)]) });
+    expect(selectionDates(undated)).toMatchObject({ dates: null, missing: true });
+  });
+
+  it('keeps only the entries for the dates being browsed', () => {
+    const cart = makeCart({
+      selectedKits: [kit],
+      byoGears: [tentA, tentB, chairA],
+      byoAddOns: { [byoLineKeyOf(tentA)]: [], [byoLineKeyOf(tentB)]: [] },
+      entryDates: { [kitDatesKey('kit-1')]: weekendA },
+    });
+    const forA = cartForDates(cart, weekendA);
+    expect(forA.selectedKits.map((k) => k.id)).toEqual(['kit-1']);
+    expect(forA.byoGears).toEqual([tentA, chairA]);
+    expect(Object.keys(forA.byoAddOns)).toEqual([byoLineKeyOf(tentA)]);
+    const forB = cartForDates(cart, weekendB);
+    expect(forB.selectedKits).toEqual([]);
+    expect(forB.byoGears).toEqual([tentB]);
   });
 });
