@@ -16,15 +16,15 @@ const TODAY = new Date().toISOString().slice(0, 10);
  *  OAUTH_RETURN_PATH_KEY. */
 const DRAFT_STORAGE_KEY = 'gearbnb.eventplan.draft';
 
-/** Whether the customer will specify their own equipment or wants Gearbnb to recommend it. There's
+/** Whether the customer will specify their own equipment or wants GearBnB to recommend it. There's
  * no dedicated EventInquiry column for this yet (see submission below) — kept local to this form
  * rather than adding one, per instruction not to touch the RMS schema for this. */
 type EquipmentSelectionMode = 'CUSTOMER_SELECTS' | 'GEARBNB_RECOMMENDS';
 
 /** Plain-language marker sent in the existing `requestedEquipment` field when the customer asks
- * Gearbnb to recommend equipment instead of listing any themselves — never a fake/invented
+ * GearBnB to recommend equipment instead of listing any themselves — never a fake/invented
  * equipment list, just a clear signal for the admin reading the inquiry. */
-const RECOMMENDATION_REQUESTED_TEXT = 'Equipment preference: Gearbnb recommendation requested, customer asked our team to recommend suitable equipment for this event.';
+const RECOMMENDATION_REQUESTED_TEXT = 'Equipment preference: GearBnB recommendation requested, customer asked our team to recommend suitable equipment for this event.';
 
 interface FormState {
   customerName: string;
@@ -66,7 +66,7 @@ const EQUIPMENT_MODE_OPTIONS: { value: EquipmentSelectionMode; title: string; de
     value: 'GEARBNB_RECOMMENDS',
     title: '🎒 Help me choose the right equipment',
     description:
-      "Not sure what equipment you need for your event? No worries! Tell us about your event and our Gearbnb team can recommend suitable equipment for you.",
+      "Not sure what equipment you need for your event? No worries! Tell us about your event and our GearBnB team can recommend suitable equipment for you.",
   },
 ];
 
@@ -197,8 +197,8 @@ export default function EventPlan() {
   if (inquiryNumber) {
     const wantsRecommendation = form.equipmentSelectionMode === 'GEARBNB_RECOMMENDS';
     const nextSteps = [
-      'Our Gearbnb team reviews your event details.',
-      'A Gearbnb representative contacts you through your provided email.',
+      'Our GearBnB team reviews your event details.',
+      'A GearBnB representative contacts you through your provided email.',
       wantsRecommendation
         ? "Since you asked us to help choose your equipment, we'll recommend suitable gear based on your event."
         : "We'll go over the equipment you requested and confirm what's available.",
@@ -218,7 +218,7 @@ export default function EventPlan() {
         <div className="flex flex-col gap-2">
           <h1 className="font-serif text-2xl font-semibold text-ink">Thank You for Your Inquiry! 🎉</h1>
           <p className="text-sm text-ink-muted">
-            Your event inquiry has been successfully submitted. A Gearbnb representative will be reaching out shortly
+            Your event inquiry has been successfully submitted. A GearBnB representative will be reaching out shortly
             through your provided email.
           </p>
           <p className="text-xs text-ink-faint">
@@ -399,7 +399,7 @@ export default function EventPlan() {
             <div className="flex flex-col gap-1">
               <p className="text-sm font-semibold text-accent">Let us help! 🎒</p>
               <p className="text-sm text-ink-muted">
-                Our Gearbnb team will review your event details and recommend suitable equipment. We may also send
+                Our GearBnB team will review your event details and recommend suitable equipment. We may also send
                 you our equipment brochure through your provided email.
               </p>
             </div>

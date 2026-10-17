@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { defineConfig, type Plugin } from 'vite'
+import { createServer, defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { ORGANIZATION_JSON_LD, OG_IMAGE_PATH, OG_IMAGE_VERSION, PRERENDERED_PAGES, SITE_NAME, SITE_URL, type PageMeta } from './src/config/pageMeta.ts'
@@ -112,23 +112,72 @@ function withPageMeta(html: string, path: string, meta: PageMeta): string {
  * paths still fall back to index.html as before. Titles/descriptions come from
  * src/config/pageMeta.ts, the same source the pages themselves use.
  */
+/**
+ * Pages whose full text is also written into their HTML file, not only rendered by JavaScript.
+ * Crawlers that don't run scripts (Facebook's app review checks the Privacy Policy and data
+ * deletion URLs this way, and so do some search engines) would otherwise see an empty page. When
+ * the app loads it replaces this markup with the live page, so visitors see no difference.
+ */
+const STATIC_CONTENT_PAGES: Record<string, string> = {
+  '/privacy-policy': '/src/pages/PrivacyPolicy.tsx',
+  '/terms-of-service': '/src/pages/TermsOfService.tsx',
+  '/data-deletion': '/src/pages/DataDeletion.tsx',
+}
+
+/** Renders each STATIC_CONTENT_PAGES page to plain HTML, using a throwaway Vite server to load the
+ *  TSX the same way the app does. */
+async function renderStaticContent(root: string): Promise<Map<string, string>> {
+  const server = await createServer({
+    root,
+    configFile: false,
+    logLevel: 'error',
+    appType: 'custom',
+    server: { middlewareMode: true, hmr: false, ws: false },
+    plugins: [react()],
+  })
+  try {
+    // Plain Node imports: the same copies the pages get (Vite leaves node_modules to Node in SSR).
+    const { createElement } = await import('react')
+    const { renderToStaticMarkup } = await import('react-dom/server')
+    const { MemoryRouter } = await import('react-router-dom')
+    const rendered = new Map<string, string>()
+    for (const [path, file] of Object.entries(STATIC_CONTENT_PAGES)) {
+      const Page = (await server.ssrLoadModule(file)).default
+      const markup: string = renderToStaticMarkup(createElement(MemoryRouter, { initialEntries: [path] }, createElement(Page)))
+      if (markup.length < 1000) throw new Error(`prerender-route-meta: ${path} rendered almost nothing`)
+      rendered.set(path, markup)
+    }
+    return rendered
+  } finally {
+    await server.close()
+  }
+}
+
 function prerenderRouteMeta(): Plugin {
   let outDir = 'dist'
+  let root = process.cwd()
   return {
     name: 'prerender-route-meta',
     apply: 'build',
     configResolved(config) {
       outDir = resolve(config.root, config.build.outDir)
+      root = config.root
     },
-    closeBundle() {
+    async closeBundle() {
       const indexFile = resolve(outDir, 'index.html')
       const baseHtml = readFileSync(indexFile, 'utf8')
+      const staticContent = await renderStaticContent(root)
 
       mkdirSync(resolve(outDir, '_pages'), { recursive: true })
       const apacheRules: string[] = []
       const netlifyRules: string[] = []
       for (const { path, meta } of PRERENDERED_PAGES) {
-        const html = withPageMeta(baseHtml, path, meta)
+        let html = withPageMeta(baseHtml, path, meta)
+        const content = staticContent.get(path)
+        if (content) {
+          if (!html.includes('<div id="root"></div>')) throw new Error('prerender-route-meta: empty #root not found')
+          html = html.replace('<div id="root"></div>', `<div id="root">${content}</div>`)
+        }
         if (path === '/') {
           writeFileSync(indexFile, html)
           continue

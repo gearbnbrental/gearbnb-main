@@ -86,7 +86,7 @@ export const PAGE_META = {
   about: {
     title: 'Camping Gear Rental in Las Piñas, Metro Manila | GearBnB',
     description:
-      'Discover Gearbnb, your camping gear rental in Las Piñas, Metro Manila. Learn about our mission and find reliable gear for your next outdoor adventure.',
+      'Discover GearBnB, your camping gear rental in Las Piñas, Metro Manila. Learn about our mission and find reliable gear for your next outdoor adventure.',
   },
   privacy: {
     title: 'Privacy Policy | GearBnB',

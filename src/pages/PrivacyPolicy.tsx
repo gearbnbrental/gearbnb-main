@@ -36,7 +36,7 @@ const SECTIONS: LegalSection[] = [
         <LegalList>
           <li><Strong>What we collect.</Strong> Your contact details, booking details, verification documents, payment records and messages. We also collect basic technical data when you visit our website.</li>
           <li><Strong>Why we collect the data.</Strong> We verify your identity, process your booking, confirm your payment, inspect returned gear and protect our gear from fraud and theft.</li>
-          <li><Strong>Who sees the data.</Strong> Authorized GearBnB staff. Our hosting and email providers, Hostinger and Google, process some data for us. We do not sell your data.</li>
+          <li><Strong>Who sees the data.</Strong> Authorized GearBnB staff. Our service providers, Supabase, Hostinger and Google, process some data for us. We do not sell your data.</li>
           <li><Strong>How long we keep the data.</Strong> 90 days for booking records, payment records, verification documents and website technical data. We keep tax and accounting records for the period the law requires.</li>
           <li><Strong>Your rights.</Strong> You are allowed to access, correct, block or delete your data and to withdraw your consent. Email {DPO_EMAIL}.</li>
           <li><Strong>Google sign-in.</Strong> If you sign in with Google we receive your name, email address and profile picture. We use this data only to run your GearBnB account. We do not sell the data or use the data for advertising. See <SectionLink id="google">section&nbsp;5</SectionLink>.</li>
@@ -339,6 +339,7 @@ const SECTIONS: LegalSection[] = [
           headers={['Recipient', 'Why we share', 'Data shared']}
           rows={[
             ['Authorized GearBnB staff', 'Run bookings, verify identity and inspect gear', 'Data each person needs for the job'],
+            ['Supabase', 'Account sign-in and database hosting', 'Account details, Google or Facebook sign-in data, booking details and verification documents'],
             ['Hostinger', 'Website hosting and email services', 'Website data and emails'],
             ['Google', 'Gmail email service', 'Emails you send us and our replies'],
             ['Google (sign-in)', 'You choose to sign in with your Google Account', 'Google knows you signed in to GearBnB'],
@@ -369,8 +370,10 @@ const SECTIONS: LegalSection[] = [
     title: 'Transfers outside the Philippines',
     body: (
       <p>
-        Hostinger and Google run servers in several countries. Your data might be stored or processed outside the
-        Philippines. We stay responsible for your data when a provider handles the data for us. We choose providers with
+        Supabase stores your account and booking data on servers in South Korea, and Supabase staff in the United
+        States might access the data to support the service. Hostinger runs our website on servers in Singapore, and
+        Hostinger staff in Lithuania might access the servers. Google runs servers in several countries. Your data
+        might be stored or processed outside the Philippines. We stay responsible for your data when a provider handles the data for us. We choose providers with
         security measures to protect your data during any transfer. If you accept cookies, Meta also processes the
         data Meta Pixel collects on servers outside the Philippines, including in the United States.
       </p>
