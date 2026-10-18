@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   describeDeposit,
   describePickupDifference,
+  formatRentalDuration,
+  rentalStartAt,
   returnMoved,
   rentalFeePill,
   classifyMyBookingsLoadError,
@@ -406,5 +408,32 @@ describe('returnMoved', () => {
     expect(returnMoved({ returnAt: '2026-10-15T09:00:00.000Z', originalReturnAt: '2026-10-15T09:00:00.000Z' })).toBe(false);
     expect(returnMoved({ returnAt: '2026-10-15T09:00:00.000Z', originalReturnAt: null })).toBe(false);
     expect(returnMoved({ returnAt: '2026-10-15T09:00:00.000Z' })).toBe(false);
+  });
+});
+
+describe('early pickup display', () => {
+  // GB-2026-1018-01: booked Oct 29 2:30 PM -> Nov 1 2:30 PM (3 days), picked up early Oct 18 5:02 AM;
+  // the RMS moved the return to Oct 21 5:03 AM to keep the rental's length.
+  const booking = {
+    pickupAt: '2026-10-29T06:30:00.000Z',
+    pickedUpAt: '2026-10-17T21:02:30.000Z',
+    returnAt: '2026-10-20T21:03:00.000Z',
+  };
+
+  it('starts the rental at the actual pickup once there is one', () => {
+    expect(rentalStartAt(booking)).toBe(booking.pickedUpAt);
+    expect(rentalStartAt({ ...booking, pickedUpAt: null })).toBe(booking.pickupAt);
+    expect(rentalStartAt({ ...booking, pickedUpAt: 'not a date' })).toBe(booking.pickupAt);
+  });
+
+  it('reads a return a few seconds past 3 days as 3 Days, not 4', () => {
+    expect(formatRentalDuration(rentalStartAt(booking), booking.returnAt)).toBe('3 Days');
+    expect(formatRentalDuration('2026-10-01T00:00:00.000Z', '2026-10-04T02:00:00.000Z')).toBe('4 Days');
+    expect(formatRentalDuration('2026-10-01T00:00:00.000Z', '2026-10-03T00:00:00.000Z')).toBe('2 Days');
+  });
+
+  it('describes a pickup days early in days and hours', () => {
+    expect(describePickupDifference(-16407)).toBe('11 days 9 hours earlier than booked');
+    expect(describePickupDifference(1440)).toBe('1 day later than booked');
   });
 });

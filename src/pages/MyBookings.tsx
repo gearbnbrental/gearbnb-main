@@ -224,14 +224,29 @@ function formatTime(value: Date): string {
  *  remains solely the RMS's, via its own pickTierPrice formula). Rounds up to the nearest whole
  *  day for the common "N Day(s)" phrasing customers expect; falls back to an hour count for a
  *  same-day rental shorter than 24 hours rather than reading "0 Days". */
-/** "1 hour 20 minutes" style wording for a whole number of minutes (always positive). */
+/** "1 hour 20 minutes" style wording for a whole number of minutes (always positive). From a day
+ *  up it reads in days and hours ("11 days 9 hours"), never "273 hours 27 minutes". */
 function formatHoursMinutes(totalMinutes: number): string {
+  if (totalMinutes >= 24 * 60) {
+    const days = Math.floor(totalMinutes / (24 * 60));
+    const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+    const parts = [`${days} day${days === 1 ? '' : 's'}`];
+    if (hours > 0) parts.push(`${hours} hour${hours === 1 ? '' : 's'}`);
+    return parts.join(' ');
+  }
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   const parts = [];
   if (hours > 0) parts.push(`${hours} hour${hours === 1 ? '' : 's'}`);
   if (minutes > 0) parts.push(`${minutes} minute${minutes === 1 ? '' : 's'}`);
   return parts.join(' ');
+}
+
+/** When the rental actually started: the handover time (pickedUpAt) once staff confirmed it, else
+ *  the booked pickup. An early or late pickup moves the start, and the RMS moves the return to keep
+ *  the rental's length, so the dates shown must start from the real handover. */
+export function rentalStartAt(booking: Pick<RmsMyBooking, 'pickupAt' | 'pickedUpAt'>): string {
+  return booking.pickedUpAt && !Number.isNaN(Date.parse(booking.pickedUpAt)) ? booking.pickedUpAt : booking.pickupAt;
 }
 
 /** "12 hours later than booked" / "6 hours earlier than booked", from the RMS's own
@@ -256,7 +271,7 @@ export function returnMoved(booking: Pick<RmsMyBooking, 'returnAt' | 'originalRe
 /** Rental length from when the rental started to the (current) return time. Callers pass the
  *  actual handover time (pickedUpAt) once there is one: measuring from the booked pickup after a
  *  late pickup would overstate it (a 3 day rental collected 12 hours late would read "4 Days"). */
-function formatRentalDuration(startAt: string, returnAt: string): string | null {
+export function formatRentalDuration(startAt: string, returnAt: string): string | null {
   const start = new Date(startAt);
   const end = new Date(returnAt);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) return null;
@@ -266,7 +281,10 @@ function formatRentalDuration(startAt: string, returnAt: string): string | null 
     const wholeHours = Math.round(hours);
     return `${wholeHours} Hour${wholeHours === 1 ? '' : 's'}`;
   }
-  const days = Math.ceil(hours / 24);
+  // A few minutes of slack before rounding up: when the RMS moves a return to keep a 3-day rental's
+  // length after an early or late pickup, the new return can land a few seconds past exactly 72 hours,
+  // which must still read "3 Days", not "4 Days".
+  const days = Math.ceil((hours - 5 / 60) / 24);
   return `${days} Day${days === 1 ? '' : 's'}`;
 }
 
@@ -736,7 +754,7 @@ function CollapsedSummary({ booking }: { booking: RmsMyBooking }) {
       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
         <dt className="text-ink-muted">Rental Dates:</dt>
         <dd className="min-w-0 break-words font-medium text-ink">
-          {formatDateOnly(booking.pickupAt)} &ndash; {formatDateOnly(booking.returnAt)}
+          {formatDateOnly(rentalStartAt(booking))} &ndash; {formatDateOnly(booking.returnAt)}
         </dd>
       </div>
       {deposit && (
@@ -1361,7 +1379,7 @@ function BookingCard({
   // The actual handover time, only when the RMS sent a real timestamp (a malformed value is
   // ignored rather than printed). The rental length is measured from it once there is one.
   const pickedUpAt = booking.pickedUpAt && !Number.isNaN(Date.parse(booking.pickedUpAt)) ? booking.pickedUpAt : null;
-  const rentalLength = formatRentalDuration(pickedUpAt ?? booking.pickupAt, booking.returnAt);
+  const rentalLength = formatRentalDuration(rentalStartAt(booking), booking.returnAt);
   const statusStyle = STATUS_STYLES[booking.status] ?? 'bg-surface-strong text-ink-muted';
   const nextStep = getNextStep(booking);
   const [detailsOpen, setDetailsOpen] = useState(defaultOpen);
@@ -1453,15 +1471,16 @@ function BookingCard({
               <SectionHeader icon={GearPlaceholderIcon} title="Rental Details" subtitle="Your gear rental information" />
               <div className="grid grid-cols-1 gap-2.5 rounded-lg bg-surface-muted p-2.5 sm:grid-cols-2 sm:gap-3 sm:p-3">
                 <div className="min-w-0">
-                  <p className="text-xs text-ink-faint">Pickup</p>
-                  <p className="break-words text-sm font-medium text-ink">{formatDateTime(booking.pickupAt)}</p>
-                  {/* Only once staff confirmed the handover; the times and the difference are the
-                      RMS's own, never worked out here. */}
+                  {/* Once staff confirmed the handover, the real pickup is THE pickup, with the booked
+                      time underneath for reference. The times and the difference are the RMS's own,
+                      never worked out here. */}
+                  <p className="text-xs text-ink-faint">{pickedUpAt ? 'Picked Up' : 'Pickup'}</p>
+                  <p className="break-words text-sm font-medium text-ink">{formatDateTime(rentalStartAt(booking))}</p>
                   {pickedUpAt && (
                     <p className="mt-0.5 break-words text-xs text-ink-muted">
-                      Picked up {formatDateTime(pickedUpAt)}
+                      Booked for {formatDateTime(booking.pickupAt)}
                       {describePickupDifference(booking.pickupDifferenceMinutes) &&
-                        ` (${describePickupDifference(booking.pickupDifferenceMinutes)})`}
+                        ` (picked up ${describePickupDifference(booking.pickupDifferenceMinutes)})`}
                     </p>
                   )}
                 </div>
