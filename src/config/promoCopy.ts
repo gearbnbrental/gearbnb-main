@@ -29,6 +29,9 @@ export const PROMO_COPY = {
 
   /** Small badge beside a discounted price: "15% OFF" / "₱300 OFF". */
   offBadge: (offer: string) => `${offer} OFF`,
+  /** After "15% OFF" on the catalog chooser's photo pill, for a first-time-renters promo (shown
+   *  uppercase: "15% OFF FIRST RENTAL"). */
+  promoBannerFirstRental: 'first rental',
 
   // Package cards
   // Non-breaking hyphen (U+2011) so a narrow card wraps as "15% for / first-time renters", never "first- / time".
