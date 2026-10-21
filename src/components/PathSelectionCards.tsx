@@ -56,10 +56,11 @@ function PathCard({ to, title, subtitle, description, cta, image, roomyOnMobile 
         ) : (
           <GearPlaceholderIcon className="h-12 w-12 text-ink-faint" />
         )}
-        {/* Yellow promo pill, top-left of the photo (the client's own mockup). */}
+        {/* Yellow promo pill, top-left of the photo (the client's own mockup). Always one line: smaller,
+            tighter text on the narrowest phones so it still fits inside the photo there. */}
         {ribbon && (
-          <span className="pointer-events-none absolute left-2 top-2 z-10 max-w-[calc(100%-1rem)] rounded-full bg-[#f6c445] px-2.5 py-1 text-[9px] font-extrabold uppercase leading-tight tracking-wide text-ink shadow-md sm:left-4 sm:top-4 sm:px-4 sm:py-1.5 sm:text-sm">
-            <span aria-hidden="true" className="mr-1">🎁</span>
+          <span className="pointer-events-none absolute left-1.5 top-1.5 z-10 whitespace-nowrap rounded-full bg-[#f6c445] px-2 py-1 text-[8.5px] font-extrabold max-[359px]:px-1.5 max-[359px]:text-[7.5px] uppercase leading-tight tracking-normal text-ink shadow-md min-[400px]:left-2 min-[400px]:top-2 min-[400px]:px-2.5 min-[400px]:text-[9px] min-[400px]:tracking-wide sm:left-4 sm:top-4 sm:px-4 sm:py-1.5 sm:text-sm">
+            <span aria-hidden="true" className="mr-0.5 min-[400px]:mr-1">🎁</span>
             {ribbon.offer}
             {ribbon.note && ` ${ribbon.note}`}
           </span>
