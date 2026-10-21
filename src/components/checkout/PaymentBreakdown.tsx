@@ -17,6 +17,7 @@ import {
 } from '../../context/RentalContext';
 import { REQUIRED_VERIFICATION_DOCUMENTS, selectionDates } from '../../context/RentalContext';
 import { buildVerificationPayload, clearSavedSlots } from '../../utils/savedDocuments';
+import { browserEnvironment, buildMetaTracking, leadEventIdFor, trackLead } from '../../utils/metaTracking';
 import { toAvailabilityTimestamp, toTimestamp } from '../../utils/duration';
 import { formatCurrency, formatTripDate } from '../../utils/format';
 import {
@@ -603,9 +604,13 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
         console.log(`[timing] session/token prep: ${(tSessionReady - tSubmitClick).toFixed(0)}ms`);
       }
 
+      // Meta ads tracking (only if the visitor accepted cookies; otherwise undefined and nothing is added to the request).
+      const metaTracking = buildMetaTracking(idempotencyKeyRef.current, browserEnvironment());
+
       const tRmsPostStart = import.meta.env.DEV ? performance.now() : 0;
       const result = await submitBookingToRms(
         {
+          ...(metaTracking ? { meta: metaTracking } : {}),
           contact: { fullName: verificationDocs.fullName, phone: verificationDocs.phone },
           booking,
           // Each slot is an upload, or a request to reuse the customer's saved document (the RMS checks it again).
@@ -614,6 +619,13 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
         idempotencyKeyRef.current,
       );
       const tRmsPostDone = import.meta.env.DEV ? performance.now() : 0;
+      // The booking request is saved: tell Meta's browser Pixel (same event id the RMS uses for its server-side Lead, so
+      // Meta counts it once). Wrapped so that nothing about tracking can ever turn a saved booking into an error.
+      try {
+        trackLead(leadEventIdFor(idempotencyKeyRef.current), result.rentalFeeCentavos - (result.discountCentavos ?? 0));
+      } catch {
+        // tracking only
+      }
       setShowSubmitConfirm(false);
       onSubmit?.(result);
       if (import.meta.env.DEV) {

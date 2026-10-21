@@ -1,4 +1,5 @@
 import { supabase } from '../supabase';
+import type { MetaBookingTracking } from './metaTracking';
 import type { VerificationDocumentKey } from '../types/gearbnb';
 
 /**
@@ -324,6 +325,9 @@ export function toRmsBrand(brand: string): string {
 }
 
 export interface RmsBookingSubmission {
+  /** Meta (Facebook) ads tracking details: present ONLY when the visitor accepted cookies, otherwise left out entirely.
+   *  The RMS uses it to send the matching server-side "Lead"; see utils/metaTracking.ts. */
+  meta?: MetaBookingTracking;
   contact: { fullName: string; phone: string };
   booking: {
     /** Package path — mutually exclusive with bookingGears (the RMS route takes packageCode
