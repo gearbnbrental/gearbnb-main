@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AuthRequiredMessage from '../components/AuthRequiredMessage';
 import BackLink from '../components/BackLink';
@@ -9,6 +9,7 @@ import PaymentBreakdown from '../components/checkout/PaymentBreakdown';
 import { useAuth } from '../context/AuthContext';
 import { sameDates, selectionDates, useRental } from '../context/RentalContext';
 import { formatCurrency } from '../utils/format';
+import { trackInitiateCheckout } from '../utils/metaTracking';
 import { PROMO_COPY } from '../config/promoCopy';
 import { formatCentavos } from '../utils/promo';
 import type { RmsBookingResult } from '../utils/rmsApi';
@@ -19,8 +20,15 @@ export default function Checkout() {
   const [submittedBooking, setSubmittedBooking] = useState<RmsBookingResult | null>(null);
   // Checkout books what's checked for ITS dates (each cart entry keeps the dates it was added for),
   // so the trip dates everything below reads are set to those, the same as the Cart page does.
-  const { cart, updateTripDetails } = useRental();
+  const { cart, updateTripDetails, totals } = useRental();
   const checkedDates = selectionDates(cart).dates;
+  // Meta "InitiateCheckout": once per visit to this page, when a signed-in customer arrives with something checked.
+  const checkoutTracked = useRef(false);
+  useEffect(() => {
+    if (checkoutTracked.current || authLoading || !user || submittedBooking || !checkedDates) return;
+    checkoutTracked.current = true;
+    trackInitiateCheckout(totals.dueBeforeStart);
+  }, [authLoading, user, submittedBooking, checkedDates, totals.dueBeforeStart]);
   useEffect(() => {
     if (checkedDates && !sameDates(checkedDates, cart.tripDetails)) updateTripDetails(checkedDates);
   }, [checkedDates, cart.tripDetails, updateTripDetails]);

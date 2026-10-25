@@ -69,7 +69,7 @@ export default function CookieConsent() {
           <li className="flex items-center justify-between gap-3 p-3">
             <span className="min-w-0">
               <span className="block text-sm font-semibold text-ink">Measurement and ads (Meta Pixel)</span>
-              <span className="block text-xs text-ink-muted">Count visits and see how our Facebook and Instagram ads perform. If you book, we also tell Meta about your booking request and payment, with your contact details scrambled.</span>
+              <span className="block text-xs text-ink-muted">Count visits, sign-ups, carts and checkouts and see how our Facebook and Instagram ads perform. If you book, we also tell Meta about your booking request and payment, with your contact details scrambled.</span>
             </span>
             <button
               type="button"

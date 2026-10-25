@@ -2,6 +2,7 @@ import type { Session, User } from '@supabase/supabase-js';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { supabase } from '../supabase';
 import { isAllowedRegistrationEmail, REGISTRATION_EMAIL_ERROR } from '../utils/email';
+import { newOAuthRegistration, trackCompleteRegistration } from '../utils/metaTracking';
 
 interface AuthResult {
   error: string | null;
@@ -250,6 +251,20 @@ export function friendlyAuthError(message: string): string {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+/** Reports a just-created Google or Facebook account to Meta, once per account per browser tab. Never throws. */
+function reportNewOAuthAccount(user: Parameters<typeof newOAuthRegistration>[0]): void {
+  try {
+    const method = newOAuthRegistration(user);
+    if (!method || !user) return;
+    const key = `gearbnb-meta-registration-${user.id}`;
+    if (sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key, '1');
+    trackCompleteRegistration(method);
+  } catch {
+    // Storage or Pixel problems must never get in the way of signing in.
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -358,6 +373,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sessionUpdatedByEventRef.current = true;
       }
       setSession(newSession);
+      // Meta "CompleteRegistration" for a brand-new Google/Facebook account. SIGNED_IN also fires on a tab refocus, so the
+      // account id is remembered for this browser tab and an account is reported once.
+      if (event === 'SIGNED_IN') reportNewOAuthAccount(newSession?.user);
       // LATCHED deliberately: PASSWORD_RECOVERY turns it on, and only a sign-out turns it back
       // off. It must NOT be recomputed from each event as `event === 'PASSWORD_RECOVERY'`, because
       // supabase-js keeps firing other events at this same listener afterwards — TOKEN_REFRESHED
@@ -432,6 +450,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // Email confirmation enabled: signUp succeeds but no session is issued until confirmed.
+    // The account now exists (confirmed or waiting for the email link): report it to Meta once, whichever way it goes on.
+    trackCompleteRegistration('email');
     if (data.user && !data.session) {
       return { error: null, needsEmailConfirmation: true };
     }

@@ -29,6 +29,7 @@ import { dropStaleTripDates } from '../utils/duration';
 import { isSlotFilled } from '../utils/savedDocuments';
 import { useCatalog } from './useCatalog';
 import { useAuth } from './AuthContext';
+import { trackAddToCart } from '../utils/metaTracking';
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
@@ -1507,6 +1508,7 @@ export function RentalProvider({ children }: { children: ReactNode }) {
         // before booking creation, which this can never substitute for.
         if (!checkKitAvailability(kit, null)) return false;
         dispatch({ type: 'ADD_KIT', kit });
+        trackAddToCart('package');
         return true;
       },
       removeKit: (kitId) => dispatch({ type: 'REMOVE_KIT', kitId }),
@@ -1519,6 +1521,7 @@ export function RentalProvider({ children }: { children: ReactNode }) {
       addItem: (item) => {
         if (!user) return false;
         dispatch({ type: 'ADD_ITEM', item });
+        trackAddToCart('gear');
         return true;
       },
       removeItem: (itemId) => dispatch({ type: 'REMOVE_ITEM', itemId }),
@@ -1535,6 +1538,7 @@ export function RentalProvider({ children }: { children: ReactNode }) {
         const current = cart.byoGears.find((g) => byoLineKeyOf(g) === key)?.quantity ?? 0;
         if (quantity > current && !user) return false;
         dispatch({ type: 'SET_BYO_GEAR_QUANTITY', gear, quantity });
+        if (quantity > current) trackAddToCart('build_your_own');
         return true;
       },
       setByoAddOnQuantity: (gearKey, addOn, quantity) => {

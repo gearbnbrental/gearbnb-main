@@ -304,7 +304,7 @@ const SECTIONS: LegalSection[] = [
             ['Keep financial and tax records', 'Booking and payment records', 'Legal obligation'],
             ['Prevent fraud, theft and unpaid rentals', 'Verification documents, booking and payment records', 'Legitimate interests'],
             ['Run, secure and improve the website', 'Technical data', 'Legitimate interests'],
-            ['Count website visits and bookings and measure our Facebook and Instagram ads (Meta Pixel and Conversions API)', 'Technical data, cookie data and booking message data', 'Consent'],
+            ['Count website visits, sign-ups, carts, checkouts and bookings and measure our Facebook and Instagram ads (Meta Pixel and Conversions API)', 'Technical data, cookie data and booking message data', 'Consent'],
             ['Meet legal requests and protect our legal rights', 'Data the request or claim requires', 'Legal obligation and legitimate interests'],
           ]}
         />
@@ -457,7 +457,9 @@ const SECTIONS: LegalSection[] = [
         <p>
           Our website uses Meta Pixel, a tool from Meta Platforms. Meta Pixel runs only if you tap Accept on our cookie
           banner. It sets cookies and sends Meta data about your visit, such as the pages you view, your IP address and
-          your browser. We use this data to count visits and to see how well our Facebook and Instagram ads work. Meta
+          your browser. It also tells Meta when you create an account, add gear to your cart, open checkout and send a
+          booking request. For the cart, we tell Meta only whether you added a package, an individual item or a Build
+          Your Own item, never the item names, and for checkout only the estimated rental amount. We use this data to count visits and to see how well our Facebook and Instagram ads work. Meta
           handles this data under its own privacy policy.
         </p>
         <p>
