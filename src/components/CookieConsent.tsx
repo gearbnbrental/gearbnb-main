@@ -50,8 +50,9 @@ export default function CookieConsent() {
       {!showSettings ? (
         <p className="text-sm text-ink-muted">
           We use cookies to improve your browsing experience, understand website traffic, and help our website work
-          smoothly. Tap Accept to allow cookies that help us measure our ads, or Decline to keep only essential cookies.
-          You can manage your preferences anytime.{' '}
+          smoothly. Tap Accept to allow cookies that help us measure our ads. If you then book, we also tell Meta that you sent a
+          booking request or paid (your contact details are scrambled first). Tap Decline to keep only essential cookies
+          and send Meta nothing about your booking. You can manage your preferences anytime.{' '}
           <Link to="/privacy-policy#cookies" className="font-medium text-accent underline underline-offset-2">
             Privacy Policy
           </Link>
@@ -68,7 +69,7 @@ export default function CookieConsent() {
           <li className="flex items-center justify-between gap-3 p-3">
             <span className="min-w-0">
               <span className="block text-sm font-semibold text-ink">Measurement and ads (Meta Pixel)</span>
-              <span className="block text-xs text-ink-muted">Count visits and see how our Facebook and Instagram ads perform.</span>
+              <span className="block text-xs text-ink-muted">Count visits and see how our Facebook and Instagram ads perform. If you book, we also tell Meta about your booking request and payment, with your contact details scrambled.</span>
             </span>
             <button
               type="button"
