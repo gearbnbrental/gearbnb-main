@@ -42,7 +42,7 @@ const SECTIONS: LegalSection[] = [
           <li><Strong>Google sign-in.</Strong> If you sign in with Google we receive your name, email address and profile picture. We use this data only to run your GearBnB account. We do not sell the data or use the data for advertising. See <SectionLink id="google">section&nbsp;5</SectionLink>.</li>
           <li><Strong>Facebook Login.</Strong> If you sign in with Facebook we receive your name, email address and profile picture. We use this data only to run your GearBnB account. We do not sell the data or use the data for advertising. See <SectionLink id="google">section&nbsp;5</SectionLink>.</li>
           <li><Strong>Payments.</Strong> We do not use a payment provider. You pay by GCash or bank transfer and we record each payment by hand.</li>
-          <li><Strong>Meta Pixel.</Strong> With your consent, our website uses Meta Pixel to count visits and measure our Facebook and Instagram ads. You choose on our cookie banner. See <SectionLink id="cookies">section&nbsp;12</SectionLink>.</li>
+          <li><Strong>Meta Pixel and Conversions API.</Strong> With your consent, our website uses Meta Pixel, and our booking system sends two messages about your booking to Meta, to measure our Facebook and Instagram ads. You choose on our cookie banner. If you decline, we send Meta nothing about your booking. See <SectionLink id="cookies">section&nbsp;12</SectionLink>.</li>
         </LegalList>
       </>
     ),
@@ -125,7 +125,7 @@ const SECTIONS: LegalSection[] = [
         </LegalList>
         <p><Strong>Data your device sends us</Strong></p>
         <LegalList>
-          <li><Strong>Technical data.</Strong> Your IP address, device type, browser, pages visited and the date and time of your visit. If you accept cookies on our banner, Meta Pixel also collects some of this data for us.</li>
+          <li><Strong>Technical data.</Strong> Your IP address, device type, browser, pages visited and the date and time of your visit. If you accept cookies on our banner, Meta Pixel also collects some of this data for us. When you send a booking request after you accept cookies, we also save your Meta cookie values and the page you booked on, to send with the booking messages described in <SectionLink id="cookies">section&nbsp;12</SectionLink>.</li>
           <li><Strong>Cookie and storage data.</Strong> Small files and browser storage which keep the site working, and Meta Pixel cookies if you accept them on our cookie banner. See <SectionLink id="cookies">section&nbsp;12</SectionLink>.</li>
         </LegalList>
         <p>You choose what you give us. We need the contact details, booking details and verification documents to complete a rental.</p>
@@ -304,7 +304,7 @@ const SECTIONS: LegalSection[] = [
             ['Keep financial and tax records', 'Booking and payment records', 'Legal obligation'],
             ['Prevent fraud, theft and unpaid rentals', 'Verification documents, booking and payment records', 'Legitimate interests'],
             ['Run, secure and improve the website', 'Technical data', 'Legitimate interests'],
-            ['Count website visits and measure our Facebook and Instagram ads (Meta Pixel)', 'Technical data and cookie data', 'Consent'],
+            ['Count website visits and bookings and measure our Facebook and Instagram ads (Meta Pixel and Conversions API)', 'Technical data, cookie data and booking message data', 'Consent'],
             ['Meet legal requests and protect our legal rights', 'Data the request or claim requires', 'Legal obligation and legitimate interests'],
           ]}
         />
@@ -344,7 +344,7 @@ const SECTIONS: LegalSection[] = [
             ['Google', 'Gmail email service', 'Emails you send us and our replies'],
             ['Google (sign-in)', 'You choose to sign in with your Google Account', 'Google knows you signed in to GearBnB'],
             ['Meta Platforms (Facebook Login)', 'You choose to sign in with your Facebook account', 'Facebook knows you signed in to GearBnB'],
-            ['Meta Platforms (Meta Pixel)', 'Count website visits and measure our Facebook and Instagram ads, only if you accept cookies', 'Pages you visit, your IP address, browser and device data, and cookie identifiers'],
+            ['Meta Platforms (Meta Pixel and Conversions API)', 'Count website visits and bookings and measure our Facebook and Instagram ads, only if you accept cookies', 'Pages you visit, your IP address, browser and device data, cookie identifiers, your phone number and, if you did not sign in with Google or Facebook, your email address (both in hashed form), and the rental amount'],
             ['Government bodies, courts and law enforcement', 'Meet legal duties', 'Data the law requires'],
             ['Accountants and lawyers', 'Tax, accounting and legal advice', 'Data needed for their work'],
             ['A buyer or partner in a business sale or merger', 'Transfer the business', 'Business records'],
@@ -355,7 +355,7 @@ const SECTIONS: LegalSection[] = [
           own privacy policies when you use their services.
         </p>
         <p>
-          We do not sell your personal data. We do not share your data for third-party marketing or advertising. We
+          We do not sell your personal data. We do not share your data for third-party marketing or advertising. The only advertising use is the ad measurement with Meta that this policy describes, and only if you accept cookies. We
           require each provider to protect your data and use the data only for the services we ask for.
         </p>
         <p>
@@ -375,7 +375,7 @@ const SECTIONS: LegalSection[] = [
         Hostinger staff in Lithuania might access the servers. Google runs servers in several countries. Your data
         might be stored or processed outside the Philippines. We stay responsible for your data when a provider handles the data for us. We choose providers with
         security measures to protect your data during any transfer. If you accept cookies, Meta also processes the
-        data Meta Pixel collects on servers outside the Philippines, including in the United States.
+        data Meta Pixel collects and the booking messages our server sends on servers outside the Philippines, including in the United States.
       </p>
     ),
   },
@@ -392,6 +392,7 @@ const SECTIONS: LegalSection[] = [
             ['Payment records', '90 days after your rental ends'],
             ['Verification documents', '90 days after your rental ends'],
             ['Website technical data', '90 days after we collect the data'],
+            ['Meta cookie values, IP address and browser details we save with a booking request', '90 days after we save the data'],
             ['Account details and Google or Facebook sign-in data', 'While your account stays open. We delete the data when you ask us to delete your account'],
             ['Tax and accounting records', 'The period Philippine law requires'],
             ['Data tied to an open dispute, damage claim or legal duty', 'Until the matter ends'],
@@ -458,6 +459,18 @@ const SECTIONS: LegalSection[] = [
           banner. It sets cookies and sends Meta data about your visit, such as the pages you view, your IP address and
           your browser. We use this data to count visits and to see how well our Facebook and Instagram ads work. Meta
           handles this data under its own privacy policy.
+        </p>
+        <p>
+          If you accept cookies and send a booking request, our booking system also sends Meta two messages from our own
+          server: one when you submit the booking request and one when we confirm your first rental payment. We use the
+          messages to see which of our Facebook and Instagram ads lead to bookings. Each message carries your phone number
+          and, if you did not sign in with Google or Facebook, your email address, both in hashed form (a scrambled code
+          which is not readable text). Each message also carries the identifiers Meta's cookies set in your browser, your IP
+          address and browser details from when you booked, the page you booked on, and the rental amount, never your
+          security deposit. We do not send your name, address, identity documents, payment proofs or messages. We keep the
+          IP address, browser details and cookie values we save for this for no longer than 90 days. If you decline
+          cookies, we send Meta nothing about your booking. Meta handles the data under its own privacy policy, which
+          includes matching the data to its users and measuring and improving ads.
         </p>
         <p>
           You are allowed to change your choice at any time with the Cookie Settings link at the bottom of every page.
@@ -527,7 +540,7 @@ const SECTIONS: LegalSection[] = [
       <p>
         Our site links to services from other companies. These include Google Sign-In, Facebook Login, Google Maps for our pickup
         location and Messenger, Facebook, Instagram and TikTok for messages. GCash, your bank and Grab also handle data
-        when you use their services. If you accept cookies, Meta Pixel on our site sends visit data to Meta. See{' '}
+        when you use their services. If you accept cookies, Meta Pixel on our site sends visit data to Meta, and our booking system sends booking messages to Meta. See{' '}
         <SectionLink id="cookies">section&nbsp;12</SectionLink>. Each company controls its own data and follows its own
         privacy policy. Read those policies before you use the services.
       </p>

@@ -143,6 +143,7 @@ const SECTIONS: LegalSection[] = [
         <li>The rental fee depends on the gear and the length of your rental. Rates change by rental duration and we list the rates per item.</li>
         <li>Your payment has two parts. The security deposit is due after we approve your request. The rental fee total is due before your rental start date.</li>
         <li>We accept GCash and bank transfer. We give you our bank and GCash details and we confirm each payment by hand.</li>
+        <li>We hold your gear for 24 hours after we approve your request. If we do not receive your security deposit within those 24 hours, we automatically cancel the booking and release the gear. We do not charge you anything for a booking we cancel this way, and you are welcome to book again, subject to availability.</li>
         <li>If we do not receive your rental fee before the start date we might cancel your booking and release your dates. We keep your security deposit unless your cancellation qualifies for a refund under <SectionRef id="cancel">section&nbsp;10</SectionRef>.</li>
       </LegalList>
     ),
