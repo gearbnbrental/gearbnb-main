@@ -445,7 +445,6 @@ function ReviewSlider() {
             key={review.author}
             aria-roledescription="slide"
             aria-label={`${index + 1} of ${REVIEWS.length}`}
-            aria-hidden={index !== activeIndex}
             className="flex w-full shrink-0 snap-center flex-col items-center px-1"
           >
             <span className="mb-2 flex items-center gap-0.5 text-[#f5b400]">
