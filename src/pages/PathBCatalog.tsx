@@ -824,11 +824,18 @@ export default function PathBCatalog() {
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 p-4 sm:gap-6 sm:p-6">
         <BackLink to="/catalog" label="Back to Browse Gear" />
         <div className="flex flex-col gap-1">
-          <h1 className="font-serif text-lg font-semibold text-ink sm:text-xl">Build Your Own</h1>
-          <p className="text-sm text-ink-muted">Pick your rental duration first, then mix and match individual gear.</p>
+          <h1 className="font-serif text-lg font-semibold text-ink sm:text-xl">Build Your Own Camping Setup</h1>
+          <p className="text-sm text-ink-muted">
+            Rent tents, beds, chairs, coolers and more by the piece. Pick your rental duration first, then mix and match
+            individual gear. Prefer a ready-made kit?{' '}
+            <Link to="/catalog/camping-packages" className="font-medium text-accent underline underline-offset-2">
+              See our camping packages
+            </Link>
+            .
+          </p>
           <p className="text-xs text-ink-faint">
-            Prices shown are estimates from our live catalog, GearBnB confirms final rates when your booking
-            is submitted.{' '}
+            Prices shown are estimates from our live catalog. GearBnB confirms final rates once you submit your
+            booking.{' '}
             <Link to="/terms" className="font-medium text-accent underline underline-offset-2">
               View Terms &amp; Conditions
             </Link>

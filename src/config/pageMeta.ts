@@ -27,22 +27,103 @@ export const LOGO_PATH = '/brand_assets/GEARBNB_logo.png';
 export const ORGANIZATION_JSON_LD = {
   '@context': 'https://schema.org',
   '@type': 'LocalBusiness',
-  name: SITE_NAME,
-  url: SITE_URL,
-  logo: SITE_URL + LOGO_PATH,
-  image: SITE_URL + OG_IMAGE_PATH,
-  description: 'Camping gear rental in Metro Manila, Philippines, tents, sleeping gear, cooking equipment, and complete camping packages.',
+  '@id': 'https://gearbnbrental.com/#business',
+  name: 'GearBnB',
+  url: 'https://gearbnbrental.com',
+  logo: 'https://gearbnbrental.com/brand_assets/GEARBNB_logo.png',
+  image: 'https://gearbnbrental.com/images/og-image.jpg',
+  description:
+    'Camping gear for rent in Las Piñas City. GearBnB offers camping gear rental in Metro Manila, including tents, sleeping gear, cooking equipment and complete camping packages.',
+  email: 'customersupport@gearbnbrental.com',
   address: {
     '@type': 'PostalAddress',
-    addressLocality: 'Talon Uno, Las Piñas City',
+    streetAddress: 'Talon Uno',
+    addressLocality: 'Las Piñas City',
     addressRegion: 'Metro Manila',
     addressCountry: 'PH',
   },
-  areaServed: 'Metro Manila, Philippines',
+  geo: {
+    '@type': 'GeoCoordinates',
+    latitude: 14.4461908,
+    longitude: 120.9966593,
+  },
+  hasMap: 'https://www.google.com/maps/place/GearBnB+Camping+Gears+Rental/@14.4461908,120.9966593,17z',
+  areaServed: [
+    { '@type': 'City', name: 'Las Piñas City' },
+    { '@type': 'AdministrativeArea', name: 'Metro Manila' },
+    { '@type': 'AdministrativeArea', name: 'Calabarzon' },
+  ],
   sameAs: [
     'https://www.facebook.com/profile.php?id=61583759100221',
     'https://www.instagram.com/gearbnb_rental',
     'https://www.tiktok.com/@camp.gearbnb',
+  ],
+} as const;
+
+/** About Us page schema (AboutPage + breadcrumb + its FAQ), next to the shared LocalBusiness block.
+ *  The FAQ answers must stay word for word the same as the FAQ shown on the About Us page. */
+export const ABOUT_US_JSON_LD = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'AboutPage',
+      '@id': 'https://gearbnbrental.com/about-us#webpage',
+      url: 'https://gearbnbrental.com/about-us',
+      name: 'About GearBnB',
+      description:
+        'Discover GearBnB, your camping gear rental in Las Piñas, Metro Manila. Learn about our mission and find reliable gear for your next outdoor adventure.',
+      inLanguage: 'en',
+      primaryImageOfPage: 'https://gearbnbrental.com/images/about-us-hero.webp',
+      about: { '@id': 'https://gearbnbrental.com/#business' },
+      mainEntity: { '@id': 'https://gearbnbrental.com/#business' },
+      breadcrumb: { '@id': 'https://gearbnbrental.com/about-us#breadcrumb' },
+    },
+    {
+      '@type': 'BreadcrumbList',
+      '@id': 'https://gearbnbrental.com/about-us#breadcrumb',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://gearbnbrental.com/' },
+        { '@type': 'ListItem', position: 2, name: 'About Us', item: 'https://gearbnbrental.com/about-us' },
+      ],
+    },
+    {
+      '@type': 'FAQPage',
+      '@id': 'https://gearbnbrental.com/about-us#faq',
+      mainEntity: [
+        {
+          '@type': 'Question',
+          name: 'How do I rent camping gear from GearBnB?',
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: 'If you need help, you can send us a message on Messenger or TikTok. You can also directly browse available gear or packages and select your rental period. Choose Grab delivery or pick up and confirm your time at least 24 hours before your rental date.',
+          },
+        },
+        {
+          '@type': 'Question',
+          name: 'How much does camping gear cost to rent?',
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: 'Rental rates depend on the gear you choose and your rental period. Packages and individual items are priced separately, so you can build a rental that fits your budget.',
+          },
+        },
+        {
+          '@type': 'Question',
+          name: 'How much does it cost to rent camping equipment for a weekend?',
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: 'Your total cost depends on which items you select, how many pieces you rent, and how long you’re renting. Feel free to browse our gear rental page for accurate pricing.',
+          },
+        },
+        {
+          '@type': 'Question',
+          name: 'How do I contact GearBnB?',
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: "You can message us directly on Facebook or TikTok for inquiries, recommendations, and booking assistance. We're happy to help you get camp-ready!",
+          },
+        },
+      ],
+    },
   ],
 } as const;
 
@@ -51,30 +132,36 @@ export interface PageMeta {
   description: string;
   /** This page's own link-preview image (1200x630, path under public/). Defaults to OG_IMAGE_PATH. */
   image?: string;
+  /** A `<meta name="robots">` value for this page's built HTML (e.g. "noindex, follow"). */
+  robots?: string;
+  /** Extra JSON-LD for this page's built HTML, after the shared LocalBusiness block. */
+  jsonLd?: object;
 }
 
 export const PAGE_META = {
   home: {
-    title: 'Camping Gear Rental in the Philippines | GearBnB',
+    title: 'Camping Gear for Rent in Las Piñas & Metro Manila | GearBnB',
     description:
-      'Explore camping gear rental in the Philippines, serving Metro Manila, Las Piñas, and nearby cities. Find quality gear and book for your next adventure.',
+      'Camping gear rental in Metro Manila made easy. Rent tents, beds, chairs and full camping kits from trusted brands. Pick up in Las Piñas City. Book online.',
   },
   catalog: {
     title: 'Camping Kits for Rent in Metro Manila | GearBnB',
     description:
       'Browse and rent camping gears in Metro Manila. Explore our selection of quality outdoor equipment and find the perfect gear for your next adventure.',
     image: '/images/og-packages.jpg',
+    // The hub only links on to the two catalogs, which own the keywords; kept out of search results.
+    robots: 'noindex, follow',
   },
   packages: {
-    title: 'Camping Gear for Rent in Metro Manila | GearBnB',
+    title: 'Camping Package Rental in Metro Manila | GearBnB',
     description:
-      'Choose camping gear for rent in Metro Manila and find ready-to-go packages for solo trips, couples, and groups. Book your gear and get outdoors!',
+      'Rent a ready-to-go camping kit with tent, sleeping gear and seating in one booking. Sized for couples, backpackers, families and barkadas.',
     image: '/images/og-packages.jpg',
   },
   buildYourOwn: {
-    title: 'Camping Gear Rental in Metro Manila | GearBnB',
+    title: 'Tent and Camping Equipment Rental by the Piece | GearBnB',
     description:
-      'Customize your adventure with camping gear rental in Metro Manila. Pick the gear you need, build your own package, and enjoy the outdoors your way.',
+      'Rent tents, air beds, camping chairs, coolers, fans and lights by the piece. Pick your dates, mix and match your setup and pick up in Las Piñas.',
     image: '/images/og-build-your-own.jpg',
   },
   events: {
@@ -87,6 +174,7 @@ export const PAGE_META = {
     title: 'Camping Gear Rental in Las Piñas, Metro Manila | GearBnB',
     description:
       'Discover GearBnB, your camping gear rental in Las Piñas, Metro Manila. Learn about our mission and find reliable gear for your next outdoor adventure.',
+    jsonLd: ABOUT_US_JSON_LD,
   },
   privacy: {
     title: 'Privacy Policy | GearBnB',

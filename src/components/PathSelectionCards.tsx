@@ -13,6 +13,8 @@ interface PathCardProps {
   description: string;
   cta: string;
   image: string;
+  /** Describes the photo for screen readers and search engines. */
+  imageAlt: string;
   /** Homepage-only: below `sm`, gives the card room to show its full text instead of the compact
    *  2-column version. Has no effect from `sm` up. */
   roomyOnMobile?: boolean;
@@ -28,7 +30,7 @@ interface PathCardProps {
  * on the CTA pins it to the bottom of both cards so the two buttons always align with each other
  * even when the text above them doesn't take up equal space.
  */
-function PathCard({ to, title, subtitle, description, cta, image, roomyOnMobile = false, ribbon = null }: PathCardProps) {
+function PathCard({ to, title, subtitle, description, cta, image, imageAlt, roomyOnMobile = false, ribbon = null }: PathCardProps) {
   return (
     <Link
       to={to}
@@ -49,7 +51,7 @@ function PathCard({ to, title, subtitle, description, cta, image, roomyOnMobile 
         {image ? (
           <img
             src={image}
-            alt=""
+            alt={imageAlt}
             loading="lazy"
             className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
@@ -150,6 +152,7 @@ export default function PathSelectionCards({
         // The client's actual "Choose Package" photo — same optimized file already registered in
         // the Camp Setups gallery (see campSetups.ts's 'choose-package-camp-setup' entry).
         image="/images/camp-setups/choose-package-camp-setup.webp"
+        imageAlt="GearBnB camping package setup with a cabin-style tent, canopy awning, folding chairs, cooler and cooking gear"
         roomyOnMobile={roomyOnMobile}
         ribbon={packagesRibbon}
       />
@@ -162,6 +165,7 @@ export default function PathSelectionCards({
         // The client's actual "BYO" photo — same file already registered in the Camp Setups
         // gallery as 'byo-camp-setup'.
         image="/images/camp-setups/byo-camp-setup.webp"
+        imageAlt="Build-your-own camping gear setup with a tent awning, folding chairs, cooler, fans and cooking gear"
         roomyOnMobile={roomyOnMobile}
         ribbon={byoRibbon}
       />

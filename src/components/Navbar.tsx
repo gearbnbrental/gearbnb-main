@@ -168,7 +168,7 @@ export default function Navbar() {
           <Link to="/" className="flex shrink-0 items-center gap-2 sm:gap-2.5">
             <img
               src="/brand_assets/gearbnb-logo-128.webp"
-              alt=""
+              alt="GearBnB logo"
               className="h-8 w-8 rounded-full shadow-sm sm:h-10 sm:w-10 lg:h-12 lg:w-12"
             />
             <span className="font-serif text-lg font-bold tracking-tight text-brand-forest sm:text-xl">

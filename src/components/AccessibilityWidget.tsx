@@ -248,7 +248,7 @@ export default function AccessibilityWidget() {
           stickyBarHeight ? '' : 'bottom-2 sm:bottom-3'
         }`}
       >
-        <img src="/images/accessibility-icon.png" alt="" width={36} height={36} className="h-9 w-9 drop-shadow-[0_2px_4px_rgba(0,0,0,0.25)]" />
+        <img src="/images/accessibility-icon.png" alt="Accessibility options" width={36} height={36} className="h-9 w-9 drop-shadow-[0_2px_4px_rgba(0,0,0,0.25)]" />
         {!isDefault(settings) && (
           <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-white bg-amber-400" />
         )}

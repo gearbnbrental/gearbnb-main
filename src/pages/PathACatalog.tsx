@@ -337,7 +337,7 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color }: Pac
             >
               <img
                 src={displayImage}
-                alt={kit.name}
+                alt={`${kit.name}: camping package with tent, sleeping gear and seating`}
                 onError={() => setImageFailed(true)}
                 className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
               />
@@ -1205,9 +1205,14 @@ export default function PathACatalog() {
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 p-4 sm:gap-6 sm:p-6">
         <BackLink to="/catalog" label="Back to Browse Gear" />
         <div className="flex flex-col gap-1">
-          <h1 className="font-serif text-lg font-semibold text-ink sm:text-xl">Choose a Package</h1>
+          <h1 className="font-serif text-lg font-semibold text-ink sm:text-xl">Choose a Camping Package</h1>
           <p className="text-sm text-ink-muted">
-            Ready-made kits, bundled and priced as a single unit. Deposits and rental terms follow our shared{' '}
+            Ready-made camping kits with tent, sleeping gear and seating, bundled and priced as one unit. Want to pick
+            each piece?{' '}
+            <Link to="/catalog/build-your-own" className="font-medium text-accent underline underline-offset-2">
+              Build your own setup
+            </Link>{' '}
+            instead. Deposits and rental terms follow our shared{' '}
             <Link to="/terms" className="font-medium text-accent underline underline-offset-2">
               Rental Agreement
             </Link>

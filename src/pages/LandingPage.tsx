@@ -385,9 +385,9 @@ const FAQ_ITEMS: FaqItem[] = [
     answer: (
       <>
         <p>
-          We’re based in Talon Uno, Las Piñas City, Philippines. Our exact pickup location and address will be provided
-          once your booking is confirmed. You can also view our location on Google Maps for directions and nearby
-          landmarks.
+          We're based in Talon Uno, Las Piñas City. We offer camping gear rental across Metro Manila, Calabarzon and
+          nearby areas. We share the exact pickup address once we confirm your booking. Open our Google Maps pin for
+          directions and nearby landmarks.
         </p>
         <a
           href="https://www.google.com/maps/place/GearBnB+Camping+Gears+Rental/@14.4461908,120.9940844,17z/data=!3m1!4b1!4m6!3m5!1s0x3397d3090cbbd26f:0x665f11a5d4c66dde!8m2!3d14.4461908!4d120.9966593!16s%2Fg%2F11z8h467l7?entry=ttu&g_ep=EgoyMDI2MDkxNi4wIKXMDSoASAFQAw%3D%3D"
@@ -413,7 +413,7 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: 'Do you sell camping gear?',
     answer:
-      'We don’t sell camping gear. We offer camping gear rentals, including tents, sleeping gear, cooking equipment, and complete camping packages for different types of trips.',
+      'No. We offer camping gear for rent, including tents, sleeping gear, cooking equipment and complete camping packages for every type of trip.',
   },
   {
     question: 'Can you help me find a campsite?',
@@ -422,7 +422,7 @@ const FAQ_ITEMS: FaqItem[] = [
   },
   {
     question: 'How do I get started?',
-    answer: "Browse our packages or build your own kit, pick your dates, and book, we'll guide you through verification and payment from there.",
+    answer: "Browse our packages or build your own kit. Pick your dates and book. We'll guide you through verification and payment from there.",
   },
 ];
 
@@ -485,7 +485,7 @@ export default function LandingPage() {
       <section className="relative">
         <img
           src="/images/landing-hero.webp"
-          alt=""
+          alt="Dome tent with a camping chair and table on a grassy hill above a mountain lake at sunset"
           className="absolute inset-0 h-full w-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-brand-forest/80" />
@@ -505,16 +505,14 @@ export default function LandingPage() {
           <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white">
             Located in Las Piñas City
           </span>
-          {/* text-2xl below sm (not text-3xl): at 320-375px, "...the Philippines Made Easy" still
-              wrapped to 3-4 lines even at 30px — one word (Philippines) is long enough that a
-              smaller step was needed to keep this heading from dominating the whole first screen
-              on a short device. Wraps to 2 lines at every width down to 320px at this size. */}
+          {/* text-2xl below sm (not text-3xl): keeps this heading from dominating the whole first
+              screen on a short device. */}
           <h1 className="font-serif text-2xl font-bold leading-[1.2] tracking-tight text-white sm:text-5xl sm:leading-tight">
-            Camping Gears Rental in the Philippines Made Easy
+            Camping Gear for Rent, Made Easy
           </h1>
           <p className="max-w-xl text-base text-white">
-            Great camping trips start with the right gear, and you deserve a reliable camping gear rental in the
-            Philippines.
+            Great camping trips start with the right gear. Get reliable camping gear rental in Metro Manila, with tents,
+            beds and full kits ready for pickup.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
             <button
@@ -522,7 +520,7 @@ export default function LandingPage() {
               onClick={() => navigate('/catalog')}
               className="rounded-lg bg-brand-forest px-6 py-3 text-sm font-semibold text-white shadow-sm ring-1 ring-white/20 transition-colors hover:bg-brand-forest-dark"
             >
-              Rent Your Gears
+              Rent Camping Gear
             </button>
             <button
               type="button"
@@ -644,7 +642,7 @@ export default function LandingPage() {
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
           <div className="flex flex-col items-center gap-2 text-center">
             <h2 className="font-serif text-2xl font-bold text-ink sm:text-3xl">
-              Explore the Best Outdoor Adventure Gear
+              Browse Our Camping Gear for Rent
             </h2>
             <p className="max-w-xl text-sm text-ink-muted">
               High-quality, ready-to-rent equipment for your next adventure.
@@ -873,24 +871,24 @@ export default function LandingPage() {
         <div className="relative mx-auto grid w-full max-w-5xl gap-10 lg:grid-cols-2 lg:items-center">
           <div className="flex flex-col items-center gap-5 text-center lg:items-start lg:text-left">
             <h2 className="font-serif text-2xl font-bold text-white drop-shadow-sm sm:text-4xl">
-              Gear Up for Your Next Adventure
+              Camping Gear for Rent in Las Piñas City
             </h2>
             <p className="text-sm text-white">
               Make your next camping trip easier with{' '}
               <Link to="/about-us" className="underline underline-offset-2 hover:text-white/80">
                 GearBnB
               </Link>
-              . We are proudly located in{' '}
+              . Pick up your gear at{' '}
               <a
                 href="https://www.google.com/maps/place/GearBnB+Camping+Gears+Rental/@14.4461908,120.9966593,17z/data=!3m1!4b1!4m6!3m5!1s0x3397d3090cbbd26f:0x665f11a5d4c66dde!8m2!3d14.4461908!4d120.9966593!16s%2Fg%2F11z8h467l7?entry=ttu&g_ep=EgoyMDI2MDkxNi4wIKXMDSoASAFQAw%3D%3D"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="underline underline-offset-2 hover:text-white/80"
               >
-                Las Piñas City
-              </a>{' '}
-              and serves nearby cities in Metro Manila, Calabarzon, and surrounding areas. Get the gear you need and
-              enjoy more time outdoors, making memories that last.
+                our base in Talon Uno
+              </a>
+              . We serve campers across Metro Manila, Calabarzon and nearby areas. Get the gear you need and spend more
+              time outdoors with your people.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3 lg:justify-start">
               <button

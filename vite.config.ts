@@ -96,6 +96,8 @@ function withPageMeta(html: string, path: string, meta: PageMeta): string {
         `<meta name="twitter:description" content="${description}" />`,
         `<meta name="twitter:image" content="${image}" />`,
         `<script type="application/ld+json">${JSON.stringify(ORGANIZATION_JSON_LD)}</script>`,
+        ...(meta.jsonLd ? [`<script type="application/ld+json">${JSON.stringify(meta.jsonLd)}</script>`] : []),
+        ...(meta.robots ? [`<meta name="robots" content="${escapeHtml(meta.robots)}" />`] : []),
       ].join('\n    '),
     )
 }
