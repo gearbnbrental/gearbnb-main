@@ -215,30 +215,31 @@ export default function Navbar() {
                 Catalog
                 <ChevronDownIcon className={`h-3.5 w-3.5 transition-transform ${catalogMenuOpen ? 'rotate-180' : ''}`} />
               </button>
-              {catalogMenuOpen && (
-                <div
-                  role="menu"
-                  aria-label="Catalog"
-                  className="absolute left-0 top-full z-50 mt-1.5 w-48 overflow-hidden rounded-lg border border-line bg-surface py-1 shadow-lg"
+              {/* Always in the HTML, hidden while closed, so crawlers and the prerendered pages
+                  see Packages and Build Your Own as real links. */}
+              <div
+                role="menu"
+                aria-label="Catalog"
+                hidden={!catalogMenuOpen}
+                className="absolute left-0 top-full z-50 mt-1.5 w-48 overflow-hidden rounded-lg border border-line bg-surface py-1 shadow-lg"
+              >
+                <Link
+                  to="/catalog/camping-packages"
+                  role="menuitem"
+                  onClick={() => setCatalogMenuOpen(false)}
+                  className="block px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface-strong"
                 >
-                  <Link
-                    to="/catalog/camping-packages"
-                    role="menuitem"
-                    onClick={() => setCatalogMenuOpen(false)}
-                    className="block px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface-strong"
-                  >
-                    Packages
-                  </Link>
-                  <Link
-                    to="/catalog/build-your-own"
-                    role="menuitem"
-                    onClick={() => setCatalogMenuOpen(false)}
-                    className="block px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface-strong"
-                  >
-                    Build Your Own
-                  </Link>
-                </div>
-              )}
+                  Packages
+                </Link>
+                <Link
+                  to="/catalog/build-your-own"
+                  role="menuitem"
+                  onClick={() => setCatalogMenuOpen(false)}
+                  className="block px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface-strong"
+                >
+                  Build Your Own
+                </Link>
+              </div>
             </div>
 
             <Link

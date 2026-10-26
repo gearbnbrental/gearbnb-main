@@ -58,7 +58,7 @@ const escapeHtml = (value: string) =>
   value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
 /** URL path -> file name inside dist/_pages ("/catalog/build-your-own" -> "catalog--build-your-own.html"). */
-const pageFileName = (path: string) => path.slice(1).replace(/\//g, '--') + '.html'
+const pageFileName = (path: string) => (path === '/' ? 'home' : path.slice(1).replace(/\//g, '--')) + '.html'
 
 /** The built index.html with one page's own title, description, canonical URL and social preview
  * (Open Graph / Twitter) tags swapped in. The head must contain the default <title> and
@@ -115,22 +115,18 @@ function withPageMeta(html: string, path: string, meta: PageMeta): string {
  * src/config/pageMeta.ts, the same source the pages themselves use.
  */
 /**
- * Pages whose full text is also written into their HTML file, not only rendered by JavaScript.
- * Crawlers that don't run scripts (Facebook's app review checks the Privacy Policy and data
- * deletion URLs this way, and so do some search engines) would otherwise see an empty page. When
- * the app loads it replaces this markup with the live page, so visitors see no difference.
+ * Renders every PRERENDERED_PAGES page to full HTML (navbar, headings, copy, FAQ answers, links,
+ * product cards, footer) with src/prerender.tsx, loaded through a throwaway Vite server the same
+ * way the app loads its TSX. Production mode, so it reads the live RMS and Supabase with the
+ * public key from .env.production/.env.local, exactly like the deployed site. Crawlers and link
+ * previews that don't run scripts (Facebook's app review checks the Privacy Policy and data
+ * deletion URLs this way) then see the real page; when the app loads it replaces this markup with
+ * the live page.
  */
-const STATIC_CONTENT_PAGES: Record<string, string> = {
-  '/privacy-policy': '/src/pages/PrivacyPolicy.tsx',
-  '/terms-of-service': '/src/pages/TermsOfService.tsx',
-  '/data-deletion': '/src/pages/DataDeletion.tsx',
-}
-
-/** Renders each STATIC_CONTENT_PAGES page to plain HTML, using a throwaway Vite server to load the
- *  TSX the same way the app does. */
-async function renderStaticContent(root: string): Promise<Map<string, string>> {
+async function renderPages(root: string): Promise<Map<string, string>> {
   const server = await createServer({
     root,
+    mode: 'production',
     configFile: false,
     logLevel: 'error',
     appType: 'custom',
@@ -138,14 +134,15 @@ async function renderStaticContent(root: string): Promise<Map<string, string>> {
     plugins: [react()],
   })
   try {
-    // Plain Node imports: the same copies the pages get (Vite leaves node_modules to Node in SSR).
-    const { createElement } = await import('react')
-    const { renderToStaticMarkup } = await import('react-dom/server')
-    const { MemoryRouter } = await import('react-router-dom')
+    const prerender = await server.ssrLoadModule('/src/prerender.tsx')
+    const catalog = await prerender.fetchPrerenderCatalog()
+    for (const warning of catalog.warnings as string[]) console.warn(`prerender-route-meta: ${warning}`)
+    console.log(
+      `prerender-route-meta: catalog at build time: ${catalog.kits.length} packages, ${catalog.gearKinds.length} gear kinds`,
+    )
     const rendered = new Map<string, string>()
-    for (const [path, file] of Object.entries(STATIC_CONTENT_PAGES)) {
-      const Page = (await server.ssrLoadModule(file)).default
-      const markup: string = renderToStaticMarkup(createElement(MemoryRouter, { initialEntries: [path] }, createElement(Page)))
+    for (const { path } of PRERENDERED_PAGES) {
+      const markup: string = prerender.renderPage(path, catalog)
       if (markup.length < 1000) throw new Error(`prerender-route-meta: ${path} rendered almost nothing`)
       rendered.set(path, markup)
     }
@@ -168,24 +165,23 @@ function prerenderRouteMeta(): Plugin {
     async closeBundle() {
       const indexFile = resolve(outDir, 'index.html')
       const baseHtml = readFileSync(indexFile, 'utf8')
-      const staticContent = await renderStaticContent(root)
+      const pageContent = await renderPages(root)
 
       mkdirSync(resolve(outDir, '_pages'), { recursive: true })
       const apacheRules: string[] = []
       const netlifyRules: string[] = []
       for (const { path, meta } of PRERENDERED_PAGES) {
-        let html = withPageMeta(baseHtml, path, meta)
-        const content = staticContent.get(path)
-        if (content) {
-          if (!html.includes('<div id="root"></div>')) throw new Error('prerender-route-meta: empty #root not found')
-          html = html.replace('<div id="root"></div>', `<div id="root">${content}</div>`)
-        }
+        const shell = withPageMeta(baseHtml, path, meta)
+        if (!shell.includes('<div id="root"></div>')) throw new Error('prerender-route-meta: empty #root not found')
+        const html = shell.replace('<div id="root"></div>', `<div id="root">${pageContent.get(path)}</div>`)
         if (path === '/') {
-          writeFileSync(indexFile, html)
-          continue
+          // index.html stays an empty shell (home page tags, no content): it is also the fallback
+          // for /cart, /login, /checkout and every other unlisted path, which must not flash the
+          // home page's content before the app loads. "/" itself gets the full page via home.html.
+          writeFileSync(indexFile, shell)
         }
         writeFileSync(resolve(outDir, '_pages', pageFileName(path)), html)
-        apacheRules.push(`  RewriteRule ^${path.slice(1)}/?$ /_pages/${pageFileName(path)} [L]`)
+        apacheRules.push(`  RewriteRule ^${path === '/' ? '' : `${path.slice(1)}/?`}$ /_pages/${pageFileName(path)} [L]`)
         netlifyRules.push(`${path}    /_pages/${pageFileName(path)}   200`)
       }
 

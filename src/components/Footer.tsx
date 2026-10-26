@@ -1,4 +1,4 @@
-﻿import { useNavigate } from 'react-router-dom';
+﻿import { Link, useNavigate } from 'react-router-dom';
 import { CONTACT_EMAIL, MESSENGER_URL } from '../config/social';
 import { ChatBubbleIcon, MailIcon } from './icons';
 import SocialLinks from './SocialLinks';
@@ -10,9 +10,8 @@ import { openCookieSettings } from '../utils/cookieConsent';
  * Bookings, Profile, Terms, etc.) had no footer at all — moved here so it renders consistently
  * everywhere without duplicating the markup per page.
  *
- * Every link either navigates to a real route or scrolls to a same-page section id, matching the
- * one navigation mechanism this footer has always used (never a second pattern like a raw <a> for
- * an internal link). "How renting works" and "Adventure Bundles" only make sense as scroll targets
+ * Every link either navigates to a real route or scrolls to a same-page section id. Route links
+ * are router <Link>s (real <a href> anchors, so crawlers and the prerendered HTML can follow them). "How renting works" and "Adventure Bundles" only make sense as scroll targets
  * on the home page itself — clicking either from another page navigates home first, then scrolls,
  * so the link always does something sensible regardless of which page it's clicked from.
  */
@@ -73,9 +72,9 @@ export default function Footer() {
 
           <div className="flex flex-col gap-1.5 sm:gap-2">
             <h3 className="text-sm font-semibold text-white">Quick Links</h3>
-            <button type="button" onClick={() => navigate('/catalog')} className="w-fit text-left text-sm text-white hover:opacity-80">
+            <Link to="/catalog" className="w-fit text-left text-sm text-white hover:opacity-80">
               Rent Gear
-            </button>
+            </Link>
             <button
               type="button"
               onClick={() => goToHomeSection('adventure-bundles')}
@@ -83,13 +82,9 @@ export default function Footer() {
             >
               Adventure Bundles
             </button>
-            <button
-              type="button"
-              onClick={() => navigate('/plan-an-event')}
-              className="w-fit text-left text-sm text-white hover:opacity-80"
-            >
+            <Link to="/plan-an-event" className="w-fit text-left text-sm text-white hover:opacity-80">
               Plan an Event
-            </button>
+            </Link>
           </div>
 
           <div className="flex flex-col gap-1.5 sm:gap-2">
@@ -107,9 +102,9 @@ export default function Footer() {
             {/* No standalone pricing page exists — /catalog is where real, current per-package/
              * per-item prices actually live, so it's the genuine equivalent rather than a page
              * invented just to hold this link. */}
-            <button type="button" onClick={() => navigate('/catalog')} className="w-fit text-left text-sm text-white hover:opacity-80">
+            <Link to="/catalog" className="w-fit text-left text-sm text-white hover:opacity-80">
               Pricing &amp; Fees
-            </button>
+            </Link>
             {/* "Gear Care Tips" removed per client request, with no replacement item — the client
                 does not want that link treated as a gear-care section, and this site has no
                 gear-care/blog content to point it at instead. */}
@@ -117,18 +112,18 @@ export default function Footer() {
 
           <div className="flex flex-col gap-1.5 sm:gap-2">
             <h3 className="text-sm font-semibold text-white">Policies</h3>
-            <button type="button" onClick={() => navigate('/terms')} className="w-fit text-left text-sm text-white hover:opacity-80">
+            <Link to="/terms" className="w-fit text-left text-sm text-white hover:opacity-80">
               Rental Terms
-            </button>
-            <button type="button" onClick={() => navigate('/terms#deposit')} className="w-fit text-left text-sm text-white hover:opacity-80">
+            </Link>
+            <Link to="/terms#deposit" className="w-fit text-left text-sm text-white hover:opacity-80">
               Deposit &amp; Refunds
-            </button>
-            <button type="button" onClick={() => navigate('/terms-of-service')} className="w-fit text-left text-sm text-white hover:opacity-80">
+            </Link>
+            <Link to="/terms-of-service" className="w-fit text-left text-sm text-white hover:opacity-80">
               Terms of Service
-            </button>
-            <button type="button" onClick={() => navigate('/privacy-policy')} className="w-fit text-left text-sm text-white hover:opacity-80">
+            </Link>
+            <Link to="/privacy-policy" className="w-fit text-left text-sm text-white hover:opacity-80">
               Privacy Policy
-            </button>
+            </Link>
             <button type="button" onClick={openCookieSettings} className="w-fit text-left text-sm text-white hover:opacity-80">
               Cookie Settings
             </button>
