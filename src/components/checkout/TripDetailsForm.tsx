@@ -3,6 +3,7 @@ import { useRental } from '../../context/RentalContext';
 import { Link } from 'react-router-dom';
 import type { FulfillmentType } from '../../types/gearbnb';
 import { CheckIcon, MapPinIcon, TruckIcon } from '../icons';
+import { describeTime } from '../../utils/clockTime';
 
 
 interface FulfillmentOptionConfig {
@@ -26,6 +27,70 @@ const FULFILLMENT_OPTIONS: FulfillmentOptionConfig[] = [
     icon: MapPinIcon,
   },
 ];
+
+const HOURS = Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, '0'));
+const MINUTES = ['00', '15', '30', '45'];
+
+/**
+ * Pickup / delivery time on the 24-hour clock (customers kept mixing up AM and PM). Two dropdowns
+ * instead of <input type="time">, which shows AM/PM or 24-hour depending on the phone's own
+ * settings. The value is still "HH:MM", exactly what the old input produced.
+ */
+function PreferredTimePicker({ value, onChange }: { value: string; onChange: (time: string) => void }) {
+  const [savedHour = '', savedMinute = ''] = value ? value.split(':') : [];
+  // A minute picked before the hour is kept here until there's an hour to pair it with.
+  const [pendingMinute, setPendingMinute] = useState('');
+  const minute = savedMinute || pendingMinute;
+  // Keeps an older saved minute that isn't on the 15-minute list (e.g. 14:10) selectable.
+  const minuteOptions = savedMinute && !MINUTES.includes(savedMinute) ? [...MINUTES, savedMinute].sort() : MINUTES;
+  const selectClass =
+    'rounded-lg border border-line bg-surface px-3 py-2.5 text-sm text-ink shadow-sm outline-none transition-colors focus:border-brand-forest focus:ring-2 focus:ring-brand-forest/20';
+
+  return (
+    <fieldset className="flex max-w-xs flex-col gap-1.5">
+      <legend className="mb-1.5 text-sm font-medium text-ink">Preferred Time for Pick Up / Delivery</legend>
+      <div className="flex items-center gap-2">
+        <select
+          required
+          aria-label="Hour, 00 to 23"
+          value={savedHour}
+          onChange={(e) => onChange(e.target.value ? `${e.target.value}:${minute || '00'}` : '')}
+          className={selectClass}
+        >
+          <option value="">Hour</option>
+          {HOURS.map((hour) => (
+            <option key={hour} value={hour}>
+              {hour}
+            </option>
+          ))}
+        </select>
+        <span aria-hidden="true" className="text-lg font-semibold text-ink">
+          :
+        </span>
+        <select
+          required
+          aria-label="Minute"
+          value={minute}
+          onChange={(e) => {
+            setPendingMinute(e.target.value);
+            if (savedHour) onChange(`${savedHour}:${e.target.value || '00'}`);
+          }}
+          className={selectClass}
+        >
+          <option value="">Min</option>
+          {minuteOptions.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </div>
+      <p className="text-xs text-ink-muted" aria-live="polite">
+        {value ? `${value} is ${describeTime(value)}.` : '24-hour clock: 13:00 is 1:00 in the afternoon, 18:00 is 6:00 in the evening.'}
+      </p>
+    </fieldset>
+  );
+}
 
 export default function TripDetailsForm() {
   const { cart, updateTripDetails } = useRental();
@@ -79,16 +144,7 @@ export default function TripDetailsForm() {
         />
       </label>
 
-      <label className="flex max-w-xs flex-col gap-1.5">
-        <span className="text-sm font-medium text-ink">Preferred Time for Pick Up / Delivery</span>
-        <input
-          type="time"
-          required
-          value={tripDetails.preferredTime}
-          onChange={(e) => updateTripDetails({ preferredTime: e.target.value })}
-          className="rounded-lg border border-line px-3 py-2.5 text-sm text-ink shadow-sm outline-none transition-colors focus:border-brand-forest focus:ring-2 focus:ring-brand-forest/20"
-        />
-      </label>
+      <PreferredTimePicker value={tripDetails.preferredTime} onChange={(preferredTime) => updateTripDetails({ preferredTime })} />
 
       <div className="flex flex-col gap-2">
         <span className="text-sm font-medium text-ink">Fulfillment Method</span>
