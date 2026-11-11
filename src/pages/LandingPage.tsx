@@ -7,7 +7,6 @@ import { CAMP_SETUP_PHOTOS } from '../config/campSetups';
 import FaqAccordion, { type FaqItem } from '../components/FaqAccordion';
 import ImageLightbox from '../components/ImageLightbox';
 import PathSelectionCards from '../components/PathSelectionCards';
-import PromoPopup from '../components/PromoPopup';
 import SocialIconLink from '../components/SocialIconLink';
 import { ChatBubbleIcon, CheckCircleIcon, ChevronIcon, GearPlaceholderIcon } from '../components/icons';
 import { useCatalog } from '../context/useCatalog';
@@ -660,8 +659,6 @@ export default function LandingPage() {
 
   return (
     <div className="flex flex-col">
-      <PromoPopup />
-
       {/* Hero — the outer <section> itself carries NO horizontal padding, so the image/gradient
        * (`inset-0` against the section) span the full viewport width edge-to-edge; the text
        * content and the floating card each carry their own `px-5 sm:px-6` instead, so only THEY

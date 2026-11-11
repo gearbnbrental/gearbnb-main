@@ -8,9 +8,11 @@ import { readA11ySettings } from '../utils/accessibility';
 const SHOW_DELAY_MS = 1000;
 /** The animation's own background green, shown while it downloads: the animation itself opens on
  *  plain green, so the popup can appear right on time without looking empty or broken. */
-const ARTWORK_BACKGROUND = '#083d1f';
-const PROMO_IMAGE = '/images/promos/first-time-renter-15-off-v4.webp';
-const SEEN_KEY = 'gearbnb-promo-first-time-15-off-seen';
+const ARTWORK_BACKGROUND = '#042512';
+// Animated WebP made from the November promo GIF (800px, about 1.6MB instead of the GIF's 9MB).
+const PROMO_IMAGE = '/images/promos/november-promo.webp';
+// A new key per artwork, so a visitor who closed an earlier promo still sees this one once.
+const SEEN_KEY = 'gearbnb-promo-november-seen';
 
 function alreadySeenThisSession(): boolean {
   try {
@@ -46,7 +48,7 @@ export default function PromoPopup() {
     // Safety / ADHD profiles) in the accessibility panel.
     if (!hasPromo || alreadySeenThisSession() || readA11ySettings().stopAnimations) return;
     // Opens 1 second after arrival (counted from when the homepage opened, not from when the promo
-    // answer came back), without waiting for the 2.5MB animation to finish downloading: it starts
+    // answer came back), without waiting for the 1.6MB animation to finish downloading: it starts
     // downloading now and plays in place as soon as it arrives, over its own green background.
     new Image().src = PROMO_IMAGE;
     const remainingDelay = Math.max(0, mountedAt.current + SHOW_DELAY_MS - Date.now());
