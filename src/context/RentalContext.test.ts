@@ -8,6 +8,7 @@ import {
   kitDatesKey,
   selectionDates,
   calculateDueToday,
+  calculateSecurityDeposit,
   calculateItemExtrasFee,
   calculateKitExtrasFee,
   calculateRentalDurationDays,
@@ -254,6 +255,45 @@ describe('duration tier selection', () => {
   it('falls back to the 48h tier when no dates are set', () => {
     expect(getKitPrice(kit, makeTripDetails())).toBe(2490);
     expect(getItemPrice(item, makeTripDetails())).toBe(180);
+  });
+});
+
+describe('calculateSecurityDeposit', () => {
+  const gear: BookableGearSelection = {
+    category: 'Tent',
+    brand: 'Coleman',
+    model: 'Dome',
+    name: 'Coleman Dome Tent',
+    pricing: { '48h': 300, '72h': 400 },
+    extraPerDayPrice: 50,
+    quantity: 1,
+    availableCount: 3,
+    canSelect: true,
+    imageUrl: null,
+    freeAccessories: [],
+    compatibleAddOns: [],
+  };
+
+  it('Build Your Own pays the tier for its rental total', () => {
+    const cart = makeCart({ byoGears: [gear] });
+    expect(calculateSecurityDeposit(cart, 999)).toEqual({ amount: 300, reason: 'TIER', packageAmount: null });
+    expect(calculateSecurityDeposit(cart, 4000)).toEqual({ amount: 900, reason: 'TIER', packageAmount: null });
+    expect(calculateSecurityDeposit(cart, 6001)).toEqual({ amount: 1200, reason: 'TIER', packageAmount: null });
+  });
+
+  it('a package on its own keeps its own deposit', () => {
+    const cart = makeCart({ selectedKits: [makeKit({ depositAmount: 900 })] });
+    expect(calculateSecurityDeposit(cart, 6100)).toEqual({ amount: 900, reason: 'PACKAGE', packageAmount: 900 });
+  });
+
+  it('a package whose extra gear pushes the total over a tier pays the tier', () => {
+    const kit = makeKit({ depositAmount: 500 });
+    const cart = makeCart({ selectedKits: [kit], packageAddOns: { [kit.id]: [gear] } });
+    expect(calculateSecurityDeposit(cart, 7000)).toEqual({ amount: 1200, reason: 'TIER', packageAmount: 500 });
+  });
+
+  it('is 0 with nothing selected', () => {
+    expect(calculateSecurityDeposit(makeCart(), 0).amount).toBe(0);
   });
 });
 

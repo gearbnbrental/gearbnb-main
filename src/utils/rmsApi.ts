@@ -371,11 +371,10 @@ export interface RmsBookingSubmission {
 
 /**
  * Confirmed against the actual RMS route (src/app/api/customer/bookings/route.ts,
- * createBookingFromCustomerPortal in src/server/bookings/service.ts): this is the complete
- * response. There is deliberately NO booking id field here — only bookingNumber. The booking's
- * internal id (needed for POST /deposit-proof) is only ever exposed via GET /api/customer/bookings
- * (see RmsMyBooking.bookingId below). Do not add a bookingId field here without re-confirming
- * against the live RMS response — a prior version of this type assumed one existed and it did not.
+ * createBookingFromCustomerPortal in src/server/bookings/service.ts). The live RMS returns no
+ * booking id here, only bookingNumber; the internal id (needed for POST /deposit-proof) comes from
+ * GET /api/customer/bookings (RmsMyBooking.bookingId). The tiered-deposit RMS change adds an
+ * optional `bookingId` below; never assume it is present.
  */
 export interface RmsBookingResult {
   bookingNumber: string;
@@ -385,6 +384,18 @@ export interface RmsBookingResult {
   /** What the RMS actually discounted this booking by (0 when nothing). Optional defensively: an
    *  older RMS response won't carry it. */
   discountCentavos?: number;
+  /** The tiered-deposit RMS (see docs/handoff in the RMS repo) also returns these, so the
+   *  confirmation screen can take the deposit straight away. All optional: an RMS without that
+   *  change returns none of them, and the screen falls back to "upload proof in My Bookings".
+   *  bookingId: needed for POST /deposit-proof. */
+  bookingId?: string;
+  /** ISO time the booking is cancelled if the deposit is still unpaid (24h after checkout). */
+  depositDueAt?: string | null;
+  /** The RMS's own clock when it answered, so the countdown is right even on a phone with the
+   *  wrong time (see utils/depositCountdown.ts). */
+  serverNow?: string;
+  /** PACKAGE: the package's own deposit. TIER: the tier for the rental total. */
+  depositReason?: 'PACKAGE' | 'TIER';
 }
 
 export function submitBookingToRms(payload: RmsBookingSubmission, idempotencyKey: string) {
@@ -587,6 +598,11 @@ export interface RmsMyBooking {
   rentalFeeCentavos: number;
   depositCentavos: number;
   securityDeposit: RmsSecurityDeposit;
+  /** When this booking is cancelled if the deposit is still unpaid (24h after checkout). null or
+   *  absent for older bookings and an older RMS: no countdown is shown for those. */
+  depositDueAt?: string | null;
+  /** The RMS's clock when it answered (see RmsBookingResult.serverNow). */
+  serverNow?: string;
   /** Optional defensively — older RMS responses (or a booking predating this field) won't have
    * it; the UI must not crash when it's absent, just omit the rental-fee section for that card. */
   rentalFee?: RmsRentalFee;
@@ -1161,6 +1177,10 @@ export interface RmsPromoQuote {
   discountCentavos: number;
   totalAfterDiscountCentavos: number;
   remainingToQualifyCentavos: number | null;
+  /** The RMS's own deposit for this basket (tiered-deposit RMS only; absent on an older RMS, in
+   *  which case checkout shows the site's own estimate). */
+  depositCentavos?: number;
+  depositReason?: 'PACKAGE' | 'TIER';
 }
 
 /** The live promo, if any. Public; the customer's token is attached automatically when signed in,

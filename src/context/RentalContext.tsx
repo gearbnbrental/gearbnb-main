@@ -27,6 +27,7 @@ import { expandGearKinds } from '../utils/gearVariants';
 import { reconcileGearLine } from '../utils/gearReconcile';
 import { dropStaleTripDates } from '../utils/duration';
 import { isSlotFilled } from '../utils/savedDocuments';
+import { requiredDeposit, type DepositReason } from '../utils/securityDeposit';
 import { useCatalog } from './useCatalog';
 import { useAuth } from './AuthContext';
 import { trackAddToCart } from '../utils/metaTracking';
@@ -1121,11 +1122,48 @@ export function calculateRentalDurationDays(tripDetails: Pick<TripDetails, 'star
   return Math.max(1, Math.round((end.getTime() - start.getTime()) / MS_PER_DAY));
 }
 
-/** Total refundable security deposit, due at checkout regardless of trip duration. */
+/** Package and legacy-item deposits added up: the deposit before the tier rule (see
+ *  calculateSecurityDeposit, which is what the cart and checkout show). */
 export function calculateDueToday(cart: CartState): number {
   const kitDeposits = cart.selectedKits.reduce((sum, kit) => sum + kit.depositAmount, 0);
   const itemDeposits = cart.selectedItems.reduce((sum, item) => sum + item.depositAmount, 0);
   return kitDeposits + itemDeposits;
+}
+
+export interface SecurityDepositEstimate {
+  /** Pesos. */
+  amount: number;
+  /** PACKAGE: the package's own deposit. TIER: the tier for the rental total. null: nothing to price. */
+  reason: DepositReason | null;
+  /** The package's own deposit (pesos) when a package is selected, so the tier can be explained
+   *  against it ("instead of the kit's ₱500"); null for Build Your Own. */
+  packageAmount: number | null;
+}
+
+/**
+ * The refundable security deposit for `cart` (already narrowed to what's checked), using the shared
+ * rule in utils/securityDeposit.ts: Build Your Own pays the tier for its rental total; a package
+ * pays its own deposit, or the tier when its extra gear pushes the total into a higher one.
+ * `rentalBeforePromo` is the rental fee in pesos before any promo (calculateDueBeforeStartByEntryDates).
+ */
+export function calculateSecurityDeposit(cart: CartState, rentalBeforePromo: number): SecurityDepositEstimate {
+  const rentalBeforePromoCentavos = Math.round(rentalBeforePromo * 100);
+  if (cart.selectedKits.length > 0) {
+    const packageAmount = cart.selectedKits.reduce((sum, kit) => sum + kit.depositAmount, 0);
+    const hasExtras = cart.selectedKits.some((kit) => (cart.packageAddOns[kit.id] ?? []).length > 0);
+    const { depositCentavos, reason } = requiredDeposit({
+      packageDepositCentavos: Math.round(packageAmount * 100),
+      hasExtras,
+      rentalBeforePromoCentavos,
+    });
+    return { amount: depositCentavos / 100, reason, packageAmount };
+  }
+  if (cart.byoGears.length > 0) {
+    const { depositCentavos, reason } = requiredDeposit({ packageDepositCentavos: null, hasExtras: false, rentalBeforePromoCentavos });
+    return { amount: depositCentavos / 100, reason, packageAmount: null };
+  }
+  // Legacy individual items (blocked at checkout) keep their own per-item deposits.
+  return { amount: calculateDueToday(cart), reason: null, packageAmount: null };
 }
 
 /** Total one-time fee for every selected Path A kit add-on across all selected kits. */
@@ -1358,7 +1396,10 @@ export function isVerificationComplete(docs: VerificationDocs, isByoBooking: boo
 
 interface RentalTotals {
   rentalDurationDays: number;
+  /** The security deposit, in pesos (see calculateSecurityDeposit). */
   dueToday: number;
+  /** Why the deposit is that amount, for the one-line explanation under it. */
+  deposit: SecurityDepositEstimate;
   dueBeforeStart: number;
 }
 
@@ -1479,10 +1520,13 @@ export function RentalProvider({ children }: { children: ReactNode }) {
       // later must never inflate the amount the customer is about to be asked to pay.
       const selectedCart = filterCartToSelection(cart);
       const { dates } = selectionDates(cart);
+      const dueBeforeStart = calculateDueBeforeStartByEntryDates(selectedCart);
+      const deposit = calculateSecurityDeposit(selectedCart, dueBeforeStart);
       return {
         rentalDurationDays: dates ? calculateRentalDurationDays({ ...cart.tripDetails, ...dates }) : 0,
-        dueToday: calculateDueToday(selectedCart),
-        dueBeforeStart: calculateDueBeforeStartByEntryDates(selectedCart),
+        dueToday: deposit.amount,
+        deposit,
+        dueBeforeStart,
       };
     },
     [cart],

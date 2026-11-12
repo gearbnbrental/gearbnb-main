@@ -91,8 +91,8 @@ const PROCESS_STEPS: ProcessStep[] = [
     icon: <CalendarCheckIcon className="h-5 w-5" />,
   },
   {
-    title: 'Admin Review & Deposit',
-    description: 'Receive confirmation upon document approval and pay the security deposit to secure your booking.',
+    title: 'Deposit & Admin Review',
+    description: 'Pay the refundable security deposit within 24 hours while we review your documents. Your gear is reserved once you are approved.',
     icon: <ReceiptIcon className="h-5 w-5" />,
   },
   {

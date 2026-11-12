@@ -53,7 +53,7 @@ function buildFaqEntries(packageName: string, depositAmount: number): FaqEntry[]
     ID_VERIFICATION_FAQ,
     {
       question: 'When do I pay the security deposit?',
-      answer: `The refundable ${formatCurrency(depositAmount)} security deposit is due once your booking is confirmed, separate from the rental fee itself. If you add extras on top of the package, the deposit may vary depending on your add-ons. In most cases it stays the same unless the order is big.`,
+      answer: `The refundable ${formatCurrency(depositAmount)} security deposit is due within 24 hours of checking out, separate from the rental fee itself. If add-ons bring your rental total above ₱6,000 (or from ₱4,000 to ₱6,000), the deposit becomes ₱1,200 (or ₱900) when that is higher than the package's own deposit.`,
     },
   ];
 }

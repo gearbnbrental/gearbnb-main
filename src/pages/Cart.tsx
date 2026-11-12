@@ -190,7 +190,6 @@ export default function Cart() {
   const selectedCart = filterCartToSelection(cart);
   const hasCheckedForCheckout =
     selectedCart.selectedKits.length > 0 || selectedCart.selectedItems.length > 0 || selectedCart.byoGears.length > 0;
-  const isByoOnly = selectedCart.byoGears.length > 0 && selectedCart.selectedKits.length === 0;
   // Stops the customer HERE, before they fill in trip details and upload documents, when what's
   // checked can't go through as one booking (e.g. a Package and Build Your Own together) — the
   // same rule checkout enforces at the end (see checkoutBlocker).
@@ -550,7 +549,7 @@ export default function Cart() {
             </span>
             {hasCheckedForCheckout ? (
               <span className="text-sm font-semibold text-ink">
-                Deposit {isByoOnly ? 'To Be Determined' : formatCurrency(totals.dueToday)}
+                Deposit {formatCurrency(totals.dueToday)}
                 <span className="mx-1.5 text-ink-faint">&bull;</span>
                 <BarRentalFee normalPesos={totals.dueBeforeStart} state={basketPromo} />
               </span>

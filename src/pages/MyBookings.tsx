@@ -35,6 +35,8 @@ import BookingDiscountSummary from '../components/promo/BookingDiscountSummary';
 // ("₱5,257.25"); identical to formatCurrency for every whole-peso amount.
 import { formatCentavos } from '../utils/promo';
 import { BUSINESS_TIME_ZONE } from '../utils/duration';
+import { formatDeadline } from '../utils/clockTime';
+import DepositCountdown from '../components/checkout/DepositCountdown';
 import { MESSENGER_URL } from '../config/social';
 import { cleanGearName } from '../utils/gearName';
 
@@ -322,6 +324,18 @@ interface NextStep {
   cta?: { label: string; targetId: string };
 }
 
+/** Still waiting for the deposit, with a deadline to pay it by: no payment verified and no proof
+ *  waiting for review, on a booking that isn't reserved yet. Older bookings have no deadline. */
+export function needsDepositBeforeDeadline(booking: RmsMyBooking): boolean {
+  return (
+    Boolean(booking.depositDueAt) &&
+    ['PENDING_REVIEW', 'AWAITING_CUSTOMER_RESPONSE', 'AWAITING_PAYMENT'].includes(booking.status) &&
+    !booking.securityDeposit.verified &&
+    booking.securityDeposit.proofStatus !== 'PENDING_REVIEW' &&
+    booking.securityDeposit.requiredCentavos > 0
+  );
+}
+
 export function getNextStep(booking: RmsMyBooking): NextStep {
   const detailsTargetId = `booking-details-${booking.bookingId}`;
   // Deposit and rental-fee CTAs land on their own section (payment instructions + proof upload),
@@ -368,6 +382,15 @@ export function getNextStep(booking: RmsMyBooking): NextStep {
   switch (booking.status) {
     case 'PENDING_REVIEW':
     case 'AWAITING_CUSTOMER_RESPONSE':
+      // Bookings with a deposit deadline are paid during review, so the gear can be reserved as
+      // soon as the documents are approved (and the booking isn't cancelled at the deadline).
+      if (needsDepositBeforeDeadline(booking)) {
+        return {
+          tone: 'warning',
+          message: `We're reviewing your documents. In the meantime, pay your security deposit by ${formatDeadline(new Date(booking.depositDueAt!))} so we can reserve your gear as soon as your booking is approved.`,
+          cta: { label: 'Pay security deposit', targetId: depositTargetId },
+        };
+      }
       return { tone: 'info', message: "We're reviewing your verification documents, we'll notify you once they're approved." };
     case 'PENDING_FOR_INSPECTION': {
       // Driven by RMS's own returnCondition (see getReturnOutcome) — matches getBookingStatusLabel.
@@ -405,7 +428,9 @@ export function getNextStep(booking: RmsMyBooking): NextStep {
       }
       return {
         tone: 'warning',
-        message: 'Pay your security deposit to reserve your gear.',
+        message: booking.depositDueAt
+          ? `Your booking is approved. Pay your security deposit by ${formatDeadline(new Date(booking.depositDueAt))} to reserve your gear.`
+          : 'Pay your security deposit to reserve your gear.',
         cta: { label: 'Pay security deposit', targetId: depositTargetId },
       };
     }
@@ -1560,7 +1585,16 @@ function BookingCard({
             {/* Anchor for the "Pay security deposit" / "Resubmit deposit proof" buttons: lands on the
                 deposit amount, payment instructions and proof upload. scroll-mt clears the sticky
                 site header. */}
-            <div id={`security-deposit-${booking.bookingId}`} className="scroll-mt-24">
+            <div id={`security-deposit-${booking.bookingId}`} className="flex scroll-mt-24 flex-col gap-3">
+              {booking.depositDueAt &&
+                ['PENDING_REVIEW', 'AWAITING_CUSTOMER_RESPONSE', 'AWAITING_PAYMENT'].includes(booking.status) && (
+                  <DepositCountdown
+                    depositDueAt={booking.depositDueAt}
+                    serverNow={booking.serverNow}
+                    proofStatus={booking.securityDeposit.proofStatus}
+                    verified={booking.securityDeposit.verified}
+                  />
+                )}
               <DepositProofUpload
                 bookingId={booking.bookingId}
                 requiredCentavos={booking.securityDeposit.requiredCentavos}

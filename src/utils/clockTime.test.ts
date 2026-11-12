@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeTime } from './clockTime';
+import { describeTime, formatDeadline } from './clockTime';
 
 describe('describeTime', () => {
   it.each([
@@ -16,5 +16,12 @@ describe('describeTime', () => {
     ['23:45', '11:45 at night'],
   ])('%s -> %s', (time, words) => {
     expect(describeTime(time)).toBe(words);
+  });
+});
+
+describe('formatDeadline', () => {
+  it('shows Manila time on the 24-hour clock with the time in words', () => {
+    expect(formatDeadline(new Date('2026-11-13T07:00:00Z'))).toBe('Friday, November 13, 2026, 15:00 (3:00 in the afternoon)');
+    expect(formatDeadline(new Date('2026-11-13T16:00:00Z'))).toBe('Saturday, November 14, 2026, 00:00 (12:00 midnight)');
   });
 });

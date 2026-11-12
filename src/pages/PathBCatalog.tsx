@@ -1197,11 +1197,7 @@ export default function PathBCatalog() {
               )}
             </span>
             <span className="text-sm font-semibold text-ink">
-              {cart.byoGears.length > 0 && cart.selectedKits.length === 0 ? (
-                <>Deposit: To be determined by GearBnB</>
-              ) : (
-                <>Deposit {formatCurrency(totals.dueToday)}</>
-              )}
+              Deposit {formatCurrency(totals.dueToday)}
               <span className="mx-1.5 text-ink-faint">&bull;</span>
               <BarRentalFee normalPesos={totals.dueBeforeStart} state={basketPromo} />
             </span>

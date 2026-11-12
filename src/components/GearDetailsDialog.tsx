@@ -54,7 +54,7 @@ function buildFaqEntries(kind: BookableGearKind): FaqEntry[] {
   entries.push({
     question: 'When do I pay the security deposit?',
     answer:
-      'The refundable security deposit is due once your booking is confirmed, separate from the rental fee itself, the exact split is shown at checkout before you pay anything.',
+      'Right after you check out, separate from the rental fee. It depends on your rental total: ₱300 below ₱1,000, ₱500 up to ₱4,000, ₱900 from ₱4,000 to ₱6,000, and ₱1,200 above ₱6,000. Pay it within 24 hours of checking out or the booking is cancelled and the gear released. It is fully refundable.',
   });
   return entries;
 }

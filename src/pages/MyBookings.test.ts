@@ -13,6 +13,7 @@ import {
   getReturnOutcome,
   hasOutstandingPayment,
   isTerminalBooking,
+  needsDepositBeforeDeadline,
 } from './MyBookings';
 import { RMS_NOT_CONFIGURED_CODE, RmsApiError, type RmsAdditionalCharge, type RmsMyBooking, type RmsRentalFee } from '../utils/rmsApi';
 
@@ -435,5 +436,43 @@ describe('early pickup display', () => {
   it('describes a pickup days early in days and hours', () => {
     expect(describePickupDifference(-16407)).toBe('11 days 9 hours earlier than booked');
     expect(describePickupDifference(1440)).toBe('1 day later than booked');
+  });
+});
+
+describe('deposit deadline during review', () => {
+  const due = '2026-11-13T07:00:00.000Z';
+
+  it('asks for the deposit while documents are under review, with the deadline', () => {
+    const step = getNextStep(makeBooking({ status: 'PENDING_REVIEW', depositDueAt: due }));
+    expect(step.tone).toBe('warning');
+    expect(step.message).toContain('pay your security deposit by Friday, November 13, 2026, 15:00 (3:00 in the afternoon)');
+    expect(step.cta?.label).toBe('Pay security deposit');
+  });
+
+  it('keeps the plain review message once a proof is waiting, or for an older booking without a deadline', () => {
+    const proofWaiting = makeBooking({
+      status: 'PENDING_REVIEW',
+      depositDueAt: due,
+      securityDeposit: { ...makeBooking().securityDeposit, proofStatus: 'PENDING_REVIEW' },
+    });
+    expect(getNextStep(proofWaiting).tone).toBe('info');
+    expect(getNextStep(makeBooking({ status: 'PENDING_REVIEW' })).tone).toBe('info');
+  });
+
+  it('needs the deposit only before it is verified and while the booking is not reserved', () => {
+    expect(needsDepositBeforeDeadline(makeBooking({ status: 'AWAITING_PAYMENT', depositDueAt: due }))).toBe(true);
+    expect(needsDepositBeforeDeadline(makeBooking({ status: 'RESERVED', depositDueAt: due }))).toBe(false);
+    const paid = makeBooking({
+      status: 'PENDING_REVIEW',
+      depositDueAt: due,
+      securityDeposit: { ...makeBooking().securityDeposit, verified: true, verifiedCentavos: 50000 },
+    });
+    expect(needsDepositBeforeDeadline(paid)).toBe(false);
+  });
+
+  it('quotes the deadline once approved and still unpaid', () => {
+    expect(getNextStep(makeBooking({ status: 'AWAITING_PAYMENT', depositDueAt: due })).message).toBe(
+      'Your booking is approved. Pay your security deposit by Friday, November 13, 2026, 15:00 (3:00 in the afternoon) to reserve your gear.',
+    );
   });
 });

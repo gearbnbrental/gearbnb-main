@@ -43,6 +43,7 @@ import { formatCentavos, type BasketPromoState } from '../../utils/promo';
 import { decideCheckoutSaving } from '../../utils/promoDisplay';
 import { PromoRentalFeeRows } from '../promo/PromoTotals';
 import CheckoutSavingLine from '../promo/CheckoutSavingLine';
+import { depositExplanation } from '../../utils/securityDeposit';
 
 /**
  * `crypto.randomUUID()` is restricted to secure contexts (HTTPS, or localhost) by every major
@@ -69,9 +70,7 @@ interface SummaryCardProps {
   variant: 'primary' | 'secondary';
   eyebrow: string;
   title: string;
-  /** Null renders "To be determined" instead of a peso amount — for the Build Your Own deposit,
-   * whose real amount doesn't exist yet (see requirement 13/20). */
-  amount: number | null;
+  amount: number;
   description: string;
   /** Keep centavos ("₱1,062.50") instead of rounding to whole pesos — only for an amount a
    *  percent discount made non-whole. Off by default, so the card reads exactly as before. */
@@ -101,8 +100,8 @@ function SummaryCard({ variant, eyebrow, title, amount, description, exactCentav
       <span className={isPrimary ? 'text-sm font-medium text-white' : 'text-sm font-medium text-ink-muted'}>
         {title}
       </span>
-      <span className={amount === null ? 'text-xl font-bold tracking-tight' : 'text-3xl font-bold tracking-tight'}>
-        {amount === null ? 'To Be Determined' : exactCentavos ? formatCentavos(Math.round(amount * 100)) : formatCurrency(amount)}
+      <span className="text-3xl font-bold tracking-tight">
+        {exactCentavos ? formatCentavos(Math.round(amount * 100)) : formatCurrency(amount)}
       </span>
       <p className={isPrimary ? 'text-xs text-white' : 'text-xs text-ink-muted'}>{description}</p>
     </div>
@@ -172,20 +171,8 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
 
   const hasPackage = selectedKits.length > 0;
   const hasByoGear = byoGears.length > 0;
-  // A pure-BYO cart never has a computed deposit — RMS starts every Build Your Own booking at
-  // ₱0 and an admin sets the real amount manually after review (see requirement 13's workflow).
-  // Showing "₱0" unqualified would read as "no deposit required," which isn't true.
+  // Build Your Own signs the BYO Rental Agreement instead of the package Terms (see below).
   const isByoOnly = hasByoGear && !hasPackage;
-  // Whether the selected package has any extra rentable inventory attached on top of it — the
-  // customer website never computes THIS deposit; a GearBnB staff member decides, after reviewing
-  // the specific add-ons, whether anything beyond the package's own deposit (shown below, already
-  // an RMS-authoritative figure) is required. Requiring `hasPackage` means this can never be true
-  // for a BYO-only cart, which already has its own separate "To Be Determined" story via
-  // `isByoOnly` above. Mirrors `hasAnyKitExtras`' own Object.values(...).some(...) pattern just
-  // above it — `packageAddOns` here is already `selectedCart.packageAddOns`, scoped by
-  // filterCartToSelection to only the checked selection, so this can never react to an unchecked
-  // kit's add-ons sitting elsewhere in the cart.
-  const hasPackageAddOns = hasPackage && Object.values(packageAddOns).some((gears) => gears.length > 0);
 
   const hasSelection = hasPackage || hasByoGear || selectedItems.length > 0;
   const formattedStartDate = formatTripDate(tripDetails.startDate);
@@ -339,6 +326,18 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
         ? basketPromo
         : { kind: 'hidden' };
   const rentalFeeDue = Math.max(0, Math.round(totals.dueBeforeStart * 100) - displayedDiscountCentavos) / 100;
+
+  // The security deposit (utils/securityDeposit.ts): the RMS's own figure when its quote has one,
+  // otherwise the site's estimate from the same rule. The RMS sets the real amount at booking.
+  const quotedDeposit =
+    promoQuote.status === 'success' && promoQuote.quote.depositCentavos !== undefined ? promoQuote.quote : null;
+  const depositPesos = quotedDeposit ? (quotedDeposit.depositCentavos ?? 0) / 100 : totals.dueToday;
+  const depositNote = depositExplanation({
+    depositCentavos: Math.round(depositPesos * 100),
+    reason: quotedDeposit?.depositReason ?? totals.deposit.reason,
+    packageDepositCentavos: totals.deposit.packageAmount === null ? null : Math.round(totals.deposit.packageAmount * 100),
+    rentalBeforePromoCentavos: Math.round(totals.dueBeforeStart * 100),
+  });
 
   const [checkoutAvailability, setCheckoutAvailability] = useState<CheckoutAvailabilityState>({ status: 'idle' });
 
@@ -556,7 +555,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
           estimatedRentalFeeCentavos: Math.round(
             (getKitPrice(selectedKits[0], tripDetails) + calculatePackageAddOnsFee(selectedCart)) * 100,
           ),
-          estimatedDepositCentavos: Math.round(selectedKits[0].depositAmount * 100),
+          estimatedDepositCentavos: Math.round(depositPesos * 100),
           estimatedDiscountCentavos: displayedDiscountCentavos,
         }
       : {
@@ -583,10 +582,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
           estimatedRentalFeeCentavos: Math.round(
             (calculateByoGearsFee(selectedCart) + calculateByoAddOnsFee(selectedCart)) * 100,
           ),
-          // Build Your Own never computes or sends a deposit — see requirement 13. RMS itself
-          // always writes depositCentavos = 0 for a BYO booking regardless of what's sent here;
-          // an admin sets the real amount manually after review.
-          estimatedDepositCentavos: 0,
+          estimatedDepositCentavos: Math.round(depositPesos * 100),
           estimatedDiscountCentavos: displayedDiscountCentavos,
         };
 
@@ -691,15 +687,9 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
         <SummaryCard
           variant="primary"
           eyebrow="Due Today"
-          title={hasPackageAddOns ? 'Package Security Deposit' : 'Security Deposit Total'}
-          amount={isByoOnly ? null : totals.dueToday}
-          description={
-            isByoOnly
-              ? 'GearBnB will determine your security deposit after reviewing your Build Your Own selections.'
-              : hasPackageAddOns
-                ? 'Refundable deposit to lock in your reservation. Your final deposit isn’t set yet, see the notice below.'
-                : 'Refundable deposit to lock in your reservation.'
-          }
+          title="Security Deposit"
+          amount={depositPesos}
+          description={`${depositNote ? `${depositNote} ` : ''}Refundable. Pay within 24 hours of checking out to reserve your gear.`}
         />
         <SummaryCard
           variant="secondary"
@@ -841,39 +831,22 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
 
             <div className="mt-2 flex flex-col gap-2 border-t border-line pt-3 text-sm">
               <div className="flex items-center justify-between">
-                <span className="font-medium text-ink-muted">
-                  {hasPackageAddOns ? 'Package Security Deposit' : 'Security Deposit Subtotal'}
-                </span>
-                <span className="font-semibold text-ink">
-                  {isByoOnly ? 'To Be Determined' : formatCurrency(totals.dueToday)}
-                </span>
+                <span className="font-medium text-ink-muted">Security Deposit</span>
+                <span className="font-semibold text-ink">{formatCurrency(depositPesos)}</span>
               </div>
-              {/* Never a second real figure to add to the line above — "To Be Determined" is a
-                  status, not an amount, so there is nothing here for a customer (or this code) to
-                  add up. See hasPackageAddOns' own comment for why the customer website never
-                  computes this. */}
-              {hasPackageAddOns && (
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-ink-muted">Additional Add-on Deposit</span>
-                  <span className="font-semibold text-ink">To Be Determined</span>
-                </div>
-              )}
               <PromoRentalFeeRows normalPesos={totals.dueBeforeStart} state={checkoutPromoState} />
             </div>
 
-            {/* Visible here, before the submit button below, so the customer reads this before —
-                never after — confirming the booking. Amber (not red) — this isn't an error the
-                customer needs to fix, just a heads-up about what happens next. */}
-            {hasPackageAddOns && (
-              <p
-                role="note"
-                className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800"
-              >
-                <span className="font-semibold">Security deposit is not yet final.</span> Additional
-                deposit requirements for selected add-ons will be reviewed and confirmed by GearBnB
-                staff after your booking is submitted.
-              </p>
-            )}
+            {/* Read before confirming, never after: why both payments matter and what happens if
+                the deposit isn't paid. Amber, not red: a heads-up, not an error to fix. */}
+            <p role="note" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+              <span className="font-semibold">
+                We can only reserve and prepare your gear once your security deposit and rental payment are settled.
+              </span>{' '}
+              This keeps every booking on track, from preparing your gear to handing it over at pickup. Pay the
+              security deposit within 24 hours of checking out, or your booking is cancelled automatically and the
+              gear released. You can pay right after you submit, while we review your documents.
+            </p>
           </>
         ) : (
           <p className="py-6 text-center text-sm text-ink-muted">
