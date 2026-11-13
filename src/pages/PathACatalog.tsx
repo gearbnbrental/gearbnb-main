@@ -18,7 +18,7 @@ import { QuantityStepper } from './PathBCatalog';
 import SocialIconLink from '../components/SocialIconLink';
 import { useAuth } from '../context/AuthContext';
 import { useCatalog } from '../context/useCatalog';
-import { byoGearKey, getGearKindPrice, useRental } from '../context/RentalContext';
+import { byoGearKey, cartForDates, entryDatesFor, getGearKindPrice, kitDatesKey, sameDates, useRental } from '../context/RentalContext';
 import type { BookableGearKind, BookableGearSelection, DateRange, DurationPresetId, PackageKit } from '../types/gearbnb';
 import { cartStockUses, subtractStock } from '../utils/packageStock';
 import { decidePackageCheck, type PackageDateStock } from '../utils/packageDateStock';
@@ -33,11 +33,23 @@ import {
   MAX_BOOKING_DATE,
   TODAY,
 } from '../utils/duration';
-import { formatCurrency } from '../utils/format';
+import { formatCurrency, formatTripDate } from '../utils/format';
 import { toRmsBrand, type RmsAvailabilityIssue, type RmsAvailabilityRequest, type RmsBookingGearLine } from '../utils/rmsApi';
 import { useAvailabilityCheck } from '../hooks/useAvailabilityCheck';
 import { cleanGearName } from '../utils/gearName';
+import { usePromo } from '../context/PromoContext';
+import { useBasketPromo } from '../hooks/useBasketPromo';
+import { BarPromoNote, BarRentalFee } from '../components/promo/PromoTotals';
+import ByoPromoProgress from '../components/promo/ByoPromoProgress';
+import OffBadge from '../components/promo/OffBadge';
+import { PROMO_COPY } from '../config/promoCopy';
+import { formatCentavos, formatPromoOffer, packageCardPromo, pesosToCentavos } from '../utils/promo';
+import { gearCardPromoNote, gearCardPromoSaving } from '../utils/promoDisplay';
+import YouSaveLine from '../components/promo/YouSaveLine';
+import GearPriceBlock from '../components/promo/GearPriceBlock';
+import { promoPickupAt } from '../utils/promoCart';
 import { describeAvailabilityIssue } from '../utils/availabilityIssue';
+import { useStickyBarRef } from '../utils/stickyBar';
 
 type PackageDuration = Extract<DurationPresetId, '48h' | '72h'>;
 
@@ -129,6 +141,13 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color }: Pac
   // Supabase row id — matching exactly what booking submission would send for this same selection.
   const effectivePackageCode = selectedEdition?.packageNumber ?? kit.packageNumber;
   const isSelected = cart.selectedKits.some((selected) => selected.id === effectiveId);
+  // In the cart for OTHER dates than the ones being browsed: still removable here, but labelled
+  // with its own dates so it's clear it won't follow the date picker (see CartState.entryDates).
+  const kitDates = entryDatesFor(cart, kitDatesKey(effectiveId));
+  const inCartForOtherDates =
+    isSelected && kitDates.startDate && kitDates.returnDate && !sameDates(kitDates, cart.tripDetails)
+      ? `${formatTripDate(kitDates.startDate)} – ${formatTripDate(kitDates.returnDate)}`
+      : null;
   const selectedExtraIds = cart.kitExtras[effectiveId] ?? [];
   // Extra inventory the customer attached to THIS package — sent alongside packageCode so the
   // RMS checks the package and every extra item against the same dates in one authoritative call
@@ -154,7 +173,7 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color }: Pac
   // first selected kit only, and renders nothing on a failed or empty gear catalog — so the hint
   // can never point at a section that isn't there.
   const showAddOnsHint =
-    cart.selectedKits[0]?.id === effectiveId &&
+    cartForDates(cart, cart.tripDetails).selectedKits[0]?.id === effectiveId &&
     (gearCatalogState === 'loading' || (gearCatalogState === 'ready' && gearKinds.length > 0));
 
   const displayImage = selectedEdition?.imageUrl || kit.imageUrl;
@@ -189,6 +208,17 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color }: Pac
   // here; it never falls back to guessed content.
   const { lead, bestFor } = splitBestForLine(effectiveDescription);
   const price = selectedDuration ? effectivePricing[selectedDuration] : null;
+  // The promo's view of this card's own price, for the chosen duration: a struck-through normal
+  // price next to the discounted one only when a pickup date is chosen and every promo condition
+  // holds (see packageCardPromo); otherwise at most a small neutral tag.
+  const { promo, eligibleForYou, nowMs } = usePromo();
+  const cardPromo = packageCardPromo(
+    promo,
+    eligibleForYou,
+    price === null ? null : pesosToCentavos(price),
+    dateRange ? promoPickupAt(cart.tripDetails) : null,
+    nowMs,
+  );
 
   // Real, date-scoped availability — checked against the RMS's actual inventory/assignment data,
   // never computed locally. Each card owns its own useAvailabilityCheck instance; the shared
@@ -307,7 +337,7 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color }: Pac
             >
               <img
                 src={displayImage}
-                alt={kit.name}
+                alt={`${kit.name}: camping package with tent, sleeping gear and seating`}
                 onError={() => setImageFailed(true)}
                 className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
               />
@@ -343,11 +373,15 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color }: Pac
           />
         )}
 
-        <div className="flex items-start justify-between gap-1.5 sm:gap-2">
+        {/* Phone: the name gets the full width and the pills sit under it (beside it they squeezed
+            the name to "The Base Camper..."); from `sm` up, side by side as before. */}
+        <div className="flex flex-col items-start gap-1 sm:flex-row sm:justify-between sm:gap-2">
           <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-ink sm:text-base">{kit.name}</h3>
-          <div className="flex shrink-0 flex-col items-end gap-1">
-            {effectiveIsOutOfStock && (
-              <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700 dark:bg-red-500/10 dark:text-red-400 sm:px-2 sm:text-xs">
+          <div className="flex shrink-0 flex-row flex-wrap items-center gap-1 sm:flex-col sm:items-end">
+            {/* Red "Out of Stock" beside the name both when nothing is free right now and when the
+                RMS says the package isn't free for the dates the customer picked. */}
+            {(effectiveIsOutOfStock || availability.status === 'unavailable') && (
+              <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700 sm:px-2 sm:text-xs">
                 Out of Stock
               </span>
             )}
@@ -403,16 +437,47 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color }: Pac
       </div>
 
       <div className="mt-2.5 flex flex-col gap-2 sm:mt-5 sm:gap-3">
-        <div className="flex items-center justify-between border-t border-line-soft pt-2 sm:pt-3">
-          {/* This row is already side-by-side (price left, deposit right) at every width — unlike
-              the BYO gear card, there's no button sharing this row to squeeze against, so the
-              72h-upsell/extra-day-rate hints below only ever needed `min-w-0` to wrap safely, never
+        <div className="flex flex-col gap-2 border-t border-line-soft pt-2 sm:flex-row sm:items-center sm:justify-between sm:gap-0 sm:pt-3">
+          {/* Side by side (price left, deposit right) from `sm` up. Below `sm` the deposit gets its
+              own row under the price: in the 2-column phone grid a card is only ~150px wide, and
+              the price stack (crossed-off price, discounted price, "You save", promo tag) had the
+              deposit squeezed against it. The 72h-upsell/extra-day-rate hints below only need
+              `min-w-0` to wrap safely, never
               hiding on mobile. */}
-          <div className="min-w-0">
+          <div className="flex min-w-0 flex-col gap-1">
             <p className="text-[10px] uppercase tracking-wide text-ink-faint sm:text-xs">Package Price</p>
-            <p className="text-sm font-bold text-ink sm:text-lg">
-              {price !== null ? formatCurrency(price) : `${formatCurrency(effectivePricing['48h'])}–${formatCurrency(effectivePricing['72h'])}`}
-            </p>
+            {cardPromo?.kind === 'discounted' ? (
+              <>
+                {/* Desktop: all on one line. Phone: the crossed-off price takes its own line
+                    (basis-full) so the discounted price and the badge fit side by side. */}
+                <p className="flex flex-wrap items-baseline gap-x-1.5">
+                  <s className="basis-full text-xs font-medium text-ink-faint sm:basis-auto sm:text-sm">{formatCentavos(cardPromo.normalCentavos)}</s>
+                  <span className="text-sm font-bold text-ink sm:text-lg">{formatCentavos(cardPromo.nowCentavos)}</span>
+                  <OffBadge offer={formatPromoOffer(cardPromo.promo)} className="self-center" />
+                </p>
+                {/* No "(15%)" here: the "15% OFF" badge beside the price already says it. */}
+                <YouSaveLine
+                  centavos={cardPromo.normalCentavos - cardPromo.nowCentavos}
+                  percent={null}
+                  className="text-xs sm:text-sm"
+                />
+              </>
+            ) : (
+              <p className="text-sm font-bold text-ink sm:text-lg">
+                {price !== null ? formatCurrency(price) : `${formatCurrency(effectivePricing['48h'])}–${formatCurrency(effectivePricing['72h'])}`}
+              </p>
+            )}
+            {cardPromo?.kind === 'tag' && (
+              <p className="inline-flex flex-wrap self-start items-center gap-x-1.5 text-[11px] font-medium text-accent sm:text-xs">
+                {/* A rounded box (not a pill) below `sm`, so it can wrap onto two lines cleanly in a
+                    narrow phone card; the pill shape comes back once there's room. */}
+                <span className="rounded-md bg-brand-forest/10 px-1.5 py-0.5 leading-snug sm:rounded-full sm:px-2">
+                  {cardPromo.audience === 'everyone'
+                    ? PROMO_COPY.packageTagEveryone(formatPromoOffer(cardPromo.promo))
+                    : PROMO_COPY.packageTag(formatPromoOffer(cardPromo.promo))}
+                </span>
+              </p>
+            )}
             {selectedDuration === '48h' && !effectiveIsOutOfStock && (
               <p className="text-xs font-medium text-accent">
                 Add {formatCurrency(getSeventyTwoHourUpsellDelta(effectivePricing))} to rent for 72h instead
@@ -422,7 +487,7 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color }: Pac
               <p className="text-xs font-medium text-ink-muted">+{formatCurrency(effectiveExtraPerDayPrice)} per extra day</p>
             )}
           </div>
-          <div className="shrink-0 text-right">
+          <div className="flex shrink-0 items-baseline justify-between gap-2 border-t border-line-soft pt-2 sm:block sm:border-0 sm:pt-0 sm:text-right">
             <p className="text-[10px] uppercase tracking-wide text-ink-faint sm:text-xs">Deposit</p>
             <p className="text-xs font-semibold text-ink sm:text-sm">{formatCurrency(effectiveDepositAmount)}</p>
           </div>
@@ -437,12 +502,12 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color }: Pac
         {isSelected && availability.status === 'unavailable' && availability.issues.length > 0 && (
           <div
             role="alert"
-            className="flex flex-col gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] dark:border-amber-400/30 dark:bg-amber-400/10 sm:px-3 sm:py-2 sm:text-xs"
+            className="flex flex-col gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] sm:px-3 sm:py-2 sm:text-xs"
           >
-            <p className="font-semibold text-amber-800 dark:text-amber-300">
+            <p className="font-semibold text-amber-800">
               Not available for your selected dates
             </p>
-            <ul className="flex flex-col gap-0.5 text-amber-800/90 dark:text-amber-300/90">
+            <ul className="flex flex-col gap-0.5 text-amber-800/90">
               {availability.issues.map((issue) => (
                 <li key={issue.name} className="break-words">
                   {describeAvailabilityIssue(issue)}
@@ -450,7 +515,7 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color }: Pac
                 </li>
               ))}
             </ul>
-            <p className="text-amber-800/90 dark:text-amber-300/90">
+            <p className="text-amber-800/90">
               Adjust the quantity below, or change your dates before checking out.
             </p>
           </div>
@@ -470,13 +535,18 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color }: Pac
         ) : isSelected ? (
           // Already in the cart — removable regardless of what a later availability re-check says,
           // so a customer can never get stuck unable to remove a selection that just went stale.
-          <button
-            type="button"
-            onClick={handleRemove}
-            className={`${ACTION_SIZE_CLASS} border border-brand-forest bg-brand-forest/10 text-accent transition-colors hover:bg-brand-forest/15`}
-          >
-            Remove from Cart
-          </button>
+          <div className="flex flex-col gap-1">
+            {inCartForOtherDates && (
+              <p className="text-center text-[11px] font-medium text-ink-muted sm:text-xs">In your cart for {inCartForOtherDates}</p>
+            )}
+            <button
+              type="button"
+              onClick={handleRemove}
+              className={`${ACTION_SIZE_CLASS} border border-brand-forest bg-brand-forest/10 text-accent transition-colors hover:bg-brand-forest/15`}
+            >
+              Remove from Cart
+            </button>
+          </div>
         ) : availability.status === 'checking' ? (
           <span className={ACTION_CLASS} aria-busy>
             Checking availability…
@@ -598,12 +668,19 @@ function PackageAddOnCard({
   kind,
   quantity,
   price,
+  promoSaving,
+  promoNote,
   onQuantityChange,
 }: {
   kind: BookableGearKind;
   quantity: number;
   /** Null until the customer has picked a duration — shows the 48h–72h range instead of a total. */
   price: number | null;
+  /** What one unit saves once the promo applies (same rule as Build Your Own's gear cards); the
+   *  card then shows the normal price crossed off, the discounted price and "✓ You save". */
+  promoSaving: { centavos: number; percent: string | null } | null;
+  /** Same "15% off your order once it reaches ₱1,000" note Build Your Own shows on covered gear. */
+  promoNote: string | null;
   onQuantityChange: (next: number) => void;
 }) {
   const [imageFailed, setImageFailed] = useState(false);
@@ -676,18 +753,17 @@ function PackageAddOnCard({
         {/* Stacked below `lg` so the quantity control gets the full width of the details column
             instead of being squeezed beside the price; side by side once the card is a wide square tile. */}
         <div className="mt-auto flex flex-col items-start gap-2 pt-1 lg:flex-row lg:items-end lg:justify-between lg:pt-2">
-          <div className="min-w-0">
-            <p className="text-lg font-bold leading-tight text-accent">
-              {price !== null
-                ? formatCurrency(price)
-                : kind.pricing['48h'] === kind.pricing['72h']
-                  ? formatCurrency(kind.pricing['48h'])
-                  : `${formatCurrency(kind.pricing['48h'])}–${formatCurrency(kind.pricing['72h'])}`}
-            </p>
-            {quantity > 1 && price !== null && (
-              <p className="text-[11px] text-ink-muted">Subtotal {formatCurrency(price * quantity)}</p>
-            )}
-          </div>
+          {/* Price and subtotal keep this card's own sizes; only the promo lines share Build Your
+              Own's style. */}
+          <GearPriceBlock
+            pricing={kind.pricing}
+            price={price}
+            quantity={quantity}
+            promoSaving={promoSaving}
+            promoNote={promoNote}
+            priceClassName="text-lg font-bold leading-tight text-ink"
+            subtotalClassName="text-[11px] text-ink-muted"
+          />
           {kind.canSelect ? (
             // Capped at the RMS's own availableCount — a convenience only; the RMS independently
             // re-validates the requested quantity server-side at availability check and booking.
@@ -736,6 +812,7 @@ function PackageAddOnsSection({
   // Extras are counted for the customer's chosen dates when there are any, see useDateAwareGearKinds.
   const catalogGearKinds = useDateAwareGearKinds(stockWindow);
   const { cart, setPackageAddOnQuantity } = useRental();
+  const basketPromo = useBasketPromo();
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
@@ -751,7 +828,8 @@ function PackageAddOnsSection({
   // 0 is hidden unless it's already in the cart, so it can still be lowered. The availability call
   // each package card makes on every cart change stays the final say, for dates and anything this
   // local subtraction can't see.
-  const stockUses = useMemo(() => cartStockUses(kits, cart), [kits, cart]);
+  // Only what's in the cart for the dates being browsed uses up stock for those dates.
+  const stockUses = useMemo(() => cartStockUses(kits, cartForDates(cart, cart.tripDetails)), [kits, cart]);
   const { gearKinds, hiddenByPackage } = useMemo(() => {
     const adjusted = subtractStock(catalogGearKinds, stockUses);
     const kept: BookableGearKind[] = [];
@@ -950,6 +1028,8 @@ function PackageAddOnsSection({
                       kind={kind}
                       quantity={selectedQuantities.get(key) ?? 0}
                       price={hasDuration ? getGearKindPrice(kind, cart.tripDetails) : null}
+                      promoSaving={gearCardPromoSaving(basketPromo, kind.category, hasDuration ? getGearKindPrice(kind, cart.tripDetails) : null)}
+                      promoNote={gearCardPromoNote(basketPromo, kind.category)}
                       onQuantityChange={(next) => {
                         // Only an increase needs an account — lowering/removing is always allowed,
                         // matching every other cart mutation. RentalContext refuses the mutation
@@ -980,9 +1060,14 @@ function PackageAddOnsSection({
 }
 
 export default function PathACatalog() {
+  // Lets the floating corner buttons sit just above this page's sticky bar, whatever its height.
+  const stickyBarRef = useStickyBarRef();
   usePageMeta(PAGE_META.packages.title, PAGE_META.packages.description);
   const { kits, catalogState, retryCatalog, packageDetailsFailed } = useCatalog();
   const { cart, totals, updateTripDetails } = useRental();
+  // The package in the cart for the dates being browsed, if any — what the extras section attaches to.
+  const kitForTheseDates = cartForDates(cart, cart.tripDetails).selectedKits[0] ?? null;
+  const basketPromo = useBasketPromo();
   const [searchQuery, setSearchQuery] = useState('');
   // Free-text guest count, not a capacity dropdown — see the Group Size audit note below.
   const [guestCountInput, setGuestCountInput] = useState('');
@@ -1120,9 +1205,14 @@ export default function PathACatalog() {
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 p-4 sm:gap-6 sm:p-6">
         <BackLink to="/catalog" label="Back to Browse Gear" />
         <div className="flex flex-col gap-1">
-          <h1 className="font-serif text-lg font-semibold text-ink sm:text-xl">Choose a Package</h1>
+          <h1 className="font-serif text-lg font-semibold text-ink sm:text-xl">Choose a Camping Package</h1>
           <p className="text-sm text-ink-muted">
-            Ready-made kits, bundled and priced as a single unit. Deposits and rental terms follow our shared{' '}
+            Ready-made camping kits with tent, sleeping gear and seating, bundled and priced as one unit. Want to pick
+            each piece?{' '}
+            <Link to="/catalog/build-your-own" className="font-medium text-accent underline underline-offset-2">
+              Build your own setup
+            </Link>{' '}
+            instead. Deposits and rental terms follow our shared{' '}
             <Link to="/terms" className="font-medium text-accent underline underline-offset-2">
               Rental Agreement
             </Link>
@@ -1175,7 +1265,7 @@ export default function PathACatalog() {
                 aria-describedby="guest-count-hint"
                 className={`w-full rounded-xl border bg-surface p-3 text-sm text-ink shadow-sm outline-none transition-colors focus:ring-2 ${
                   guestCountError
-                    ? 'border-red-400 focus:border-red-500 focus:ring-red-500/20 dark:border-red-500'
+                    ? 'border-red-400 focus:border-red-500 focus:ring-red-500/20'
                     : 'border-line focus:border-brand-forest focus:ring-brand-forest/20'
                 }`}
               />
@@ -1304,6 +1394,10 @@ export default function PathACatalog() {
           </div>
         </div>
 
+        {/* Same sticky "unlock your discount" tracker as Build Your Own. A package (and any gear
+            added on top of it) counts toward the minimum. */}
+        <ByoPromoProgress state={basketPromo} />
+
         {catalogState === 'loading' && (
           <div className="grid grid-cols-2 animate-pulse gap-2.5 sm:gap-4 lg:grid-cols-3" aria-busy="true" aria-label="Loading package catalog">
             {Array.from({ length: 6 }, (_, index) => (
@@ -1320,14 +1414,14 @@ export default function PathACatalog() {
         )}
 
         {catalogState === 'error' && (
-          <div className="flex flex-col items-center gap-3 rounded-xl border border-red-300 bg-red-50 p-6 text-center dark:border-red-500/30 dark:bg-red-500/10">
-            <p className="text-sm text-red-600 dark:text-red-400">
+          <div className="flex flex-col items-center gap-3 rounded-xl border border-red-300 bg-red-50 p-6 text-center">
+            <p className="text-sm text-red-600">
               We couldn't load the package catalog right now. Please try again shortly.
             </p>
             <button
               type="button"
               onClick={retryCatalog}
-              className="rounded-lg border border-red-300 bg-surface px-4 py-2 text-sm font-medium text-red-700 shadow-sm transition-colors hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10"
+              className="rounded-lg border border-red-300 bg-surface px-4 py-2 text-sm font-medium text-red-700 shadow-sm transition-colors hover:bg-red-50"
             >
               Try Again
             </button>
@@ -1376,8 +1470,10 @@ export default function PathACatalog() {
         {/* Appears directly below the packages the moment one is actually selected — the customer
             never has to leave for Build Your Own to add an extra light/bed/stove. Attached to the
             first selected kit, matching the one-package-per-booking rule checkout enforces. */}
-        {cart.selectedKits.length > 0 && (
-          <PackageAddOnsSection kitId={cart.selectedKits[0].id} kitName={cart.selectedKits[0].name} stockWindow={stockWindow} />
+        {/* Extras are priced and stock-checked for the dates being browsed, so they attach only to a
+            package in the cart for those same dates (a package booked for other dates keeps its own). */}
+        {kitForTheseDates && (
+          <PackageAddOnsSection kitId={kitForTheseDates.id} kitName={kitForTheseDates.name} stockWindow={stockWindow} />
         )}
 
         {/* Contextual help right where indecision actually happens — after browsing every
@@ -1420,7 +1516,7 @@ export default function PathACatalog() {
         </div>
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur">
+      <div ref={stickyBarRef} className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-5 py-3 sm:px-6">
           <div className="flex flex-col">
             <span className="text-xs font-medium uppercase tracking-wide text-ink-faint">
@@ -1429,8 +1525,9 @@ export default function PathACatalog() {
             <span className="text-sm font-semibold text-ink">
               Deposit {formatCurrency(totals.dueToday)}
               <span className="mx-1.5 text-ink-faint">&bull;</span>
-              Rental Fee {formatCurrency(totals.dueBeforeStart)}
+              <BarRentalFee normalPesos={totals.dueBeforeStart} state={basketPromo} />
             </span>
+            <BarPromoNote state={basketPromo} />
           </div>
           <Link
             to="/cart"

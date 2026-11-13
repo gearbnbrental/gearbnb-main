@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   byoGearKey,
+  byoLineKeyOf,
   calculateDueBeforeStart,
+  calculateDueBeforeStartByEntryDates,
+  cartForDates,
+  kitDatesKey,
+  selectionDates,
   calculateDueToday,
+  calculateSecurityDeposit,
   calculateItemExtrasFee,
   calculateKitExtrasFee,
   calculateRentalDurationDays,
@@ -91,6 +97,7 @@ function makeVerificationDocs(overrides: Partial<VerificationDocs> = {}): Verifi
 function makeCart(overrides: Partial<CartState> = {}): CartState {
   return {
     selectedKits: [],
+    entryDates: {},
     kitExtras: {},
     packageAddOns: {},
     selectedItems: [],
@@ -248,6 +255,45 @@ describe('duration tier selection', () => {
   it('falls back to the 48h tier when no dates are set', () => {
     expect(getKitPrice(kit, makeTripDetails())).toBe(2490);
     expect(getItemPrice(item, makeTripDetails())).toBe(180);
+  });
+});
+
+describe('calculateSecurityDeposit', () => {
+  const gear: BookableGearSelection = {
+    category: 'Tent',
+    brand: 'Coleman',
+    model: 'Dome',
+    name: 'Coleman Dome Tent',
+    pricing: { '48h': 300, '72h': 400 },
+    extraPerDayPrice: 50,
+    quantity: 1,
+    availableCount: 3,
+    canSelect: true,
+    imageUrl: null,
+    freeAccessories: [],
+    compatibleAddOns: [],
+  };
+
+  it('Build Your Own pays the tier for its rental total', () => {
+    const cart = makeCart({ byoGears: [gear] });
+    expect(calculateSecurityDeposit(cart, 999)).toEqual({ amount: 300, reason: 'TIER', packageAmount: null });
+    expect(calculateSecurityDeposit(cart, 4000)).toEqual({ amount: 900, reason: 'TIER', packageAmount: null });
+    expect(calculateSecurityDeposit(cart, 6001)).toEqual({ amount: 1200, reason: 'TIER', packageAmount: null });
+  });
+
+  it('a package on its own keeps its own deposit', () => {
+    const cart = makeCart({ selectedKits: [makeKit({ depositAmount: 900 })] });
+    expect(calculateSecurityDeposit(cart, 6100)).toEqual({ amount: 900, reason: 'PACKAGE', packageAmount: 900 });
+  });
+
+  it('a package whose extra gear pushes the total over a tier pays the tier', () => {
+    const kit = makeKit({ depositAmount: 500 });
+    const cart = makeCart({ selectedKits: [kit], packageAddOns: { [kit.id]: [gear] } });
+    expect(calculateSecurityDeposit(cart, 7000)).toEqual({ amount: 1200, reason: 'TIER', packageAmount: 500 });
+  });
+
+  it('is 0 with nothing selected', () => {
+    expect(calculateSecurityDeposit(makeCart(), 0).amount).toBe(0);
   });
 });
 
@@ -415,12 +461,39 @@ describe('isVerificationComplete', () => {
     expect(isVerificationComplete(stillUploading, false)).toBe(false);
   });
 
+  it('passes when a slot uses a document saved from an earlier booking (nothing uploaded for it)', () => {
+    const docs = makeVerificationDocs();
+    const saved = {
+      ...docs,
+      documents: {
+        ...docs.documents,
+        idType1: {
+          name: 'Saved document',
+          size: 0,
+          type: '',
+          storagePath: null,
+          savedDocument: { uploadedAt: '2026-10-01T00:00:00.000Z', verifiedAt: '2026-10-02T00:00:00.000Z', expiresAt: '2026-12-30T00:00:00.000Z', fromBookingNumber: 'GB-2026-1001-01' },
+        },
+      },
+    };
+    expect(isVerificationComplete(saved, false)).toBe(true);
+  });
+
   it('fails when terms are not accepted', () => {
     expect(isVerificationComplete(makeVerificationDocs({ termsAccepted: false }), false)).toBe(false);
   });
 
-  it('fails when the section has not been confirmed', () => {
-    expect(isVerificationComplete(makeVerificationDocs({ confirmed: false }), false)).toBe(false);
+  it('is complete without a separate save press once everything is in', () => {
+    expect(isVerificationComplete(makeVerificationDocs({ confirmed: false }), false)).toBe(true);
+  });
+
+  it('counts saved documents (no new upload) as filled slots', () => {
+    const saved = { name: 'Saved', size: 0, type: '', storagePath: null, savedDocument: { uploadedAt: '2026-01-01', verifiedAt: '2026-01-02', expiresAt: '2027-01-01', fromBookingNumber: 'GB-1' } };
+    const docs = makeVerificationDocs({
+      confirmed: false,
+      documents: { idType1: saved, idType2: saved, verificationVideo: saved, proofOfBilling: saved },
+    });
+    expect(isVerificationComplete(docs, false)).toBe(true);
   });
 
   it('accepts any file type in a slot — the gate is artifact-agnostic', () => {
@@ -445,5 +518,80 @@ describe('isVerificationComplete', () => {
 
   it('passes for a BYO booking once byoAgreementAccepted is also true', () => {
     expect(isVerificationComplete(makeVerificationDocs({ byoAgreementAccepted: true }), true)).toBe(true);
+  });
+});
+
+describe('per-entry rental dates', () => {
+  const weekendA = { startDate: '2099-10-22', returnDate: '2099-10-24' }; // 2 days -> 48h tier
+  const weekendB = { startDate: '2099-10-30', returnDate: '2099-11-02' }; // 3 days -> 72h tier
+  const kit = makeKit({ id: 'kit-1', pricing: { '48h': 2000, '72h': 2600 } });
+  const tentKind: BookableGearSelection = {
+    category: 'Tent',
+    brand: 'Coleman',
+    model: 'Dome',
+    name: 'Coleman Dome Tent',
+    pricing: { '48h': 300, '72h': 400 },
+    extraPerDayPrice: 50,
+    quantity: 2,
+    availableCount: 3,
+    canSelect: true,
+    imageUrl: null,
+    freeAccessories: [],
+    compatibleAddOns: [],
+  };
+  const tentA: BookableGearSelection = { ...tentKind, ...weekendA };
+  const tentB: BookableGearSelection = { ...tentKind, quantity: 1, ...weekendB };
+  const chairA: BookableGearSelection = { ...tentKind, category: 'Chair', brand: 'Naturehike', model: 'Moon', name: 'Moon Chair', pricing: { '48h': 100, '72h': 150 }, quantity: 1, ...weekendA };
+
+  it('gives the same gear on different dates its own cart line', () => {
+    expect(byoLineKeyOf(tentA)).not.toBe(byoLineKeyOf(tentB));
+    expect(byoLineKeyOf(tentA).startsWith(byoGearKey(tentKind))).toBe(true);
+    // A line with no dates keeps the plain gear key (what every saved cart used before).
+    expect(byoLineKeyOf(tentKind)).toBe(byoGearKey(tentKind));
+  });
+
+  it('prices each entry for its own dates, not the dates being browsed', () => {
+    const cart = makeCart({
+      selectedKits: [kit],
+      byoGears: [tentA, tentB],
+      entryDates: { [kitDatesKey('kit-1')]: weekendA },
+      // Browsing some other dates entirely must not change any price.
+      tripDetails: makeTripDetails({ startDate: '2099-12-01', returnDate: '2099-12-05' }),
+    });
+    // Package for 2 days (2000) + two tents for 2 days (2 x 300) + the same tent for 3 days (400).
+    expect(calculateDueBeforeStartByEntryDates(cart)).toBe(2000 + 600 + 400);
+  });
+
+  it('finds the one date range shared by what is checked, or flags mixed dates', () => {
+    const selection = (keys: string[]) => ({ kitIds: [], itemIds: [], byoGearKeys: keys, packageAddOnKeys: {}, byoAddOnKeys: {} });
+    const cart = makeCart({ byoGears: [tentA, tentB, chairA] });
+
+    const sameWeekend = { ...cart, checkoutSelection: selection([byoLineKeyOf(tentA), byoLineKeyOf(chairA)]) };
+    expect(selectionDates(sameWeekend)).toEqual({ dates: weekendA, mixed: false, missing: false });
+
+    const both = { ...cart, checkoutSelection: selection([byoLineKeyOf(tentA), byoLineKeyOf(tentB)]) };
+    expect(selectionDates(both)).toMatchObject({ dates: null, mixed: true });
+
+    const onlyB = { ...cart, checkoutSelection: selection([byoLineKeyOf(tentB)]) };
+    expect(selectionDates(onlyB).dates).toEqual(weekendB);
+
+    const undated = makeCart({ byoGears: [tentKind], checkoutSelection: selection([byoGearKey(tentKind)]) });
+    expect(selectionDates(undated)).toMatchObject({ dates: null, missing: true });
+  });
+
+  it('keeps only the entries for the dates being browsed', () => {
+    const cart = makeCart({
+      selectedKits: [kit],
+      byoGears: [tentA, tentB, chairA],
+      byoAddOns: { [byoLineKeyOf(tentA)]: [], [byoLineKeyOf(tentB)]: [] },
+      entryDates: { [kitDatesKey('kit-1')]: weekendA },
+    });
+    const forA = cartForDates(cart, weekendA);
+    expect(forA.selectedKits.map((k) => k.id)).toEqual(['kit-1']);
+    expect(forA.byoGears).toEqual([tentA, chairA]);
+    expect(Object.keys(forA.byoAddOns)).toEqual([byoLineKeyOf(tentA)]);
+    const forB = cartForDates(cart, weekendB);
+    expect(forB.selectedKits).toEqual([]);
+    expect(forB.byoGears).toEqual([tentB]);
   });
 });

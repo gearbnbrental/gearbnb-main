@@ -31,7 +31,7 @@ const PLATFORM_CONFIG: Record<
     label: 'TikTok',
     href: TIKTOK_URL,
     icon: TikTokIcon,
-    badgeClassName: 'bg-ink text-white dark:bg-black',
+    badgeClassName: 'bg-ink text-white',
   },
 };
 

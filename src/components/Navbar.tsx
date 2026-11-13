@@ -5,7 +5,6 @@ import { useRental } from '../context/RentalContext';
 import ConfirmDialog from './ConfirmDialog';
 import { ChevronDownIcon, UserIcon } from './icons';
 import SocialLinks from './SocialLinks';
-import ThemeToggle from './ThemeToggle';
 
 function CartIcon({ className }: { className?: string }) {
   return (
@@ -168,17 +167,11 @@ export default function Navbar() {
               instead of shrinking. */}
           <Link to="/" className="flex shrink-0 items-center gap-2 sm:gap-2.5">
             <img
-              src="/brand_assets/GEARBNB_logo.png"
-              alt=""
+              src="/brand_assets/gearbnb-logo-128.webp"
+              alt="GearBnB logo"
               className="h-8 w-8 rounded-full shadow-sm sm:h-10 sm:w-10 lg:h-12 lg:w-12"
             />
-            {/* brand-forest reads fine on this header's light-mode surface, but the same dark green
-                on the dark-mode surface is low-contrast — dark:text-ink switches it to this site's
-                normal near-white dark-mode text color, per the client's explicit "branding text
-                should also appear white in Dark Mode" request. Footer's own "GearBnB" wordmark
-                needs no equivalent change — it already sits on a constant brand-brown band in
-                brand-cream (an off-white), which never dims in dark mode. */}
-            <span className="font-serif text-lg font-bold tracking-tight text-brand-forest dark:text-ink sm:text-xl">
+            <span className="font-serif text-lg font-bold tracking-tight text-brand-forest sm:text-xl">
               GearBnB
             </span>
           </Link>
@@ -222,30 +215,31 @@ export default function Navbar() {
                 Catalog
                 <ChevronDownIcon className={`h-3.5 w-3.5 transition-transform ${catalogMenuOpen ? 'rotate-180' : ''}`} />
               </button>
-              {catalogMenuOpen && (
-                <div
-                  role="menu"
-                  aria-label="Catalog"
-                  className="absolute left-0 top-full z-50 mt-1.5 w-48 overflow-hidden rounded-lg border border-line bg-surface py-1 shadow-lg"
+              {/* Always in the HTML, hidden while closed, so crawlers and the prerendered pages
+                  see Packages and Build Your Own as real links. */}
+              <div
+                role="menu"
+                aria-label="Catalog"
+                hidden={!catalogMenuOpen}
+                className="absolute left-0 top-full z-50 mt-1.5 w-48 overflow-hidden rounded-lg border border-line bg-surface py-1 shadow-lg"
+              >
+                <Link
+                  to="/catalog/camping-packages"
+                  role="menuitem"
+                  onClick={() => setCatalogMenuOpen(false)}
+                  className="block px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface-strong"
                 >
-                  <Link
-                    to="/catalog/camping-packages"
-                    role="menuitem"
-                    onClick={() => setCatalogMenuOpen(false)}
-                    className="block px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface-strong"
-                  >
-                    Packages
-                  </Link>
-                  <Link
-                    to="/catalog/build-your-own"
-                    role="menuitem"
-                    onClick={() => setCatalogMenuOpen(false)}
-                    className="block px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface-strong"
-                  >
-                    Build Your Own
-                  </Link>
-                </div>
-              )}
+                  Packages
+                </Link>
+                <Link
+                  to="/catalog/build-your-own"
+                  role="menuitem"
+                  onClick={() => setCatalogMenuOpen(false)}
+                  className="block px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface-strong"
+                >
+                  Build Your Own
+                </Link>
+              </div>
             </div>
 
             <Link
@@ -259,7 +253,7 @@ export default function Navbar() {
               // Inline from `lg` up only. Below that, My Bookings is the menu drawer's own entry
               // (see mobileNavLinks) — it used to also sit inline here at every width, so a
               // signed-in phone header carried it twice while squeezing a named account pill,
-              // theme toggle, cart and menu button into the same row.
+              // cart and menu button into the same row.
               <Link
                 to="/my-bookings"
                 className="hidden whitespace-nowrap rounded-md px-2 py-1.5 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-strong hover:text-ink lg:inline-block"
@@ -267,8 +261,6 @@ export default function Navbar() {
                 My Bookings
               </Link>
             )}
-
-            <ThemeToggle />
 
             <Link
               to="/cart"

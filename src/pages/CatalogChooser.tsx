@@ -12,7 +12,7 @@ export default function CatalogChooser() {
           Two ways to rent, both fully covered by our verification and split-payment protections.
         </p>
       </div>
-      <PathSelectionCards roomyOnMobile />
+      <PathSelectionCards roomyOnMobile showPromoRibbons />
     </div>
   );
 }

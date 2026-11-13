@@ -168,7 +168,7 @@ export default function ResetPassword() {
             <p className="text-sm text-ink-muted">Choose a new password for your account.</p>
           </div>
           {error && (
-            <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+            <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-600">
               {error}
             </p>
           )}

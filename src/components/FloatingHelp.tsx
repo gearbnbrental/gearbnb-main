@@ -1,4 +1,5 @@
 ﻿import { useEffect, useRef, useState } from 'react';
+import { useStickyBarHeight } from '../utils/stickyBar';
 import { useLocation } from 'react-router-dom';
 import { MESSENGER_URL, TIKTOK_URL } from '../config/social';
 import { ChatBubbleIcon, TikTokIcon } from './icons';
@@ -11,12 +12,6 @@ function XMarkIcon({ className }: { className?: string }) {
   );
 }
 
-/** Routes whose own sticky bottom action bar (Cart's checkout footer, the catalog pages' cart
- * summary bar) would otherwise sit directly under this widget's default bottom-right position —
- * on these, the widget is lifted clear of that bar instead of overlapping its buttons. Exported so
- * BackToTop.tsx — which stacks directly above this widget — lifts by the same amount on the same
- * routes, rather than maintaining a second, potentially-drifting copy of this list. */
-export const STICKY_FOOTER_ROUTES = new Set(['/cart', '/catalog/camping-packages', '/catalog/build-your-own']);
 
 /**
  * Sitewide floating "Need Help?" contact widget — the one general-purpose support CTA, available
@@ -31,7 +26,9 @@ export default function FloatingHelp() {
   const panelRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
-  const liftedForStickyFooter = STICKY_FOOTER_ROUTES.has(location.pathname);
+  // On pages with a sticky bottom bar (the catalog cart summary, Cart's checkout footer) the widget
+  // sits just above it, following the bar's real height.
+  const stickyBarHeight = useStickyBarHeight();
 
   // A panel left open across a navigation would otherwise sit, now pointing at content the
   // customer never asked to see, on top of whatever page they just moved to.
@@ -64,8 +61,8 @@ export default function FloatingHelp() {
 
   return (
     <div
-      className={`fixed right-4 z-50 sm:right-6 ${liftedForStickyFooter ? 'bottom-24 sm:bottom-24' : 'bottom-5 sm:bottom-6'}`}
-      style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
+      className={`hide-in-product-view fixed right-4 z-50 sm:right-6 ${stickyBarHeight ? '' : 'bottom-5 sm:bottom-6'}`}
+      style={stickyBarHeight ? { bottom: stickyBarHeight + 12 } : { marginBottom: 'env(safe-area-inset-bottom)' }}
     >
       {/* Trigger comes BEFORE the panel in DOM order (even though the panel renders visually
        * above it via `absolute bottom-full`) — forward-Tab from this button must reach the
@@ -98,7 +95,7 @@ export default function FloatingHelp() {
            * the panel's only close control (never duplicated below). */}
           <div className="flex items-center justify-between gap-2 bg-brand-forest px-4 py-3">
             <div className="flex items-center gap-2">
-              <img src="/brand_assets/GEARBNB_logo.png" alt="" className="h-6 w-6 rounded-full" />
+              <img src="/brand_assets/gearbnb-logo-128.webp" alt="" className="h-6 w-6 rounded-full" />
               <span className="font-serif text-sm font-bold text-white">GearBnB</span>
             </div>
             <button
@@ -138,7 +135,7 @@ export default function FloatingHelp() {
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="TikTok (opens in a new tab)"
-                className="flex items-center justify-center gap-2 rounded-full bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm transition-transform hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0 dark:bg-black"
+                className="flex items-center justify-center gap-2 rounded-full bg-ink px-4 py-3 text-sm font-semibold text-white shadow-sm transition-transform hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
               >
                 <TikTokIcon className="h-4.5 w-4.5" />
                 TikTok

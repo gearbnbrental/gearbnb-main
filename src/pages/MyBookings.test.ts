@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  describeDeposit,
+  describePickupDifference,
+  formatRentalDuration,
+  rentalStartAt,
+  returnMoved,
+  rentalFeePill,
   classifyMyBookingsLoadError,
   getBookingStatusLabel,
   getChargeProofState,
@@ -7,8 +13,9 @@ import {
   getReturnOutcome,
   hasOutstandingPayment,
   isTerminalBooking,
+  needsDepositBeforeDeadline,
 } from './MyBookings';
-import { RMS_NOT_CONFIGURED_CODE, RmsApiError, type RmsAdditionalCharge, type RmsMyBooking } from '../utils/rmsApi';
+import { RMS_NOT_CONFIGURED_CODE, RmsApiError, type RmsAdditionalCharge, type RmsMyBooking, type RmsRentalFee } from '../utils/rmsApi';
 
 /**
  * Pins down the terminal-booking behaviour fixed in this pass: once a booking reaches COMPLETED or
@@ -326,5 +333,146 @@ describe('classifyMyBookingsLoadError', () => {
   it('a network failure or unknown throw is an ordinary error', () => {
     expect(classifyMyBookingsLoadError(new TypeError('Failed to fetch'))).toBe('error');
     expect(classifyMyBookingsLoadError('nope')).toBe('error');
+  });
+});
+
+describe('describeDeposit (collapsed booking card)', () => {
+  const booking = (deposit: Partial<RmsMyBooking['securityDeposit']>, extra: Partial<RmsMyBooking> = {}) =>
+    ({
+      bookingId: 'b', bookingNumber: 'GB-1', status: 'AWAITING_PAYMENT', pickupAt: '2026-10-12T02:00:00.000Z', returnAt: '2026-10-15T02:00:00.000Z',
+      rentalFeeCentavos: 0, depositCentavos: 0, fulfillmentType: 'PICKUP', deliveryAddress: null,
+      packages: [{ name: 'Kit', quantity: 1 }], gears: [], addOns: [], verificationDocuments: [],
+      securityDeposit: { requiredCentavos: 90000, verifiedCentavos: 0, verified: false, proofStatus: null, reviewNote: null, amountClaimedCentavos: null, ...deposit },
+      ...extra,
+    }) as RmsMyBooking;
+
+  it('says the deposit amount is due now to reserve the gear', () => {
+    expect(describeDeposit(booking({}))).toEqual({ amount: '₱900', note: 'Due now to reserve your gear', due: true, status: 'Pending' });
+  });
+  it('is to be determined before GearBnB sets a Build Your Own deposit', () => {
+    expect(describeDeposit(booking({ requiredCentavos: 0 }, { packages: [] }))).toMatchObject({ amount: 'To Be Determined', due: false });
+  });
+  it('reflects a proof under review, a rejected proof, and a paid deposit', () => {
+    expect(describeDeposit(booking({ proofStatus: 'PENDING_REVIEW' }))).toMatchObject({ note: 'Payment received, being reviewed', due: false, status: 'Under Review' });
+    expect(describeDeposit(booking({ proofStatus: 'REJECTED' }))).toMatchObject({ due: true });
+    expect(describeDeposit(booking({ verified: true, verifiedCentavos: 90000 }))).toEqual({ amount: '₱900', note: 'Paid', due: false, status: 'Paid' });
+  });
+  it('mentions a pending add-on deposit on a package with extras', () => {
+    expect(describeDeposit(booking({ addOnDepositCentavos: null }, { gears: [{ name: 'Chair', quantity: 2 }] }))?.note).toBe(
+      'Due now to reserve your gear (add-on deposit to be confirmed)',
+    );
+  });
+});
+
+describe('rentalFeePill', () => {
+  const fee = (extra: Partial<RmsRentalFee>) =>
+    ({ dueCentavos: 1000, paidCentavos: 0, outstandingCentavos: 1000, status: 'PENDING', dueDate: '2026-10-12T02:00:00.000Z', ...extra }) as RmsRentalFee;
+  it('maps the RMS status to Paid / Pending / Under Review / Partially Paid', () => {
+    expect(rentalFeePill(fee({ status: 'PAID' }))).toBe('Paid');
+    expect(rentalFeePill(fee({}))).toBe('Pending');
+    expect(rentalFeePill(fee({ proofStatus: 'PENDING_REVIEW' }))).toBe('Under Review');
+    expect(rentalFeePill(fee({ status: 'PARTIALLY_PAID' }))).toBe('Partially Paid');
+  });
+});
+
+describe('"Pay security deposit" goes to the Security Deposit section', () => {
+  it('targets the deposit section (amount, payment instructions, proof upload), not the top of the details', () => {
+    const booking = {
+      bookingId: 'b1', bookingNumber: 'GB-1', status: 'AWAITING_PAYMENT', pickupAt: '2026-10-12T02:00:00.000Z', returnAt: '2026-10-15T02:00:00.000Z',
+      rentalFeeCentavos: 0, depositCentavos: 90000, fulfillmentType: 'PICKUP', deliveryAddress: null,
+      packages: [{ name: 'Kit', quantity: 1 }], gears: [], addOns: [], verificationDocuments: [],
+      securityDeposit: { requiredCentavos: 90000, verifiedCentavos: 0, verified: false, proofStatus: null, reviewNote: null, amountClaimedCentavos: null },
+    } as unknown as RmsMyBooking;
+    expect(getNextStep(booking).cta).toEqual({ label: 'Pay security deposit', targetId: 'security-deposit-b1' });
+  });
+});
+
+describe('pickup handover wording', () => {
+  it('says how much later or earlier than booked, in hours and minutes', () => {
+    expect(describePickupDifference(720)).toBe('12 hours later than booked');
+    expect(describePickupDifference(-360)).toBe('6 hours earlier than booked');
+    expect(describePickupDifference(80)).toBe('1 hour 20 minutes later than booked');
+    expect(describePickupDifference(1)).toBe('1 minute later than booked');
+    expect(describePickupDifference(-45)).toBe('45 minutes earlier than booked');
+  });
+
+  it('says nothing extra under a minute, or when the RMS sent no difference', () => {
+    expect(describePickupDifference(0)).toBeNull();
+    expect(describePickupDifference(null)).toBeNull();
+    expect(describePickupDifference(undefined)).toBeNull();
+  });
+});
+
+describe('returnMoved', () => {
+  it('is true only when the RMS sent an original return that differs from the current one', () => {
+    expect(returnMoved({ returnAt: '2026-10-15T09:00:00.000Z', originalReturnAt: '2026-10-14T21:00:00.000Z' })).toBe(true);
+    expect(returnMoved({ returnAt: '2026-10-15T09:00:00.000Z', originalReturnAt: '2026-10-15T09:00:00.000Z' })).toBe(false);
+    expect(returnMoved({ returnAt: '2026-10-15T09:00:00.000Z', originalReturnAt: null })).toBe(false);
+    expect(returnMoved({ returnAt: '2026-10-15T09:00:00.000Z' })).toBe(false);
+  });
+});
+
+describe('early pickup display', () => {
+  // GB-2026-1018-01: booked Oct 29 2:30 PM -> Nov 1 2:30 PM (3 days), picked up early Oct 18 5:02 AM;
+  // the RMS moved the return to Oct 21 5:03 AM to keep the rental's length.
+  const booking = {
+    pickupAt: '2026-10-29T06:30:00.000Z',
+    pickedUpAt: '2026-10-17T21:02:30.000Z',
+    returnAt: '2026-10-20T21:03:00.000Z',
+  };
+
+  it('starts the rental at the actual pickup once there is one', () => {
+    expect(rentalStartAt(booking)).toBe(booking.pickedUpAt);
+    expect(rentalStartAt({ ...booking, pickedUpAt: null })).toBe(booking.pickupAt);
+    expect(rentalStartAt({ ...booking, pickedUpAt: 'not a date' })).toBe(booking.pickupAt);
+  });
+
+  it('reads a return a few seconds past 3 days as 3 Days, not 4', () => {
+    expect(formatRentalDuration(rentalStartAt(booking), booking.returnAt)).toBe('3 Days');
+    expect(formatRentalDuration('2026-10-01T00:00:00.000Z', '2026-10-04T02:00:00.000Z')).toBe('4 Days');
+    expect(formatRentalDuration('2026-10-01T00:00:00.000Z', '2026-10-03T00:00:00.000Z')).toBe('2 Days');
+  });
+
+  it('describes a pickup days early in days and hours', () => {
+    expect(describePickupDifference(-16407)).toBe('11 days 9 hours earlier than booked');
+    expect(describePickupDifference(1440)).toBe('1 day later than booked');
+  });
+});
+
+describe('deposit deadline during review', () => {
+  const due = '2026-11-13T07:00:00.000Z';
+
+  it('asks for the deposit while documents are under review, with the deadline', () => {
+    const step = getNextStep(makeBooking({ status: 'PENDING_REVIEW', depositDueAt: due }));
+    expect(step.tone).toBe('warning');
+    expect(step.message).toContain('pay your security deposit by Friday, November 13, 2026, 15:00 (3:00 in the afternoon)');
+    expect(step.cta?.label).toBe('Pay security deposit');
+  });
+
+  it('keeps the plain review message once a proof is waiting, or for an older booking without a deadline', () => {
+    const proofWaiting = makeBooking({
+      status: 'PENDING_REVIEW',
+      depositDueAt: due,
+      securityDeposit: { ...makeBooking().securityDeposit, proofStatus: 'PENDING_REVIEW' },
+    });
+    expect(getNextStep(proofWaiting).tone).toBe('info');
+    expect(getNextStep(makeBooking({ status: 'PENDING_REVIEW' })).tone).toBe('info');
+  });
+
+  it('needs the deposit only before it is verified and while the booking is not reserved', () => {
+    expect(needsDepositBeforeDeadline(makeBooking({ status: 'AWAITING_PAYMENT', depositDueAt: due }))).toBe(true);
+    expect(needsDepositBeforeDeadline(makeBooking({ status: 'RESERVED', depositDueAt: due }))).toBe(false);
+    const paid = makeBooking({
+      status: 'PENDING_REVIEW',
+      depositDueAt: due,
+      securityDeposit: { ...makeBooking().securityDeposit, verified: true, verifiedCentavos: 50000 },
+    });
+    expect(needsDepositBeforeDeadline(paid)).toBe(false);
+  });
+
+  it('quotes the deadline once approved and still unpaid', () => {
+    expect(getNextStep(makeBooking({ status: 'AWAITING_PAYMENT', depositDueAt: due })).message).toBe(
+      'Your booking is approved. Pay your security deposit by Friday, November 13, 2026, 15:00 (3:00 in the afternoon) to reserve your gear.',
+    );
   });
 });

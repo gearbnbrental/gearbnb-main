@@ -12,8 +12,12 @@ import { useAuth } from '../context/AuthContext';
 import { useCatalog } from '../context/useCatalog';
 import {
   byoGearKey,
+  byoLineDates,
+  byoLineKey,
   calculateRentalDurationDays,
+  cartForDates,
   getGearKindPrice,
+  sameDates,
   useRental,
 } from '../context/RentalContext';
 import type {
@@ -34,7 +38,7 @@ import {
   MAX_BOOKING_DATE,
   TODAY,
 } from '../utils/duration';
-import { formatCurrency } from '../utils/format';
+import { formatCurrency, formatTripDate } from '../utils/format';
 import { toRmsBrand, type RmsAvailabilityRequest, type RmsAvailabilityResult } from '../utils/rmsApi';
 import { useAvailabilityCheck } from '../hooks/useAvailabilityCheck';
 import { resolveGearVariant, sizeCapacityToShow } from '../utils/gearVariants';
@@ -45,6 +49,12 @@ import { useDateAwareGearKinds } from '../hooks/useGearDateStock';
 import { splitBestForLine } from '../utils/bestForLine';
 import { productNote } from '../utils/gearNote';
 import { cleanGearName } from '../utils/gearName';
+import { useBasketPromo } from '../hooks/useBasketPromo';
+import ByoPromoProgress from '../components/promo/ByoPromoProgress';
+import { BarPromoNote, BarRentalFee } from '../components/promo/PromoTotals';
+import { gearCardPromoNote, gearCardPromoSaving } from '../utils/promoDisplay';
+import GearPriceBlock from '../components/promo/GearPriceBlock';
+import { useStickyBarRef } from '../utils/stickyBar';
 
 /** Mirrors the RMS's own customer-safe display-name construction
  * (src/server/availability/service.ts's kindDisplayName) exactly, so an
@@ -197,7 +207,7 @@ export function QuantityStepper({ value, max, disabled, ariaLabel, onChange, com
         </button>
       </div>
       {error && (
-        <span role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+        <span role="alert" className="text-xs font-medium text-red-600">
           {error}
         </span>
       )}
@@ -297,6 +307,17 @@ interface GearCardProps {
   /** Set only when this selected kind came back in the RMS's availability issues for the current
    * dates — never inferred locally. */
   unavailableForDates: boolean;
+  /** "{offer} off your order once it reaches ₱min" on gear the live promo covers; null otherwise.
+   *  The card's own price always stays the plain, normal price. */
+  promoNote: string | null;
+  /** Once the order's discount is unlocked: what one unit of this gear saves. The card then shows
+   *  the normal price crossed off, the discounted price and "✓ You save ₱X (15%)" instead of
+   *  promoNote. */
+  promoSaving: { centavos: number; percent: string | null } | null;
+  /** The other dates this gear is already in the cart for ("Oct 22, 2026 – Oct 24, 2026"), shown as
+   *  a note. It can still be added for the dates being browsed: each dates gets its own cart line,
+   *  checked for availability on its own dates. */
+  alsoInCartFor: string[];
   onQuantityChange: (next: number) => void;
   onAddOnQuantityChange: (addOn: BookableAddOn, next: number) => void;
 }
@@ -311,6 +332,9 @@ function GearCard({
   showExtraDayRate,
   price,
   unavailableForDates,
+  promoNote,
+  promoSaving,
+  alsoInCartFor,
   onQuantityChange,
   onAddOnQuantityChange,
 }: GearCardProps) {
@@ -398,9 +422,18 @@ function GearCard({
             <span className="shrink-0 text-[10px] text-ink-faint sm:text-[11px]">Avail: {kind.availableCount}</span>
           )}
         </div>
-        <h3 className="line-clamp-2 text-xs font-medium leading-snug text-ink sm:text-sm" title={cleanGearName(kind.name)}>
-          {cleanGearName(kind.name)}
-        </h3>
+        <div className="flex flex-col items-start gap-1 sm:flex-row sm:justify-between sm:gap-2">
+          <h3 className="line-clamp-2 text-xs font-medium leading-snug text-ink sm:text-sm" title={cleanGearName(kind.name)}>
+            {cleanGearName(kind.name)}
+          </h3>
+          {/* Same red "Out of Stock" as the package cards: none free (for the chosen dates, once
+              picked) or the RMS flagged this selected gear as unavailable for those dates. */}
+          {(!kind.canSelect || unavailableForDates) && (
+            <span className="shrink-0 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700 sm:px-2 sm:text-xs">
+              Out of Stock
+            </span>
+          )}
+        </div>
         {cardBestFor.bestFor ? (
           <p className="-mt-0.5 break-words text-[11px] font-medium leading-snug text-accent sm:text-xs">
             Best {cardBestFor.lead} {cardBestFor.bestFor}
@@ -436,34 +469,40 @@ function GearCard({
             no room to sit beside (see that control's own comment). The plain round "+" button is
             small enough to share a row even at mobile width, which is what makes room to finally
             show the 72h-upsell/extra-day-rate hints below on mobile too — see those paragraphs'
-            own `hidden` toggle. */}
+            own `hidden` toggle. Also a column whenever the promo price stack shows (crossed-off
+            price, discounted price, "You save"): beside even the small "+" it wrapped into a
+            sliver on a phone. */}
+        {alsoInCartFor.length > 0 && (
+          <p className="mt-auto pt-1 text-[11px] font-medium leading-snug text-ink-muted sm:text-xs">
+            Also in your cart for {alsoInCartFor.join(' and ')}
+          </p>
+        )}
         <div
           className={`mt-auto flex gap-1.5 pt-1 sm:flex-row sm:items-end sm:justify-between sm:gap-2 sm:pt-2 ${
-            isSelected ? 'flex-col items-start' : 'flex-row items-center justify-between'
+            isSelected || promoSaving ? 'flex-col items-start' : 'flex-row items-center justify-between'
           }`}
         >
-          <div className="min-w-0">
-            <p className="text-sm font-bold leading-tight text-accent sm:text-lg">
-              {hasDuration && price !== null
-                ? formatCurrency(price)
-                : kind.pricing['48h'] === kind.pricing['72h']
-                  ? formatCurrency(kind.pricing['48h'])
-                  : `${formatCurrency(kind.pricing['48h'])}–${formatCurrency(kind.pricing['72h'])}`}
-            </p>
-            {showUpsell && getSeventyTwoHourUpsellDelta(kind.pricing) > 0 && (
-              <p className={`text-[11px] font-medium text-accent sm:block ${isSelected ? 'hidden' : ''}`}>
-                +{formatCurrency(getSeventyTwoHourUpsellDelta(kind.pricing))} for 72h
-              </p>
-            )}
-            {showExtraDayRate && kind.extraPerDayPrice > 0 && (
-              <p className={`text-[11px] font-medium text-ink-muted sm:block ${isSelected ? 'hidden' : ''}`}>
-                +{formatCurrency(kind.extraPerDayPrice)} per extra day
-              </p>
-            )}
-            {quantity > 1 && hasDuration && price !== null && (
-              <p className="text-[10px] text-ink-muted sm:text-[11px]">Subtotal {formatCurrency(price * quantity)}</p>
-            )}
-          </div>
+          <GearPriceBlock
+            pricing={kind.pricing}
+            price={hasDuration ? price : null}
+            quantity={quantity}
+            promoSaving={promoSaving}
+            promoNote={promoNote}
+            hints={
+              <>
+                {showUpsell && getSeventyTwoHourUpsellDelta(kind.pricing) > 0 && (
+                  <p className={`text-[11px] font-medium text-accent sm:block ${isSelected ? 'hidden' : ''}`}>
+                    +{formatCurrency(getSeventyTwoHourUpsellDelta(kind.pricing))} for 72h
+                  </p>
+                )}
+                {showExtraDayRate && kind.extraPerDayPrice > 0 && (
+                  <p className={`text-[11px] font-medium text-ink-muted sm:block ${isSelected ? 'hidden' : ''}`}>
+                    +{formatCurrency(kind.extraPerDayPrice)} per extra day
+                  </p>
+                )}
+              </>
+            }
+          />
 
           {kind.canSelect ? (
             isSelected ? (
@@ -550,12 +589,15 @@ function GearCard({
 }
 
 export default function PathBCatalog() {
+  // Lets the floating corner buttons sit just above this page's sticky bar, whatever its height.
+  const stickyBarRef = useStickyBarRef();
   usePageMeta(PAGE_META.buildYourOwn.title, PAGE_META.buildYourOwn.description);
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
   const { gearCatalogState, retryGearCatalog } = useCatalog();
   const { cart, totals, updateTripDetails, setByoGearQuantity, setByoAddOnQuantity } = useRental();
+  const basketPromo = useBasketPromo();
   // Once the customer has chosen dates, stock is counted for THOSE dates (a unit rented today but
   // back before their trip is available to them), not "free right now". Same catalog otherwise, and
   // the ordinary catalog on any failure or while dates aren't chosen. See useDateAwareGearKinds.
@@ -587,13 +629,37 @@ export default function PathBCatalog() {
   // `activeColor` below).
   const [chosenColor, setChosenColor] = useState<string | null>(null);
   const cartItemCount = cart.selectedKits.length + cart.selectedItems.length + cart.byoGears.length;
-  const isUnlocked = totals.rentalDurationDays > 0;
-  const hasDuration = calculateRentalDurationDays(cart.tripDetails) > 0;
+  // The duration being browsed (the cart's own totals describe what's checked for checkout, which
+  // can be for other dates).
+  const browsingDays = calculateRentalDurationDays(cart.tripDetails);
+  const hasDuration = browsingDays > 0;
+  const isUnlocked = hasDuration;
 
-  const gearSelections = useMemo(
-    () => new Map(cart.byoGears.map((gear) => [byoGearKey(gear), gear.quantity])),
-    [cart.byoGears],
+  // Each cart line keeps the dates it was added for, so this page only treats lines added for the
+  // dates being browsed (or not dated yet) as "in your cart"; lines for other dates are labelled
+  // instead, and left out of the stock and availability checks for these dates.
+  const browsingDates = useMemo(
+    () => ({ startDate: cart.tripDetails.startDate, returnDate: cart.tripDetails.returnDate }),
+    [cart.tripDetails.startDate, cart.tripDetails.returnDate],
   );
+  const cartForTheseDates = useMemo(() => cartForDates(cart, browsingDates), [cart, browsingDates]);
+  const gearSelections = useMemo(
+    () => new Map(cartForTheseDates.byoGears.map((gear) => [byoGearKey(gear), gear.quantity])),
+    [cartForTheseDates.byoGears],
+  );
+  // Other dates each gear is already in the cart for, shown on its card as a note.
+  const gearAlsoInCartFor = useMemo(() => {
+    const labels = new Map<string, string[]>();
+    for (const gear of cart.byoGears) {
+      const dates = byoLineDates(gear);
+      const start = formatTripDate(dates.startDate);
+      const end = formatTripDate(dates.returnDate);
+      if (!start || !end || sameDates(dates, browsingDates)) continue;
+      const key = byoGearKey(gear);
+      labels.set(key, [...(labels.get(key) ?? []), `${start} – ${end}`]);
+    }
+    return labels;
+  }, [cart.byoGears, browsingDates]);
 
   // Real, date-scoped availability for whatever the customer has already selected — checked
   // against the RMS's actual inventory/assignment data, never computed locally, and never checked
@@ -603,26 +669,26 @@ export default function PathBCatalog() {
   // retry/timeout lifecycle now lives in the shared useAvailabilityCheck hook — this only builds
   // the request object (or null, when there's nothing to check yet).
   const byoAvailabilityRequest: RmsAvailabilityRequest | null = useMemo(() => {
-    if (!isUnlocked || cart.byoGears.length === 0) return null;
+    if (!isUnlocked || cartForTheseDates.byoGears.length === 0) return null;
     // toAvailabilityTimestamp, not a hardcoded midnight literal — this runs before the customer
     // ever reaches Trip Details (falls back to midnight until Preferred Time has a real value),
     // but sends the exact same timestamp the final booking submission would once one exists.
-    // dates are already known-valid here (isUnlocked requires totals.rentalDurationDays > 0), so
+    // dates are already known-valid here (isUnlocked requires a browsing duration), so
     // these can never actually be null.
     const pickupAt = toAvailabilityTimestamp(cart.tripDetails.startDate, cart.tripDetails.preferredTime)!;
     const returnAt = toAvailabilityTimestamp(cart.tripDetails.returnDate, cart.tripDetails.preferredTime)!;
-    const bookingGears = cart.byoGears.map((g) => ({
+    const bookingGears = cartForTheseDates.byoGears.map((g) => ({
       category: g.category,
       brand: toRmsBrand(g.brand),
       model: g.model,
       quantity: g.quantity,
       ...(g.color ? { color: g.color } : {}),
     }));
-    const addOns = Object.values(cart.byoAddOns)
+    const addOns = Object.values(cartForTheseDates.byoAddOns)
       .flat()
       .map((a) => ({ category: a.category, brand: toRmsBrand(a.brand), model: a.model, quantity: a.quantity }));
     return { pickupAt, returnAt, bookingGears, addOns };
-  }, [isUnlocked, cart.tripDetails.startDate, cart.tripDetails.returnDate, cart.tripDetails.preferredTime, cart.byoGears, cart.byoAddOns]);
+  }, [isUnlocked, cart.tripDetails.startDate, cart.tripDetails.returnDate, cart.tripDetails.preferredTime, cartForTheseDates.byoGears, cartForTheseDates.byoAddOns]);
 
   const byoAvailabilityCheck = useAvailabilityCheck(byoAvailabilityRequest);
   // Preserves the exact pre-existing local shape every consumer below already reads
@@ -758,11 +824,18 @@ export default function PathBCatalog() {
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 p-4 sm:gap-6 sm:p-6">
         <BackLink to="/catalog" label="Back to Browse Gear" />
         <div className="flex flex-col gap-1">
-          <h1 className="font-serif text-lg font-semibold text-ink sm:text-xl">Build Your Own</h1>
-          <p className="text-sm text-ink-muted">Pick your rental duration first, then mix and match individual gear.</p>
+          <h1 className="font-serif text-lg font-semibold text-ink sm:text-xl">Build Your Own Camping Setup</h1>
+          <p className="text-sm text-ink-muted">
+            Rent tents, beds, chairs, coolers and more by the piece. Pick your rental duration first, then mix and match
+            individual gear. Prefer a ready-made kit?{' '}
+            <Link to="/catalog/camping-packages" className="font-medium text-accent underline underline-offset-2">
+              See our camping packages
+            </Link>
+            .
+          </p>
           <p className="text-xs text-ink-faint">
-            Prices shown are estimates from our live catalog, GearBnB confirms final rates when your booking
-            is submitted.{' '}
+            Prices shown are estimates from our live catalog. GearBnB confirms final rates once you submit your
+            booking.{' '}
             <Link to="/terms" className="font-medium text-accent underline underline-offset-2">
               View Terms &amp; Conditions
             </Link>
@@ -880,45 +953,47 @@ export default function PathBCatalog() {
           </p>
         )}
         {isUnlocked && byoAvailability === 'error' && (
-          <div className="flex flex-col items-start gap-2 rounded-xl border border-red-300 bg-red-50 p-4 text-sm dark:border-red-500/30 dark:bg-red-500/10">
-            <p className="font-semibold text-red-700 dark:text-red-400">Couldn't check availability</p>
-            <p className="text-red-700/90 dark:text-red-400/90">
+          <div className="flex flex-col items-start gap-2 rounded-xl border border-red-300 bg-red-50 p-4 text-sm">
+            <p className="font-semibold text-red-700">Couldn't check availability</p>
+            <p className="text-red-700/90">
               We couldn't verify your selected gear's availability just now. Please try again before checking out.
             </p>
             <button
               type="button"
               onClick={retryByoAvailability}
-              className="rounded-lg border border-red-300 bg-surface px-3 py-1.5 text-xs font-medium text-red-700 shadow-sm transition-colors hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10"
+              className="rounded-lg border border-red-300 bg-surface px-3 py-1.5 text-xs font-medium text-red-700 shadow-sm transition-colors hover:bg-red-50"
             >
               Try again
             </button>
           </div>
         )}
         {isUnlocked && byoAvailability && byoAvailability !== 'checking' && byoAvailability !== 'error' && !byoAvailability.available && (
-          <div className="flex flex-col gap-1 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm dark:border-amber-400/30 dark:bg-amber-400/10">
-            <p className="font-semibold text-amber-800 dark:text-amber-300">
+          <div className="flex flex-col gap-1 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">
+            <p className="font-semibold text-amber-800">
               Some of your selected gear isn't available for these dates
             </p>
-            <p className="text-amber-800/90 dark:text-amber-300/90">
+            <p className="text-amber-800/90">
               {byoAvailability.issues.map((issue) => cleanGearName(issue.name, { keepColor: true })).join(', ')}, adjust the quantity, remove it, or
               change your dates before checking out.
             </p>
           </div>
         )}
 
+        <ByoPromoProgress state={basketPromo} />
+
         {/* A genuine catalog failure is shown here, always at full visibility — never nested
          * inside the duration-gate's dimmed/opacity-40 wrapper below, where it would be faded
          * twice over (once by that wrapper, once more by the "select duration" overlay sitting on
          * top of it) into something a customer could easily miss entirely. */}
         {gearCatalogState === 'error' && (
-          <div className="flex flex-col items-center gap-3 rounded-xl border border-red-300 bg-red-50 p-6 text-center dark:border-red-500/30 dark:bg-red-500/10">
-            <p className="text-sm text-red-600 dark:text-red-400">
+          <div className="flex flex-col items-center gap-3 rounded-xl border border-red-300 bg-red-50 p-6 text-center">
+            <p className="text-sm text-red-600">
               We couldn't load the Build Your Own catalog right now. Please try again shortly.
             </p>
             <button
               type="button"
               onClick={retryGearCatalog}
-              className="rounded-lg border border-red-300 bg-surface px-4 py-2 text-sm font-medium text-red-700 shadow-sm transition-colors hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10"
+              className="rounded-lg border border-red-300 bg-surface px-4 py-2 text-sm font-medium text-red-700 shadow-sm transition-colors hover:bg-red-50"
             >
               Try Again
             </button>
@@ -1031,18 +1106,23 @@ export default function PathBCatalog() {
                         // through unchanged.
                         const kind = resolveGearVariant(baseKind, supportsColorFilter(baseKind) ? activeColor : undefined);
                         const key = byoGearKey(kind);
+                        // This gear's cart line for the dates being browsed (add-ons hang off it).
+                        const lineKey = byoLineKey(kind, browsingDates);
                         return (
                           <GearCard
                             key={key}
                             kind={kind}
                             quantity={gearSelections.get(key) ?? 0}
-                            addOnSelections={cart.byoAddOns[key] ?? []}
+                            addOnSelections={cart.byoAddOns[lineKey] ?? []}
                             tripDetails={cart.tripDetails}
                             hasDuration={hasDuration}
                             showUpsell={selectedPreset === '48h'}
                             showExtraDayRate={selectedPreset === '72h'}
                             price={hasDuration ? getGearKindPrice(kind, cart.tripDetails) : null}
                             unavailableForDates={unavailableNames.has(kindDisplayName(kind))}
+                            promoNote={gearCardPromoNote(basketPromo, kind.category)}
+                            promoSaving={gearCardPromoSaving(basketPromo, kind.category, hasDuration ? getGearKindPrice(kind, cart.tripDetails) : null)}
+                            alsoInCartFor={gearAlsoInCartFor.get(key) ?? []}
                             onQuantityChange={(next) => {
                               const current = gearSelections.get(key) ?? 0;
                               if (next > current && !requireAuth()) return;
@@ -1050,9 +1130,9 @@ export default function PathBCatalog() {
                             }}
                             onAddOnQuantityChange={(addOn, next) => {
                               const current =
-                                (cart.byoAddOns[key] ?? []).find((a) => byoGearKey(a) === byoGearKey(addOn))?.quantity ?? 0;
+                                (cart.byoAddOns[lineKey] ?? []).find((a) => byoGearKey(a) === byoGearKey(addOn))?.quantity ?? 0;
                               if (next > current && !requireAuth()) return;
-                              setByoAddOnQuantity(key, addOn, next);
+                              setByoAddOnQuantity(lineKey, addOn, next);
                             }}
                           />
                         );
@@ -1105,26 +1185,23 @@ export default function PathBCatalog() {
         )}
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur">
+      <div ref={stickyBarRef} className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-5 py-3 sm:px-6">
           <div className="flex flex-col">
             <span className="text-xs font-medium uppercase tracking-wide text-ink-faint">
               {cartItemCount} item{cartItemCount === 1 ? '' : 's'} selected
               {isUnlocked && (
                 <span className="ml-1.5 text-ink-faint">
-                  &bull; {totals.rentalDurationDays}-day rental
+                  &bull; {browsingDays}-day rental
                 </span>
               )}
             </span>
             <span className="text-sm font-semibold text-ink">
-              {cart.byoGears.length > 0 && cart.selectedKits.length === 0 ? (
-                <>Deposit: To be determined by GearBnB</>
-              ) : (
-                <>Deposit {formatCurrency(totals.dueToday)}</>
-              )}
+              Deposit {formatCurrency(totals.dueToday)}
               <span className="mx-1.5 text-ink-faint">&bull;</span>
-              Rental Fee {formatCurrency(totals.dueBeforeStart)}
+              <BarRentalFee normalPesos={totals.dueBeforeStart} state={basketPromo} />
             </span>
+            <BarPromoNote state={basketPromo} />
           </div>
           {byoAvailability === 'error' ? (
             // A failed check is never treated as "nothing to block on" — same reasoning as

@@ -28,10 +28,10 @@ const STATUS_LABELS: Record<VerificationDocumentReviewStatus, string> = {
 };
 
 const STATUS_BADGE_STYLES: Record<VerificationDocumentReviewStatus, string> = {
-  PENDING_REVIEW: 'bg-amber-100 text-amber-800 dark:bg-amber-400/10 dark:text-amber-300',
+  PENDING_REVIEW: 'bg-amber-100 text-amber-800',
   APPROVED: 'bg-brand-forest/10 text-accent',
-  REJECTED: 'bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400',
-  CORRECTION_REQUIRED: 'bg-amber-100 text-amber-800 dark:bg-amber-400/10 dark:text-amber-300',
+  REJECTED: 'bg-red-100 text-red-700',
+  CORRECTION_REQUIRED: 'bg-amber-100 text-amber-800',
 };
 
 function CheckCircleIcon({ className }: { className?: string }) {
@@ -216,9 +216,9 @@ function DocumentReviewRow({ bookingId, title, document, onResubmitted, readOnly
 
       {isCorrectionRequired && (
         <div className="flex flex-col gap-3">
-          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-400/30 dark:bg-amber-400/10">
-            <AlertIcon className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300" />
-            <p className="text-xs text-amber-800 dark:text-amber-300">
+          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+            <AlertIcon className="h-4 w-4 shrink-0 text-amber-700" />
+            <p className="text-xs text-amber-800">
               {document.reviewNote || 'Please review and resubmit this document.'}
             </p>
           </div>
@@ -241,7 +241,7 @@ function DocumentReviewRow({ bookingId, title, document, onResubmitted, readOnly
               />
 
               {submitError && (
-                <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+                <p role="alert" className="text-xs font-medium text-red-600">
                   {submitError}
                 </p>
               )}

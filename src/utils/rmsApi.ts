@@ -1,4 +1,5 @@
 import { supabase } from '../supabase';
+import type { MetaBookingTracking } from './metaTracking';
 import type { VerificationDocumentKey } from '../types/gearbnb';
 
 /**
@@ -76,13 +77,15 @@ export class RmsApiError extends Error {
   code?: string;
   /** Present alongside DUPLICATE_BOOKING_REQUEST: the customer's OWN existing booking's number. */
   bookingNumber?: string;
+  /** Present alongside SAVED_DOCUMENT_UNAVAILABLE: which document kinds could not be reused (e.g. GOV_ID_1). */
+  kinds?: string[];
 
   constructor(
     message: string,
     status: number,
     fields?: Record<string, string[]>,
     retryAfterMs?: number,
-    extra?: { code?: string; bookingNumber?: string },
+    extra?: { code?: string; bookingNumber?: string; kinds?: string[] },
   ) {
     super(message);
     this.status = status;
@@ -90,12 +93,16 @@ export class RmsApiError extends Error {
     this.retryAfterMs = retryAfterMs;
     this.code = extra?.code;
     this.bookingNumber = extra?.bookingNumber;
+    this.kinds = extra?.kinds;
   }
 }
 
 export type BookingSubmitFailure =
   | { kind: 'duplicate'; bookingNumber?: string }
   | { kind: 'inventory_conflict' }
+  /** A saved document the customer chose to reuse can no longer be used (it expired or was removed) between the
+   *  moment the page loaded and the moment of booking. `kinds` are the RMS document kinds to upload again. */
+  | { kind: 'saved_document_unavailable'; kinds: RmsVerificationDocumentKind[] }
   | { kind: 'other'; message: string };
 
 /**
@@ -109,6 +116,10 @@ export type BookingSubmitFailure =
 export function classifyBookingSubmitError(err: unknown): BookingSubmitFailure {
   if (err instanceof RmsApiError && err.status === 409) {
     if (err.code === 'DUPLICATE_BOOKING_REQUEST') return { kind: 'duplicate', bookingNumber: err.bookingNumber };
+    if (err.code === 'SAVED_DOCUMENT_UNAVAILABLE') {
+      const valid = new Set<string>(Object.values(VERIFICATION_KIND_MAP));
+      return { kind: 'saved_document_unavailable', kinds: (err.kinds ?? []).filter((k): k is RmsVerificationDocumentKind => valid.has(k)) };
+    }
     if (!err.code && /no longer available/i.test(err.message)) return { kind: 'inventory_conflict' };
   }
   return { kind: 'other', message: describeRmsError(err) };
@@ -232,7 +243,7 @@ async function rmsFetch<T>(path: string, options: RmsFetchOptions = {}): Promise
   }
 
   if (!response.ok) {
-    const body = (data ?? {}) as { error?: string; fields?: Record<string, string[]>; code?: string; bookingNumber?: string };
+    const body = (data ?? {}) as { error?: string; fields?: Record<string, string[]>; code?: string; bookingNumber?: string; kinds?: unknown };
     // Only meaningful on a 429 (see RMS's own checkRateLimit) — a plain integer number of seconds
     // per the standard Retry-After header, never trusted beyond that single well-formed shape.
     const retryAfterHeader = response.headers.get('Retry-After');
@@ -241,6 +252,7 @@ async function rmsFetch<T>(path: string, options: RmsFetchOptions = {}): Promise
     throw new RmsApiError(body.error ?? 'The request could not be completed.', response.status, body.fields, retryAfterMs, {
       code: typeof body.code === 'string' ? body.code : undefined,
       bookingNumber: typeof body.bookingNumber === 'string' ? body.bookingNumber : undefined,
+      kinds: Array.isArray(body.kinds) ? body.kinds.filter((k): k is string => typeof k === 'string') : undefined,
     });
   }
 
@@ -313,6 +325,9 @@ export function toRmsBrand(brand: string): string {
 }
 
 export interface RmsBookingSubmission {
+  /** Meta (Facebook) ads tracking details: present ONLY when the visitor accepted cookies, otherwise left out entirely.
+   *  The RMS uses it to send the matching server-side "Lead"; see utils/metaTracking.ts. */
+  meta?: MetaBookingTracking;
   contact: { fullName: string; phone: string };
   booking: {
     /** Package path — mutually exclusive with bookingGears (the RMS route takes packageCode
@@ -343,23 +358,44 @@ export interface RmsBookingSubmission {
     byoAgreementAccepted?: true;
     estimatedRentalFeeCentavos: number;
     estimatedDepositCentavos: number;
+    /** The promo saving the site displayed (0 when none), in centavos. The RMS only compares it
+     *  with its own figure and flags a mismatch for staff; it never trusts or charges from it.
+     *  Always separate from estimatedRentalFeeCentavos, which stays the normal, pre-discount fee. */
+    estimatedDiscountCentavos?: number;
   };
-  verificationDocuments: { kind: string; storagePath: string }[];
+  /** One entry per required document: a file the customer just uploaded (`storagePath`), or a request to reuse
+   *  the document they already have saved from an earlier booking (`reuseSaved`). The RMS re-checks the saved
+   *  one at booking time and refuses with SAVED_DOCUMENT_UNAVAILABLE if it can no longer be used. */
+  verificationDocuments: ({ kind: string; storagePath: string } | { kind: string; reuseSaved: true })[];
 }
 
 /**
  * Confirmed against the actual RMS route (src/app/api/customer/bookings/route.ts,
- * createBookingFromCustomerPortal in src/server/bookings/service.ts): this is the complete
- * response. There is deliberately NO booking id field here — only bookingNumber. The booking's
- * internal id (needed for POST /deposit-proof) is only ever exposed via GET /api/customer/bookings
- * (see RmsMyBooking.bookingId below). Do not add a bookingId field here without re-confirming
- * against the live RMS response — a prior version of this type assumed one existed and it did not.
+ * createBookingFromCustomerPortal in src/server/bookings/service.ts). The live RMS returns no
+ * booking id here, only bookingNumber; the internal id (needed for POST /deposit-proof) comes from
+ * GET /api/customer/bookings (RmsMyBooking.bookingId). The tiered-deposit RMS change adds an
+ * optional `bookingId` below; never assume it is present.
  */
 export interface RmsBookingResult {
   bookingNumber: string;
   status: string;
   rentalFeeCentavos: number;
   depositCentavos: number;
+  /** What the RMS actually discounted this booking by (0 when nothing). Optional defensively: an
+   *  older RMS response won't carry it. */
+  discountCentavos?: number;
+  /** The tiered-deposit RMS (see docs/handoff in the RMS repo) also returns these, so the
+   *  confirmation screen can take the deposit straight away. All optional: an RMS without that
+   *  change returns none of them, and the screen falls back to "upload proof in My Bookings".
+   *  bookingId: needed for POST /deposit-proof. */
+  bookingId?: string;
+  /** ISO time the booking is cancelled if the deposit is still unpaid (24h after checkout). */
+  depositDueAt?: string | null;
+  /** The RMS's own clock when it answered, so the countdown is right even on a phone with the
+   *  wrong time (see utils/depositCountdown.ts). */
+  serverNow?: string;
+  /** PACKAGE: the package's own deposit. TIER: the tier for the rental total. */
+  depositReason?: 'PACKAGE' | 'TIER';
 }
 
 export function submitBookingToRms(payload: RmsBookingSubmission, idempotencyKey: string) {
@@ -449,6 +485,17 @@ export interface RmsRentalFee {
   proofStatus?: DepositProofStatus;
   reviewNote?: string | null;
   amountClaimedCentavos?: number | null;
+  /** The rental fee before any discount, and the discount taken off it. `dueCentavos` above is
+   *  already after the discount. Optional defensively, for an older RMS response. */
+  beforeDiscountCentavos?: number;
+  discountCentavos?: number;
+}
+
+/** A discount applied to a booking: an automatic promo, or one staff set by hand ("Discount"). */
+export interface RmsBookingDiscount {
+  savedCentavos: number;
+  source: 'PROMO' | 'MANUAL';
+  label: string;
 }
 
 /** Matches the RMS's VerificationDocumentStatus enum exactly (prisma/schema.prisma). */
@@ -551,6 +598,11 @@ export interface RmsMyBooking {
   rentalFeeCentavos: number;
   depositCentavos: number;
   securityDeposit: RmsSecurityDeposit;
+  /** When this booking is cancelled if the deposit is still unpaid (24h after checkout). null or
+   *  absent for older bookings and an older RMS: no countdown is shown for those. */
+  depositDueAt?: string | null;
+  /** The RMS's clock when it answered (see RmsBookingResult.serverNow). */
+  serverNow?: string;
   /** Optional defensively — older RMS responses (or a booking predating this field) won't have
    * it; the UI must not crash when it's absent, just omit the rental-fee section for that card. */
   rentalFee?: RmsRentalFee;
@@ -577,6 +629,17 @@ export interface RmsMyBooking {
    * response predating this field — treated the same as `null` (no section), never crashes, never
    * fabricates a settlement. See RmsReturnSettlement's own doc comment for the individual fields. */
   returnSettlement?: RmsReturnSettlement | null;
+  /** `null` when the booking has no discount; absent on an older RMS response (treated the same). */
+  discount?: RmsBookingDiscount | null;
+  /** When staff confirmed the gear handover; null before pickup. `pickupAt` stays the BOOKED pickup.
+   *  Optional: an older RMS response won't have these three fields. */
+  pickedUpAt?: string | null;
+  /** Whole minutes between the booked pickup and pickedUpAt: positive = collected late, negative =
+   *  early; null before handover. */
+  pickupDifferenceMinutes?: number | null;
+  /** The return time before the RMS moved it (to keep the booked length after a late or early
+   *  pickup, or a staff edit); null if it never moved. `returnAt` is always the current, correct one. */
+  originalReturnAt?: string | null;
 }
 
 /** Read-only — safe to retry a transient failure (see withReadRetry). Never used for a mutation. */
@@ -1069,4 +1132,90 @@ export async function checkAvailability(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** The RMS's site-wide automatic promo, as published to customers. Amounts are centavos and the
+ *  percentage is basis points (1500 = 15%). See src/utils/promo.ts for how the site reads it. */
+export interface RmsPublicPromo {
+  discountType: 'PERCENT' | 'FLAT';
+  percentOffBasisPoints: number;
+  flatOffCentavos: number;
+  /** Per-unit cap on a percent discount; null = no cap. Always null for a flat promo. */
+  capCentavos: number | null;
+  /** Checked against the NORMAL price of covered gear only, before any discount. */
+  minSpendCentavos: number;
+  firstTimeRentersOnly: boolean;
+  termsText: string | null;
+  /** "PACKAGES" plus any of the ten gear category keys (see PROMO_CATEGORY_SCOPE_KEYS). */
+  scopeKeys: string[];
+  /** Last moment a customer can BOOK and still get the discount; null = no booking deadline. */
+  endsAt: string | null;
+  /** Rental window: the discount only covers a trip whose PICKUP falls inside it. Either end may
+   *  be null (open). */
+  tripStartsAt: string | null;
+  tripEndsAt: string | null;
+}
+
+export interface RmsPublicPromoResponse {
+  promo: RmsPublicPromo | null;
+  /** Only sent for a signed-in customer on a first-time-only promo. false = returning renter. */
+  eligibleForYou?: boolean;
+}
+
+export type RmsPromoEligibility = 'ELIGIBLE' | 'NOT_ELIGIBLE' | 'SIGN_IN_TO_CONFIRM' | 'NOT_REQUIRED';
+export type RmsPromoQuoteReason = 'NO_PROMO' | 'OUTSIDE_TRIP_WINDOW' | 'NOT_IN_SCOPE' | 'MIN_SPEND_NOT_MET' | 'NOT_FIRST_TIME';
+
+/** The RMS's authoritative "what would this basket save" answer. */
+export interface RmsPromoQuote {
+  applied: boolean;
+  reason: RmsPromoQuoteReason | null;
+  eligibility: RmsPromoEligibility;
+  offerLabel: string | null;
+  rentalFeeCentavos: number;
+  addOnTotalCentavos: number;
+  subtotalCentavos: number;
+  discountCentavos: number;
+  totalAfterDiscountCentavos: number;
+  remainingToQualifyCentavos: number | null;
+  /** The RMS's own deposit for this basket (tiered-deposit RMS only; absent on an older RMS, in
+   *  which case checkout shows the site's own estimate). */
+  depositCentavos?: number;
+  depositReason?: 'PACKAGE' | 'TIER';
+}
+
+/** The live promo, if any. Public; the customer's token is attached automatically when signed in,
+ *  which is what makes the RMS add `eligibleForYou`. No automatic retry: the caller treats any
+ *  failure as "no promo" and simply asks again later. */
+export function fetchPublicPromo(signal?: AbortSignal) {
+  return rmsFetch<RmsPublicPromoResponse>('/api/customer/promo', { requireAuth: false, signal });
+}
+
+/** Quote for one basket, same body as the availability check. Public (token attached when signed
+ *  in). Rate limited by the RMS, so callers debounce it and never retry automatically. */
+export function fetchPromoQuote(input: RmsAvailabilityRequest, signal?: AbortSignal) {
+  return rmsFetch<RmsPromoQuote>('/api/customer/promo/quote', { method: 'POST', body: input, requireAuth: false, signal });
+}
+
+/** One of the four required documents, as the customer's own saved copy: a state and dates, never a file or a link.
+ *  `AVAILABLE` can be reused on a new booking; the others explain why not. */
+export interface RmsSavedDocument {
+  kind: RmsVerificationDocumentKind;
+  state: 'AVAILABLE' | 'EXPIRING' | 'NOT_VERIFIED' | 'NONE';
+  uploadedAt: string | null;
+  verifiedAt: string | null;
+  expiresAt: string | null;
+  fromBookingNumber: string | null;
+}
+
+/**
+ * The documents the signed-in customer already has on file from earlier bookings (GET
+ * /api/customer/saved-documents), so a returning renter does not upload them again. Read-only. A failure just
+ * means the site asks for uploads as it always has, so callers treat any error as "nothing saved".
+ */
+export async function fetchSavedDocuments(
+  /** The booking's return time, when known, so the RMS only offers documents it will still hold after the rental. */
+  returnAt?: string | null,
+): Promise<{ retentionDays: number; documents: RmsSavedDocument[] }> {
+  const query = returnAt ? `?returnAt=${encodeURIComponent(returnAt)}` : '';
+  return withReadRetry(() => rmsFetch<{ retentionDays: number; documents: RmsSavedDocument[] }>(`/api/customer/saved-documents${query}`));
 }

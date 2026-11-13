@@ -1,6 +1,10 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
 import type { BookableAddOn, BookableGearKind } from '../types/gearbnb';
 import { formatCurrency } from '../utils/format';
+import { useBasketPromo } from '../hooks/useBasketPromo';
+import { formatCentavos, formatPromoOffer, pesosToCentavos } from '../utils/promo';
+import { gearCardPromoSaving } from '../utils/promoDisplay';
+import OffBadge from './promo/OffBadge';
 import { sizeCapacityToShow, withDefaultVariant } from '../utils/gearVariants';
 import { splitBestForLine } from '../utils/bestForLine';
 import { ID_VERIFICATION_FAQ, type FaqEntry } from '../utils/productFaq';
@@ -11,6 +15,7 @@ import { useCatalog } from '../context/useCatalog';
 import GalleryNav, { useSwipe } from './GalleryNav';
 import FormattedDescription from './FormattedDescription';
 import { GearPlaceholderIcon } from './icons';
+import { useProductViewOpen } from '../utils/productView';
 import ImageLightbox, { type LightboxImage } from './ImageLightbox';
 import ProductFaqSection from './ProductFaqSection';
 import { AddOnRow, QuantityStepper } from '../pages/PathBCatalog';
@@ -49,7 +54,7 @@ function buildFaqEntries(kind: BookableGearKind): FaqEntry[] {
   entries.push({
     question: 'When do I pay the security deposit?',
     answer:
-      'The refundable security deposit is due once your booking is confirmed, separate from the rental fee itself, the exact split is shown at checkout before you pay anything.',
+      'Right after you check out, separate from the rental fee. It depends on your rental total: ₱300 below ₱1,000, ₱500 up to ₱4,000, ₱900 from ₱4,000 to ₱6,000, and ₱1,200 above ₱6,000. Pay it within 24 hours of checking out or the booking is cancelled and the gear released. It is fully refundable.',
   });
   return entries;
 }
@@ -89,6 +94,7 @@ interface GearDetailsDialogProps {
  * this feature's own design discussion for what a real per-product URL would additionally buy.
  */
 export default function GearDetailsDialog({ kind, quantity, onQuantityChange, onClose, addOnsSection, viewOnly }: GearDetailsDialogProps) {
+  useProductViewOpen();
   const gallery: LightboxImage[] =
     kind.images && kind.images.length > 0
       ? kind.images.map((src) => ({ src, alt: kind.name }))
@@ -115,6 +121,11 @@ export default function GearDetailsDialog({ kind, quantity, onQuantityChange, on
   const [linkedKind, setLinkedKind] = useState<BookableGearKind | null>(null);
   const faqLinkTargets = useMemo(() => buildFaqLinkTargets(gearKinds, kind), [gearKinds, kind]);
   const isSelected = quantity > 0;
+  // Same promo rule as the gear cards (see gearUnitSavingCentavos), for each price tier.
+  const basketPromo = useBasketPromo();
+  const saving48 = gearCardPromoSaving(basketPromo, kind.category, kind.pricing['48h']);
+  const saving72 = gearCardPromoSaving(basketPromo, kind.category, kind.pricing['72h']);
+  const badgePromo = (saving48 || saving72) && basketPromo.kind !== 'hidden' ? basketPromo.promo : null;
 
   // Esc closes the dialog, same convention as ImageLightbox's own.
   useEffect(() => {
@@ -229,7 +240,10 @@ export default function GearDetailsDialog({ kind, quantity, onQuantityChange, on
         <div className="flex flex-col gap-4 p-5 sm:p-6">
           <div className="flex flex-col gap-1">
             <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">{kind.category}</p>
-            <h2 className="font-serif text-xl font-bold text-ink sm:text-2xl">{cleanGearName(kind.name)}</h2>
+            <h2 className="flex flex-wrap items-center gap-x-2 gap-y-1 font-serif text-xl font-bold text-ink sm:text-2xl">
+              {cleanGearName(kind.name)}
+              {!viewOnly && badgePromo && <OffBadge offer={formatPromoOffer(badgePromo)} size="large" className="my-1" />}
+            </h2>
             {bestFor ? (
               <p className="-mt-1 text-sm font-semibold text-accent">Best {lead} {bestFor}</p>
             ) : (
@@ -255,13 +269,33 @@ export default function GearDetailsDialog({ kind, quantity, onQuantityChange, on
           {!viewOnly && (
             <div className="flex items-center justify-between gap-3 rounded-xl bg-surface-muted p-3">
               <div>
-                <p className="text-lg font-bold text-accent">
-                  {formatCurrency(kind.pricing['48h'])}
-                  <span className="text-sm font-normal text-ink-muted"> / 48h</span>
-                </p>
+                {/* With the promo: normal price crossed off, discounted price right beside it, per
+                    tier. Without it: exactly the plain prices from before. */}
+                {saving48 ? (
+                  <p className="flex flex-wrap items-baseline gap-x-1.5 text-lg font-bold text-ink">
+                    <s className="text-sm font-medium text-ink-faint">{formatCurrency(kind.pricing['48h'])}</s>
+                    {formatCentavos(pesosToCentavos(kind.pricing['48h']) - saving48.centavos)}
+                    <span className="text-sm font-normal text-ink-muted">/ 48h</span>
+                  </p>
+                ) : (
+                  <p className="text-lg font-bold text-accent">
+                    {formatCurrency(kind.pricing['48h'])}
+                    <span className="text-sm font-normal text-ink-muted"> / 48h</span>
+                  </p>
+                )}
                 {(kind.pricing['72h'] !== kind.pricing['48h'] || kind.extraPerDayPrice > 0) && (
                   <p className="text-xs text-ink-muted">
-                    {formatCurrency(kind.pricing['72h'])} / 72h
+                    {saving72 ? (
+                      <>
+                        <s className="text-ink-faint">{formatCurrency(kind.pricing['72h'])}</s>{' '}
+                        <span className="font-semibold text-ink">
+                          {formatCentavos(pesosToCentavos(kind.pricing['72h']) - saving72.centavos)}
+                        </span>
+                      </>
+                    ) : (
+                      formatCurrency(kind.pricing['72h'])
+                    )}{' '}
+                    / 72h
                     {kind.extraPerDayPrice > 0 && ` · +${formatCurrency(kind.extraPerDayPrice)} per extra day`}
                   </p>
                 )}

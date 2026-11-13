@@ -10,20 +10,32 @@
      rectangle clipped by CSS. -->
     <link rel="icon" type="image/png" href="/brand_assets/gearbnb-favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Camping Gear Rental in the Philippines | GearBnB</title>
-    <meta name="description" content="Explore camping gear rental in the Philippines, serving Metro Manila, Las Piñas, and nearby cities. Find quality gear and book for your next adventure." />
+    <title>Camping Gear for Rent in Las Piñas &amp; Metro Manila | GearBnB</title>
+    <meta name="description" content="Camping gear rental in Metro Manila made easy. Rent tents, beds, chairs and full camping kits from trusted brands. Pick up in Las Piñas City. Book online." />
+    <!-- Meta Pixel Code. Loads ONLY after the visitor taps "Accept" on the cookie banner
+         (src/components/CookieConsent.tsx), and only on the live site (gearbnbrental.com), so local
+         development and previews never send test traffic. A returning visitor who already accepted
+         gets it straight away here; the banner calls window.gearbnbLoadPixel() on Accept. Page
+         changes inside the site are tracked by MetaPixelPageViews in src/App.tsx. -->
     <script>
-      (function () {
-        // Default is light — only an explicit prior choice (the in-app toggle) turns this dark.
-        // Deliberately does NOT fall back to prefers-color-scheme: a first-time visitor whose OS/
-        // browser reports a dark preference must still see the site's intended light-mode default,
-        // not have that decision made for them by an unrelated system setting they never chose
-        // inside this app. Runs before <body> renders so there's no flash of the wrong theme.
-        if (localStorage.getItem('gearbnb-theme') === 'dark') {
-          document.documentElement.classList.add('dark');
-        }
-      })();
+      window.gearbnbLoadPixel = function () {
+        if (!/(^|\.)gearbnbrental\.com$/.test(location.hostname) || window.fbq) return;
+        !function(f,b,e,v,n,t,s)
+        {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+        n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+        if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+        n.queue=[];t=b.createElement(e);t.async=!0;
+        t.src=v;s=b.getElementsByTagName(e)[0];
+        s.parentNode.insertBefore(t,s)}(window, document,'script',
+        'https://connect.facebook.net/en_US/fbevents.js');
+        fbq('init', '1784119539456234');
+        fbq('track', 'PageView');
+      };
+      try {
+        if (localStorage.getItem('gearbnb-cookie-consent') === 'granted') window.gearbnbLoadPixel();
+      } catch (e) {}
     </script>
+    <!-- End Meta Pixel Code -->
   </head>
   <body>
     <div id="root"></div>

@@ -2,6 +2,7 @@ import type { Session, User } from '@supabase/supabase-js';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { supabase } from '../supabase';
 import { isAllowedRegistrationEmail, REGISTRATION_EMAIL_ERROR } from '../utils/email';
+import { newOAuthRegistration, trackCompleteRegistration } from '../utils/metaTracking';
 
 interface AuthResult {
   error: string | null;
@@ -46,6 +47,10 @@ interface AuthContextValue {
    *  guaranteed to already be reachable (it's literally the page this button is clicked from), so
    *  `redirectPath` is stashed here and consumed by Login.tsx once the session actually lands. */
   signInWithGoogle: (redirectPath?: string) => Promise<AuthResult>;
+  /** Same flow as signInWithGoogle, through Facebook Login (Supabase's Facebook provider). Facebook
+   *  shares the name, email and profile picture; an account with no email on Facebook is refused
+   *  by Supabase and gets a plain message (see friendlyAuthError). */
+  signInWithFacebook: (redirectPath?: string) => Promise<AuthResult>;
   signOut: () => Promise<void>;
   /** Re-sends the signup confirmation email via Supabase's own `resend` API — never a second
    *  email system. Only meaningful for an account that signed up but hasn't confirmed its email
@@ -227,6 +232,15 @@ export function friendlyAuthError(message: string): string {
   if (normalized.includes('auth session missing') || normalized.includes('session not found')) {
     return 'Your password reset link has expired or is no longer valid. Please request a new one.';
   }
+  // Facebook account registered with a phone number only: Supabase can't create an account
+  // without an email, and the raw text names neither Facebook nor a fix.
+  if (normalized.includes('error getting user email from external provider')) {
+    return "Your Facebook account doesn't share an email address with us. Add an email to your Facebook account, or sign up with your email instead.";
+  }
+  // A sign-in provider not switched on yet in Supabase (Authentication → Providers).
+  if (normalized.includes('provider is not enabled') || normalized.includes('unsupported provider')) {
+    return "This sign-in option isn't available right now. Please log in with your email instead.";
+  }
   // Supabase rejects reusing the current password on some projects — actionable, not an error the
   // customer should have to decode.
   if (normalized.includes('should be different from the old password')) {
@@ -236,6 +250,20 @@ export function friendlyAuthError(message: string): string {
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+/** Reports a just-created Google or Facebook account to Meta, once per account per browser tab. Never throws. */
+function reportNewOAuthAccount(user: Parameters<typeof newOAuthRegistration>[0]): void {
+  try {
+    const method = newOAuthRegistration(user);
+    if (!method || !user) return;
+    const key = `gearbnb-meta-registration-${user.id}`;
+    if (sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key, '1');
+    trackCompleteRegistration(method);
+  } catch {
+    // Storage or Pixel problems must never get in the way of signing in.
+  }
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -345,6 +373,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sessionUpdatedByEventRef.current = true;
       }
       setSession(newSession);
+      // Meta "CompleteRegistration" for a brand-new Google/Facebook account. SIGNED_IN also fires on a tab refocus, so the
+      // account id is remembered for this browser tab and an account is reported once.
+      if (event === 'SIGNED_IN') reportNewOAuthAccount(newSession?.user);
       // LATCHED deliberately: PASSWORD_RECOVERY turns it on, and only a sign-out turns it back
       // off. It must NOT be recomputed from each event as `event === 'PASSWORD_RECOVERY'`, because
       // supabase-js keeps firing other events at this same listener afterwards — TOKEN_REFRESHED
@@ -419,6 +450,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // Email confirmation enabled: signUp succeeds but no session is issued until confirmed.
+    // The account now exists (confirmed or waiting for the email link): report it to Meta once, whichever way it goes on.
+    trackCompleteRegistration('email');
     if (data.user && !data.session) {
       return { error: null, needsEmailConfirmation: true };
     }
@@ -445,6 +478,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signInWithGoogle(redirectPath = '/'): Promise<AuthResult> {
+    // See the comment in startOAuth on why Google always shows the account chooser.
+    return startOAuth('google', redirectPath, { prompt: 'select_account' });
+  }
+
+  async function signInWithFacebook(redirectPath = '/'): Promise<AuthResult> {
+    // Facebook already shows "Continue as <name>" with a way to switch accounts, so it needs no
+    // extra parameter. Supabase's Facebook provider asks for the email permission by default.
+    return startOAuth('facebook', redirectPath);
+  }
+
+  async function startOAuth(
+    provider: 'google' | 'facebook',
+    redirectPath: string,
+    queryParams?: Record<string, string>,
+  ): Promise<AuthResult> {
     // Same identity architecture as email/password: Supabase issues the same shape of session and
     // access token regardless of provider, and the RMS resolves the customer from that token's
     // verified auth user id exactly the same way either way (see linkOrCreateCustomer server-side)
@@ -459,7 +507,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // project but is a separate application (see resolveCustomerOrigin). Also always /login rather
     // than redirectPath itself — see this function's own doc comment on the interface above.
     const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
+      provider,
       options: {
         redirectTo: `${resolveCustomerOrigin()}/login`,
         // Without this, Google silently re-authenticates using whatever Google account session
@@ -470,8 +518,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // own separate Supabase auth.users row, and nothing on this screen would show the mismatch
         // until a booking under the wrong account turns up. Forcing the chooser every time costs
         // one extra click but makes "which Google account am I using" an explicit choice instead
-        // of an invisible one.
-        queryParams: { prompt: 'select_account' },
+        // of an invisible one. (Google only; signInWithGoogle passes it.)
+        queryParams,
       },
     });
     if (error) return { error: friendlyAuthError(error.message) };
@@ -569,6 +617,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signUp,
       signIn,
       signInWithGoogle,
+      signInWithFacebook,
       signOut,
       resendEmailConfirmation,
       requestPasswordReset,

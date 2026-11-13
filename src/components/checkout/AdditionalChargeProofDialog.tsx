@@ -119,7 +119,7 @@ function ProofDropzone({ file, previewUrl, error, disabled, onSelect, onRemove }
           'relative flex h-24 flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed p-3 text-center transition-colors sm:h-32',
           disabled ? 'cursor-wait' : 'cursor-pointer',
           error
-            ? 'border-red-400 bg-red-50 dark:border-red-500 dark:bg-red-500/10'
+            ? 'border-red-400 bg-red-50'
             : hasFile
               ? 'border-brand-forest bg-brand-forest/10'
               : isDragActive
@@ -144,7 +144,7 @@ function ProofDropzone({ file, previewUrl, error, disabled, onSelect, onRemove }
               onRemove();
             }}
             aria-label="Remove selected file"
-            className="absolute right-2 top-2 rounded-full bg-surface p-1 text-ink-muted shadow hover:text-red-600 dark:hover:text-red-400"
+            className="absolute right-2 top-2 rounded-full bg-surface p-1 text-ink-muted shadow hover:text-red-600"
           >
             <XMarkIcon className="h-4 w-4" />
           </button>
@@ -175,7 +175,7 @@ function ProofDropzone({ file, previewUrl, error, disabled, onSelect, onRemove }
       </label>
 
       {error && (
-        <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+        <p role="alert" className="text-xs font-medium text-red-600">
           {error}
         </p>
       )}
@@ -205,13 +205,11 @@ export default function AdditionalChargeProofDialog({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [methodId, setMethodId] = useState('');
-  const [referenceNumber, setReferenceNumber] = useState('');
   const [detailsError, setDetailsError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const methodSelectId = useId();
-  const referenceFieldId = useId();
 
   const objectUrlRef = useRef<string | null>(null);
 
@@ -317,7 +315,6 @@ export default function AdditionalChargeProofDialog({
         // see paymentMethods.ts's own doc comment on the two fields. Falls back to rmsMethod for
         // any method (GCash) that has no purpose-specific override.
         method: selectedMethod.additionalChargeRmsMethod ?? selectedMethod.rmsMethod,
-        referenceNumber: referenceNumber.trim() || undefined,
       });
       resetSelection();
       onProofSubmitted();
@@ -400,21 +397,8 @@ export default function AdditionalChargeProofDialog({
             </select>
           </label>
 
-          <label htmlFor={referenceFieldId} className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-ink">Reference Number (optional)</span>
-            <input
-              id={referenceFieldId}
-              type="text"
-              disabled={submitting}
-              value={referenceNumber}
-              onChange={(e) => setReferenceNumber(e.target.value)}
-              placeholder="Transaction/reference number from your receipt"
-              className="rounded-lg border border-line px-3 py-2.5 text-sm text-ink shadow-sm outline-none transition-colors focus:border-brand-forest focus:ring-2 focus:ring-brand-forest/20"
-            />
-          </label>
-
           {detailsError && (
-            <p role="alert" className="text-sm font-medium text-red-600 dark:text-red-400">
+            <p role="alert" className="text-sm font-medium text-red-600">
               {detailsError}
             </p>
           )}
@@ -429,7 +413,7 @@ export default function AdditionalChargeProofDialog({
           />
 
           {submitError && (
-            <p role="alert" className="text-sm font-medium text-red-600 dark:text-red-400">
+            <p role="alert" className="text-sm font-medium text-red-600">
               {submitError}
             </p>
           )}

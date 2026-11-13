@@ -70,6 +70,24 @@ const SECTIONS: LegalSection[] = [
           <li>Give true, complete and current information.</li>
           <li>Keep your login details private if you create an account. You are responsible for activity under your account.</li>
         </LegalList>
+        <p><Strong>Signing in with Google or Facebook</Strong></p>
+        <LegalList>
+          <li>
+            You are allowed to create your account or sign in with your Google Account or your Facebook account. When
+            you do, you let Google or Facebook share your name, email address and profile picture with us. Our{' '}
+            <Link className={legalLinkClass} to="/privacy-policy#google">Privacy Policy</Link> explains how we use this
+            data.
+          </li>
+          <li>Google's and Meta's own terms also apply to your Google Account and your Facebook account.</li>
+          <li>
+            GearBnB is not affiliated with, endorsed by or sponsored by Google or Meta. Google and Meta are not
+            responsible for GearBnB's services.
+          </li>
+          <li>
+            You are allowed to delete your account and your data at any time. See our{' '}
+            <Link className={legalLinkClass} to="/data-deletion">User Data Deletion page</Link>.
+          </li>
+        </LegalList>
       </>
     ),
   },
@@ -100,9 +118,9 @@ const SECTIONS: LegalSection[] = [
         <LegalSteps>
           <li>Choose a package or build your own kit.</li>
           <li>Send your trip dates, how you will collect the gear and your verification documents.</li>
+          <li>Pay the security deposit within 24 hours of sending your request, while we review your documents.</li>
           <li>We review your documents and approve or reject your request.</li>
-          <li>Pay the security deposit after we approve your request.</li>
-          <li>We confirm your payment and lock your dates.</li>
+          <li>Once your deposit is confirmed and your request approved, we reserve your gear and lock your dates.</li>
           <li>Pay the rental fee before your rental start date.</li>
         </LegalSteps>
         <p>
@@ -123,8 +141,10 @@ const SECTIONS: LegalSection[] = [
       <LegalList>
         <li>All prices are in Philippine pesos (PHP). We will add VAT once we complete our BIR registration.</li>
         <li>The rental fee depends on the gear and the length of your rental. Rates change by rental duration and we list the rates per item.</li>
-        <li>Your payment has two parts. The security deposit is due after we approve your request. The rental fee total is due before your rental start date.</li>
+        <li>Your payment has two parts. The security deposit is due within 24 hours of sending your request. The rental fee total is due before your rental start date. We can only reserve and prepare your gear once both are settled.</li>
         <li>We accept GCash and bank transfer. We give you our bank and GCash details and we confirm each payment by hand.</li>
+        <li>We hold your gear for 24 hours after you send your request. If we do not receive your security deposit, or a proof of payment for it, within those 24 hours, we automatically cancel the booking and release the gear. We do not charge you anything for a booking we cancel this way, and you are welcome to book again, subject to availability.</li>
+        <li>If we cannot approve your request after you have paid the security deposit, we refund the deposit in full.</li>
         <li>If we do not receive your rental fee before the start date we might cancel your booking and release your dates. We keep your security deposit unless your cancellation qualifies for a refund under <SectionRef id="cancel">section&nbsp;10</SectionRef>.</li>
       </LegalList>
     ),
@@ -134,9 +154,9 @@ const SECTIONS: LegalSection[] = [
     title: 'Security deposit and refunds',
     body: (
       <LegalList>
-        <li>The deposit is a fixed amount per package. We show the amount when you book. The amount stays the same regardless of rental length.</li>
-        <li>If you rent more than one package the deposits add up.</li>
-        <li>The deposit for a Build Your Own kit varies with the amount you rent. We show the deposit amount when you book.</li>
+        <li>The deposit depends on your rental total for gear and add-ons, before any discount: ₱300 below ₱1,000; ₱500 from ₱1,000 to below ₱4,000; ₱900 from ₱4,000 to ₱6,000; ₱1,200 above ₱6,000.</li>
+        <li>A package on its own has its own fixed deposit. If add-ons bring a package rental into a higher deposit tier, the higher amount applies.</li>
+        <li>We show the deposit amount, and why, before you send your request.</li>
         <li>We refund the deposit in full when you return all gear on time and in the same condition as at handover, apart from normal wear.</li>
         <li>We inspect the gear when you return the gear. We settle your deposit after the inspection. We refund within 24 to 48 hours through GCash or bank transfer.</li>
         <li>We deduct from the deposit for damage, missing items or parts, extra cleaning and late fees. We show you each deduction with our inspection notes.</li>
@@ -357,7 +377,7 @@ export default function TermsOfService() {
   return (
     <LegalLayout
       title="Terms of Service"
-      updated="September 2026"
+      updated="October 2026"
       lead={
         <>
           These Terms govern your use of gearbnbrental.com and your rental of camping gear from GearBnB. Read them

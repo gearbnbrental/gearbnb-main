@@ -1,0 +1,120 @@
+import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { usePromo } from '../context/PromoContext';
+import { formatPromoOffer } from '../utils/promo';
+import { PROMO_COPY } from '../config/promoCopy';
+import { readA11ySettings } from '../utils/accessibility';
+
+const SHOW_DELAY_MS = 1000;
+/** The animation's own background green, shown while it downloads: the animation itself opens on
+ *  plain green, so the popup can appear right on time without looking empty or broken. */
+const ARTWORK_BACKGROUND = '#042512';
+// Animated WebP made from the November promo GIF (800px, about 1.6MB instead of the GIF's 9MB).
+const PROMO_IMAGE = '/images/promos/november-promo.webp';
+// A new key per artwork, so a visitor who closed an earlier promo still sees this one once.
+const SEEN_KEY = 'gearbnb-promo-november-seen';
+
+function alreadySeenThisSession(): boolean {
+  try {
+    return sessionStorage.getItem(SEEN_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function markSeen() {
+  try {
+    sessionStorage.setItem(SEEN_KEY, '1');
+  } catch {
+    // Storage blocked (private mode etc.) — worst case the popup shows again next visit.
+  }
+}
+
+/**
+ * Homepage promo popup. Appears only while the RMS reports a live promo this visitor can get (and
+ * before its booking deadline, which usePromo already enforces), 1 second after the homepage
+ * opens (the artwork fills in as it downloads), once per browser session; clicking the artwork goes to the catalog. Closes via the ×
+ * button, a click on the backdrop, or Escape. Disappears at once if the promo goes away (it ended,
+ * or the visitor signed in as a returning renter).
+ */
+export default function PromoPopup() {
+  const { promo } = usePromo();
+  const [open, setOpen] = useState(false);
+  const mountedAt = useRef(Date.now());
+  const hasPromo = promo !== null;
+
+  useEffect(() => {
+    // Never auto-open the animated ad for someone who switched on Stop Animations (or the Seizure
+    // Safety / ADHD profiles) in the accessibility panel.
+    if (!hasPromo || alreadySeenThisSession() || readA11ySettings().stopAnimations) return;
+    // Opens 1 second after arrival (counted from when the homepage opened, not from when the promo
+    // answer came back), without waiting for the 1.6MB animation to finish downloading: it starts
+    // downloading now and plays in place as soon as it arrives, over its own green background.
+    new Image().src = PROMO_IMAGE;
+    const remainingDelay = Math.max(0, mountedAt.current + SHOW_DELAY_MS - Date.now());
+    const timer = window.setTimeout(() => {
+      setOpen(true);
+      markSeen();
+    }, remainingDelay);
+    return () => window.clearTimeout(timer);
+  }, [hasPromo]);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [open]);
+
+  if (!open || !promo) return null;
+  const description = `${formatPromoOffer(promo)} off${promo.firstTimeRentersOnly ? ' for first-time renters' : ''}. ${PROMO_COPY.termsApply}`;
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+      onClick={() => setOpen(false)}
+      role="presentation"
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={description}
+        // Bigger on wider screens (up to 512px on desktop); phones keep the full-width-minus-margin
+        // size. The artwork is 800px, so it stays sharp at these sizes.
+        className="relative w-full max-w-sm sm:max-w-md lg:max-w-lg"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Link
+          to="/catalog"
+          onClick={() => setOpen(false)}
+          className="block aspect-square overflow-hidden rounded-2xl shadow-2xl"
+          style={{ backgroundColor: ARTWORK_BACKGROUND }}
+        >
+          <img
+            src={PROMO_IMAGE}
+            alt={`${description} Rent now.`}
+            width={800}
+            height={800}
+            // If the artwork can't load at all, close rather than leave an empty green square.
+            onError={() => setOpen(false)}
+            className="block h-full w-full"
+          />
+        </Link>
+        {/* A soft dark backing so the white text stays readable over whatever is behind it. */}
+        <p className="mx-auto mt-2 w-fit rounded-full bg-black/55 px-3 py-1 text-center text-xs text-white">
+          {PROMO_COPY.termsApply}
+        </p>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          aria-label="Close promo"
+          className="absolute -right-3 -top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white text-xl leading-none text-ink shadow-lg transition-colors hover:bg-surface-strong"
+        >
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+    </div>
+  );
+}

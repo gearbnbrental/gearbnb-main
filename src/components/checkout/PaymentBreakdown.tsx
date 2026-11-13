@@ -12,15 +12,17 @@ import {
   getItemPrice,
   getKitPrice,
   isVerificationComplete,
+  byoLineKeyOf,
   useRental,
 } from '../../context/RentalContext';
-import { REQUIRED_VERIFICATION_DOCUMENTS } from '../../context/RentalContext';
+import { REQUIRED_VERIFICATION_DOCUMENTS, selectionDates } from '../../context/RentalContext';
+import { buildVerificationPayload, clearSavedSlots } from '../../utils/savedDocuments';
+import { browserEnvironment, buildMetaTracking, leadEventIdFor, trackLead } from '../../utils/metaTracking';
 import { toAvailabilityTimestamp, toTimestamp } from '../../utils/duration';
-import { formatCurrency } from '../../utils/format';
+import { formatCurrency, formatTripDate } from '../../utils/format';
 import {
   classifyBookingSubmitError,
   ensureFreshSession,
-  VERIFICATION_KIND_MAP,
   submitBookingToRms,
   toRmsBrand,
   type RmsAvailabilityIssue,
@@ -33,15 +35,15 @@ import {
 import { clearAvailabilityCache, requestAvailabilityCheck, useAvailabilityCheck } from '../../hooks/useAvailabilityCheck';
 import { cleanGearName } from '../../utils/gearName';
 import { describeAvailabilityIssue } from '../../utils/availabilityIssue';
-
-function formatDate(dateStr: string): string | null {
-  if (!dateStr) return null;
-  const date = new Date(dateStr);
-  if (Number.isNaN(date.getTime())) return null;
-  // dateStr is a plain yyyy-mm-dd calendar date, parsed as UTC midnight — formatted in UTC so it
-  // never shifts a day in a browser west of UTC.
-  return date.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-}
+import { useBasketPromo } from '../../hooks/useBasketPromo';
+import { checkoutBlocker, datesBlocker } from '../../utils/checkoutRules';
+import { usePromoQuote } from '../../hooks/usePromoQuote';
+import { promoLinesForCart } from '../../utils/promoCart';
+import { formatCentavos, type BasketPromoState } from '../../utils/promo';
+import { decideCheckoutSaving } from '../../utils/promoDisplay';
+import { PromoRentalFeeRows } from '../promo/PromoTotals';
+import CheckoutSavingLine from '../promo/CheckoutSavingLine';
+import { depositExplanation } from '../../utils/securityDeposit';
 
 /**
  * `crypto.randomUUID()` is restricted to secure contexts (HTTPS, or localhost) by every major
@@ -68,13 +70,14 @@ interface SummaryCardProps {
   variant: 'primary' | 'secondary';
   eyebrow: string;
   title: string;
-  /** Null renders "To be determined" instead of a peso amount — for the Build Your Own deposit,
-   * whose real amount doesn't exist yet (see requirement 13/20). */
-  amount: number | null;
+  amount: number;
   description: string;
+  /** Keep centavos ("₱1,062.50") instead of rounding to whole pesos — only for an amount a
+   *  percent discount made non-whole. Off by default, so the card reads exactly as before. */
+  exactCentavos?: boolean;
 }
 
-function SummaryCard({ variant, eyebrow, title, amount, description }: SummaryCardProps) {
+function SummaryCard({ variant, eyebrow, title, amount, description, exactCentavos = false }: SummaryCardProps) {
   const isPrimary = variant === 'primary';
 
   return (
@@ -97,8 +100,8 @@ function SummaryCard({ variant, eyebrow, title, amount, description }: SummaryCa
       <span className={isPrimary ? 'text-sm font-medium text-white' : 'text-sm font-medium text-ink-muted'}>
         {title}
       </span>
-      <span className={amount === null ? 'text-xl font-bold tracking-tight' : 'text-3xl font-bold tracking-tight'}>
-        {amount === null ? 'To Be Determined' : formatCurrency(amount)}
+      <span className="text-3xl font-bold tracking-tight">
+        {exactCentavos ? formatCentavos(Math.round(amount * 100)) : formatCurrency(amount)}
       </span>
       <p className={isPrimary ? 'text-xs text-white' : 'text-xs text-ink-muted'}>{description}</p>
     </div>
@@ -137,7 +140,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
-  const { cart, totals } = useRental();
+  const { cart, totals, updateVerificationDocs } = useRental();
   // Scoped to only what's checked for checkout on the Cart page — an unchecked package or BYO
   // item saved for later must never appear in the itemized breakdown or the booking submission.
   const selectedCart = filterCartToSelection(cart);
@@ -153,6 +156,8 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
     verificationDocs,
   } = selectedCart;
 
+  const basketPromo = useBasketPromo();
+
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
@@ -166,23 +171,11 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
 
   const hasPackage = selectedKits.length > 0;
   const hasByoGear = byoGears.length > 0;
-  // A pure-BYO cart never has a computed deposit — RMS starts every Build Your Own booking at
-  // ₱0 and an admin sets the real amount manually after review (see requirement 13's workflow).
-  // Showing "₱0" unqualified would read as "no deposit required," which isn't true.
+  // Build Your Own signs the BYO Rental Agreement instead of the package Terms (see below).
   const isByoOnly = hasByoGear && !hasPackage;
-  // Whether the selected package has any extra rentable inventory attached on top of it — the
-  // customer website never computes THIS deposit; a GearBnB staff member decides, after reviewing
-  // the specific add-ons, whether anything beyond the package's own deposit (shown below, already
-  // an RMS-authoritative figure) is required. Requiring `hasPackage` means this can never be true
-  // for a BYO-only cart, which already has its own separate "To Be Determined" story via
-  // `isByoOnly` above. Mirrors `hasAnyKitExtras`' own Object.values(...).some(...) pattern just
-  // above it — `packageAddOns` here is already `selectedCart.packageAddOns`, scoped by
-  // filterCartToSelection to only the checked selection, so this can never react to an unchecked
-  // kit's add-ons sitting elsewhere in the cart.
-  const hasPackageAddOns = hasPackage && Object.values(packageAddOns).some((gears) => gears.length > 0);
 
   const hasSelection = hasPackage || hasByoGear || selectedItems.length > 0;
-  const formattedStartDate = formatDate(tripDetails.startDate);
+  const formattedStartDate = formatTripDate(tripDetails.startDate);
 
   // A booking is either a package (optionally carrying extra rentable inventory, which the RMS now
   // validates, prices and reserves when sent as bookingGears[] alongside packageCode) or a Build
@@ -192,17 +185,9 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
   // it is never caught here. More than one package and the old individual-gear (pre-BYO) cart slot
   // remain unsupported — none of these are silently dropped: submission is blocked with an
   // explicit reason instead, per instruction not to discard checkout data quietly.
-  const hasAnyKitExtras = Object.values(kitExtras).some((ids) => ids.length > 0);
-  const unsupportedReason =
-    selectedItems.length > 0
-      ? "Individual gear added the old way isn't supported through online checkout, please remove it from your cart, or use Build Your Own instead."
-      : hasPackage && hasByoGear
-        ? 'Please choose either a Package or Build Your Own for this booking, not both. Remove one before submitting.'
-        : selectedKits.length > 1
-          ? 'Only one package can be booked per online submission right now, please remove extra packages from your cart.'
-          : hasPackage && hasAnyKitExtras
-            ? "Package add-ons aren't yet supported through online checkout, please remove them from your cart, or contact us directly to add them to your booking."
-            : null;
+  // Same rules the Cart already applies before the customer gets here (see checkoutBlocker and
+  // datesBlocker): one kind of booking, and one date range for everything in it.
+  const unsupportedReason = checkoutBlocker(selectedCart) ?? datesBlocker(selectionDates(cart));
 
   /** RMS-confirmed availability for the customer's actual current checkout selection — never
    *  trusted from whatever the catalog page last saw, since a package/gear can be reserved by
@@ -270,7 +255,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
   const checkoutAddOns: RmsBookingGearLine[] = hasPackage
     ? []
     : byoGears.flatMap((gear) =>
-        (byoAddOns[byoGearKey(gear)] ?? []).map(
+        (byoAddOns[byoLineKeyOf(gear)] ?? []).map(
           (addOn): RmsBookingGearLine => ({
             category: addOn.category,
             brand: toRmsBrand(addOn.brand),
@@ -311,6 +296,48 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
   // useAvailabilityCheck hook (see its own doc comment for why this used to be duplicated,
   // slightly differently, on this page, PathACatalog, and PathBCatalog).
   const backgroundAvailability = useAvailabilityCheck(backgroundAvailabilityRequest);
+
+  // The RMS's own quote for this exact basket and dates (same body as the availability check),
+  // asked only while a promo is live for this customer and the booking itself is submittable.
+  // Never blocks anything: on failure the saving is hidden or shown as an estimate.
+  const promoQuote = usePromoQuote(
+    basketPromo.kind !== 'hidden' && !unsupportedReason ? backgroundAvailabilityRequest : null,
+    promoLinesForCart(cart),
+  );
+  const saving = decideCheckoutSaving(basketPromo, promoQuote, Boolean(user));
+  /** What the customer is shown as taken off the rental fee, and what's reported to the RMS as
+   *  estimatedDiscountCentavos. Never the deposit. */
+  const displayedDiscountCentavos = saving.kind === 'confirmed' || saving.kind === 'estimate' ? saving.centavos : 0;
+  // The breakdown rows follow the saving above (quote first), never the browse-time math alone.
+  const checkoutPromoState: BasketPromoState =
+    displayedDiscountCentavos > 0 && basketPromo.kind !== 'hidden'
+      ? {
+          kind: 'unlocked',
+          promo: basketPromo.promo,
+          audience: basketPromo.audience,
+          computation: {
+            coveredSubtotalCentavos: 0,
+            qualified: true,
+            discountCentavos: displayedDiscountCentavos,
+            remainingToQualifyCentavos: 0,
+          },
+        }
+      : basketPromo.kind === 'outside-window'
+        ? basketPromo
+        : { kind: 'hidden' };
+  const rentalFeeDue = Math.max(0, Math.round(totals.dueBeforeStart * 100) - displayedDiscountCentavos) / 100;
+
+  // The security deposit (utils/securityDeposit.ts): the RMS's own figure when its quote has one,
+  // otherwise the site's estimate from the same rule. The RMS sets the real amount at booking.
+  const quotedDeposit =
+    promoQuote.status === 'success' && promoQuote.quote.depositCentavos !== undefined ? promoQuote.quote : null;
+  const depositPesos = quotedDeposit ? (quotedDeposit.depositCentavos ?? 0) / 100 : totals.dueToday;
+  const depositNote = depositExplanation({
+    depositCentavos: Math.round(depositPesos * 100),
+    reason: quotedDeposit?.depositReason ?? totals.deposit.reason,
+    packageDepositCentavos: totals.deposit.packageAmount === null ? null : Math.round(totals.deposit.packageAmount * 100),
+    rentalBeforePromoCentavos: Math.round(totals.dueBeforeStart * 100),
+  });
 
   const [checkoutAvailability, setCheckoutAvailability] = useState<CheckoutAvailabilityState>({ status: 'idle' });
 
@@ -382,7 +409,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
     const returnAt = toTimestamp(tripDetails.returnDate, tripDetails.preferredTime);
 
     if (!pickupAt || !returnAt) {
-      setSubmitError('Please fill in your rental start/return dates and preferred time in Trip Details.');
+      setSubmitError('Please fill in your rental start/return dates and preferred time for pick up / delivery in Trip Details.');
       return;
     }
     if (!tripDetails.destination.trim()) {
@@ -390,14 +417,14 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
       return;
     }
     // Identity verification is a hard gate: contact details, every required document slot
-    // successfully uploaded, terms (and, for a BYO booking, the BYO Rental Agreement) acceptance,
-    // and an explicit save of that section. Artifact-agnostic by design — it never inspects what
+    // filled (uploaded, or a saved document), and terms (and, for a BYO booking, the BYO Rental
+    // Agreement) acceptance. Artifact-agnostic by design — it never inspects what
     // kind of file fills a slot.
     if (!isVerificationComplete(verificationDocs, isByoOnly)) {
       setSubmitError(
         isByoOnly
-          ? 'Please complete the Identity Verification section above, all documents, contact details, Terms & Conditions acceptance, and BYO Rental Agreement acceptance are required, then save that section before confirming.'
-          : 'Please complete the Identity Verification section above, all documents, contact details, and Terms & Conditions acceptance are required, then save that section before confirming.',
+          ? 'Please complete the Identity Verification section above, all documents, contact details, Terms & Conditions acceptance, and BYO Rental Agreement acceptance are required.'
+          : 'Please complete the Identity Verification section above, all documents, contact details, and Terms & Conditions acceptance are required.',
       );
       return;
     }
@@ -528,7 +555,8 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
           estimatedRentalFeeCentavos: Math.round(
             (getKitPrice(selectedKits[0], tripDetails) + calculatePackageAddOnsFee(selectedCart)) * 100,
           ),
-          estimatedDepositCentavos: Math.round(selectedKits[0].depositAmount * 100),
+          estimatedDepositCentavos: Math.round(depositPesos * 100),
+          estimatedDiscountCentavos: displayedDiscountCentavos,
         }
       : {
           ...baseBooking,
@@ -542,7 +570,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
             }),
           ),
           addOns: byoGears.flatMap((gear) =>
-            (byoAddOns[byoGearKey(gear)] ?? []).map(
+            (byoAddOns[byoLineKeyOf(gear)] ?? []).map(
               (addOn): RmsBookingGearLine => ({
                 category: addOn.category,
                 brand: toRmsBrand(addOn.brand),
@@ -554,10 +582,8 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
           estimatedRentalFeeCentavos: Math.round(
             (calculateByoGearsFee(selectedCart) + calculateByoAddOnsFee(selectedCart)) * 100,
           ),
-          // Build Your Own never computes or sends a deposit — see requirement 13. RMS itself
-          // always writes depositCentavos = 0 for a BYO booking regardless of what's sent here;
-          // an admin sets the real amount manually after review.
-          estimatedDepositCentavos: 0,
+          estimatedDepositCentavos: Math.round(depositPesos * 100),
+          estimatedDiscountCentavos: displayedDiscountCentavos,
         };
 
     // Dev-only timing (Change 15) — measures exactly where the time between clicking "Submit
@@ -574,20 +600,28 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
         console.log(`[timing] session/token prep: ${(tSessionReady - tSubmitClick).toFixed(0)}ms`);
       }
 
+      // Meta ads tracking (only if the visitor accepted cookies; otherwise undefined and nothing is added to the request).
+      const metaTracking = buildMetaTracking(idempotencyKeyRef.current, browserEnvironment());
+
       const tRmsPostStart = import.meta.env.DEV ? performance.now() : 0;
       const result = await submitBookingToRms(
         {
+          ...(metaTracking ? { meta: metaTracking } : {}),
           contact: { fullName: verificationDocs.fullName, phone: verificationDocs.phone },
           booking,
-          verificationDocuments: REQUIRED_VERIFICATION_DOCUMENTS.map((key) => ({
-            kind: VERIFICATION_KIND_MAP[key],
-            // Safe: isVerificationComplete already required a non-null storagePath for every key.
-            storagePath: verificationDocs.documents[key]!.storagePath!,
-          })),
+          // Each slot is an upload, or a request to reuse the customer's saved document (the RMS checks it again).
+          verificationDocuments: buildVerificationPayload(verificationDocs.documents, REQUIRED_VERIFICATION_DOCUMENTS),
         },
         idempotencyKeyRef.current,
       );
       const tRmsPostDone = import.meta.env.DEV ? performance.now() : 0;
+      // The booking request is saved: tell Meta's browser Pixel (same event id the RMS uses for its server-side Lead, so
+      // Meta counts it once). Wrapped so that nothing about tracking can ever turn a saved booking into an error.
+      try {
+        trackLead(leadEventIdFor(idempotencyKeyRef.current), result.rentalFeeCentavos - (result.discountCentavos ?? 0));
+      } catch {
+        // tracking only
+      }
       setShowSubmitConfirm(false);
       onSubmit?.(result);
       if (import.meta.env.DEV) {
@@ -627,6 +661,13 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
         setSubmitError(
           `You already have a booking request for the same items and dates${failure.bookingNumber ? ` (${failure.bookingNumber})` : ''}. Please check My Bookings instead of submitting another request.`,
         );
+      } else if (failure.kind === 'saved_document_unavailable') {
+        // A saved document stopped being usable between loading this page and booking (it expired or was
+        // removed). Empty exactly those slots so the customer uploads them again; nothing else is lost.
+        updateVerificationDocs({ documents: clearSavedSlots(verificationDocs.documents, failure.kinds), confirmed: false });
+        setSubmitError(
+          'One of your saved documents can no longer be used. Please go back to Identity Verification and upload it again, then submit.',
+        );
       } else {
         setSubmitError(failure.message);
       }
@@ -646,30 +687,36 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
         <SummaryCard
           variant="primary"
           eyebrow="Due Today"
-          title={hasPackageAddOns ? 'Package Security Deposit' : 'Security Deposit Total'}
-          amount={isByoOnly ? null : totals.dueToday}
-          description={
-            isByoOnly
-              ? 'GearBnB will determine your security deposit after reviewing your Build Your Own selections.'
-              : hasPackageAddOns
-                ? 'Refundable deposit to lock in your reservation. Your final deposit isn’t set yet, see the notice below.'
-                : 'Refundable deposit to lock in your reservation.'
-          }
+          title="Security Deposit"
+          amount={depositPesos}
+          description={`${depositNote ? `${depositNote} ` : ''}Refundable. Pay within 24 hours of checking out to reserve your gear.`}
         />
         <SummaryCard
           variant="secondary"
           eyebrow="Due Before Rental Start Date"
           title="Rental Fee Total"
-          amount={totals.dueBeforeStart}
+          amount={rentalFeeDue}
+          exactCentavos={displayedDiscountCentavos > 0}
           description={
-            formattedStartDate
+            (displayedDiscountCentavos > 0 ? `After your ${formatCentavos(displayedDiscountCentavos)} discount. ` : '') +
+            (formattedStartDate
               ? `Pay in full before ${formattedStartDate}${
                   totals.rentalDurationDays > 0 ? ` · ${totals.rentalDurationDays}-day rental` : ''
                 }`
-              : 'Pay in full before your trip starts.'
+              : 'Pay in full before your trip starts.')
           }
         />
       </div>
+
+      {/* The saving, right under the two cards it explains — a light box, so the Rental Fee
+          Total card stays the figure that stands out. */}
+      {hasSelection && (
+        <CheckoutSavingLine
+          saving={saving}
+          catalogPath={hasPackage ? '/catalog/camping-packages' : '/catalog/build-your-own'}
+          normalFeeCentavos={Math.round(totals.dueBeforeStart * 100)}
+        />
+      )}
 
       <section className="flex flex-col gap-3 rounded-xl border border-line p-4 sm:p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-muted">Itemized Breakdown</h2>
@@ -746,7 +793,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
               })}
 
               {byoGears.map((gear) => {
-                const key = byoGearKey(gear);
+                const key = byoLineKeyOf(gear);
                 return (
                   <BreakdownRow
                     key={key}
@@ -759,9 +806,9 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
               })}
 
               {byoGears.flatMap((gear) =>
-                (byoAddOns[byoGearKey(gear)] ?? []).map((addOn) => (
+                (byoAddOns[byoLineKeyOf(gear)] ?? []).map((addOn) => (
                   <BreakdownRow
-                    key={`${byoGearKey(gear)}::${byoGearKey(addOn)}`}
+                    key={`${byoLineKeyOf(gear)}::${byoGearKey(addOn)}`}
                     label={cleanGearName(addOn.name, { keepColor: true })}
                     sublabel={`${cleanGearName(gear.name, { keepColor: true })} add-on${addOn.quantity > 1 ? ` · ${addOn.quantity}×` : ''}`}
                     feeAmount={getGearKindPrice(addOn, tripDetails) * addOn.quantity}
@@ -784,42 +831,22 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
 
             <div className="mt-2 flex flex-col gap-2 border-t border-line pt-3 text-sm">
               <div className="flex items-center justify-between">
-                <span className="font-medium text-ink-muted">
-                  {hasPackageAddOns ? 'Package Security Deposit' : 'Security Deposit Subtotal'}
-                </span>
-                <span className="font-semibold text-ink">
-                  {isByoOnly ? 'To Be Determined' : formatCurrency(totals.dueToday)}
-                </span>
+                <span className="font-medium text-ink-muted">Security Deposit</span>
+                <span className="font-semibold text-ink">{formatCurrency(depositPesos)}</span>
               </div>
-              {/* Never a second real figure to add to the line above — "To Be Determined" is a
-                  status, not an amount, so there is nothing here for a customer (or this code) to
-                  add up. See hasPackageAddOns' own comment for why the customer website never
-                  computes this. */}
-              {hasPackageAddOns && (
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-ink-muted">Additional Add-on Deposit</span>
-                  <span className="font-semibold text-ink">To Be Determined</span>
-                </div>
-              )}
-              <div className="flex items-center justify-between">
-                <span className="font-medium text-ink-muted">Rental Fee Subtotal</span>
-                <span className="font-semibold text-ink">{formatCurrency(totals.dueBeforeStart)}</span>
-              </div>
+              <PromoRentalFeeRows normalPesos={totals.dueBeforeStart} state={checkoutPromoState} />
             </div>
 
-            {/* Visible here, before the submit button below, so the customer reads this before —
-                never after — confirming the booking. Amber (not red) — this isn't an error the
-                customer needs to fix, just a heads-up about what happens next. */}
-            {hasPackageAddOns && (
-              <p
-                role="note"
-                className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300"
-              >
-                <span className="font-semibold">Security deposit is not yet final.</span> Additional
-                deposit requirements for selected add-ons will be reviewed and confirmed by GearBnB
-                staff after your booking is submitted.
-              </p>
-            )}
+            {/* Read before confirming, never after: why both payments matter and what happens if
+                the deposit isn't paid. Amber, not red: a heads-up, not an error to fix. */}
+            <p role="note" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+              <span className="font-semibold">
+                We can only reserve and prepare your gear once your security deposit and rental payment are settled.
+              </span>{' '}
+              This keeps every booking on track, from preparing your gear to handing it over at pickup. Pay the
+              security deposit within 24 hours of checking out, or your booking is cancelled automatically and the
+              gear released. You can pay right after you submit, while we review your documents.
+            </p>
           </>
         ) : (
           <p className="py-6 text-center text-sm text-ink-muted">
@@ -834,8 +861,8 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
             <dt className="text-ink-muted">Rental Dates</dt>
             <dd className="text-right font-medium text-ink">
-              {formattedStartDate && formatDate(tripDetails.returnDate)
-                ? `${formattedStartDate} – ${formatDate(tripDetails.returnDate)}`
+              {formattedStartDate && formatTripDate(tripDetails.returnDate)
+                ? `${formattedStartDate} – ${formatTripDate(tripDetails.returnDate)}`
                 : 'Not yet set'}
               {totals.rentalDurationDays > 0 && ` · ${totals.rentalDurationDays}-day`}
             </dd>
@@ -886,9 +913,9 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
             checkoutAvailability.status === 'available'
               ? 'border-brand-forest/30 bg-brand-forest/10 text-accent'
               : checkoutAvailability.status === 'unavailable'
-                ? 'border-red-300 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400'
+                ? 'border-red-300 bg-red-50 text-red-700'
                 : checkoutAvailability.status === 'pending_turnover' || checkoutAvailability.status === 'error'
-                  ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300'
+                  ? 'border-amber-200 bg-amber-50 text-amber-800'
                   : 'border-line-soft bg-surface-muted text-ink-muted'
           }`}
         >
@@ -937,7 +964,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
             <button
               type="button"
               onClick={() => navigate('/cart')}
-              className="self-start rounded-md border border-current px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-white/40 dark:hover:bg-black/20"
+              className="self-start rounded-md border border-current px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-white/40"
             >
               Return to Cart
             </button>
@@ -951,7 +978,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
             <button
               type="button"
               onClick={backgroundAvailability.retry}
-              className="self-start rounded-md border border-current px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-white/40 dark:hover:bg-black/20"
+              className="self-start rounded-md border border-current px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-white/40"
             >
               Try Again
             </button>
@@ -960,13 +987,13 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
       )}
 
       {!submitError && unsupportedReason && (
-        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300">
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
           {unsupportedReason}
         </p>
       )}
 
       {submitError && (
-        <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+        <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-600">
           {submitError}
         </p>
       )}
@@ -991,3 +1018,4 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
     </div>
   );
 }
+

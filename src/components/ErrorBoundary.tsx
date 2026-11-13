@@ -55,7 +55,7 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
           Reload Page
         </button>
         {import.meta.env.DEV && this.state.error && (
-          <pre className="mt-4 max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded-lg border border-red-300 bg-red-50 p-3 text-left text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+          <pre className="mt-4 max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded-lg border border-red-300 bg-red-50 p-3 text-left text-xs text-red-700">
             {this.state.error.name}: {this.state.error.message}
             {'\n'}
             {this.state.error.stack}

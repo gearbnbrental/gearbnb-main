@@ -8,7 +8,7 @@ import FaqAccordion, { type FaqItem } from '../components/FaqAccordion';
 import ImageLightbox from '../components/ImageLightbox';
 import PathSelectionCards from '../components/PathSelectionCards';
 import SocialIconLink from '../components/SocialIconLink';
-import { ChatBubbleIcon, ChevronIcon, GearPlaceholderIcon } from '../components/icons';
+import { ChatBubbleIcon, CheckCircleIcon, ChevronIcon, GearPlaceholderIcon } from '../components/icons';
 import { useCatalog } from '../context/useCatalog';
 import type { BookableGearKind, PackageKit } from '../types/gearbnb';
 import { formatCurrency } from '../utils/format';
@@ -91,8 +91,8 @@ const PROCESS_STEPS: ProcessStep[] = [
     icon: <CalendarCheckIcon className="h-5 w-5" />,
   },
   {
-    title: 'Admin Review & Deposit',
-    description: 'Receive confirmation upon document approval and pay the security deposit to secure your booking.',
+    title: 'Deposit & Admin Review',
+    description: 'Pay the refundable security deposit within 24 hours while we review your documents. Your gear is reserved once you are approved.',
     icon: <ReceiptIcon className="h-5 w-5" />,
   },
   {
@@ -335,6 +335,194 @@ function BundleSlider({ kits, onSelect }: { kits: PackageKit[]; onSelect: () => 
   );
 }
 
+interface Review {
+  quote: string;
+  author: string;
+}
+
+/** Real renters' reviews, word for word as they wrote them (Taglish and spelling kept). */
+const REVIEWS: Review[] = [
+  {
+    quote:
+      'First time campers kami and they were so accommodating and professional. Nagbigay sila ng instructions plus were so patient with my wife and I. Kung gusto nyo ng affordable, accommodating, and smooth transaction, highly recommend them.',
+    author: 'Jethro Balang',
+  },
+  {
+    quote:
+      'Nag-rent kami ng camping gear sa GearBnB for our family camping tapos sobrang convenient ng experience. Kumpleto talaga yung camping package rental nila kaya hindi na namin kailangan bumili ng own stuff namin. Super linis at premium camping gears nila tapos affordable pa, and very helpful din sila sa pag-explain kung paano gamitin ang mga items kasi super baguhan talaga kami. Definitely worth checking kung naghahanap kayo ng camping gear rental dito sa Metro Manila.',
+    author: 'Eizel Gomez',
+  },
+  {
+    quote:
+      'Had a smooth and hassle-free experience renting camping gear from them. The items were clean, complete, and in good condition. Very easy to coordinate with and highly recommended for anyone planning a camping trip!',
+    author: 'Paul Andrada',
+  },
+  {
+    quote:
+      'Nag family camping kami last week and sobrang sulit because of Gearbnb. We were looking for affordable camping gears and nakita namin sila. Hindi tinipid sa quality tsaka super sulit ng tent and complete yung inclusions. Their reliable service made the whole trip stress-free. 100% recommended namin ng fam ko as a camping tent rental shop for anyone planning a trip. thank you again for the great service!',
+    author: 'Raymond Chiong Jr.',
+  },
+  {
+    quote:
+      'Highly recommended and Gearbnb Rental! First time ko mag camping pero yung guidance nila at shared instructional videos sa akin nakatulong para magawa ko ng maayos yung setup. Aside from that yung owner/s napaka considerate sa mga requests ko na add-ons. Yung mga gears nila? Solid! Quality! Inulan kami that night at ang dami naming mga kasamahan na nag moist yung tent nila pero yung sa amin kinaya kahit buhos talaga yung ulan! Lastly, ang linis ng mga gears nila, tent, tables, fan, as in lahat maayos, medyo OA pero maayos kasi talaga. Salamat Gearbnb for being part of the core memory ng daughter ko. Til next camp, kasama naman buong family ko, message ulit ako sa inyo.',
+    author: 'Stanley Tan',
+  },
+];
+
+/**
+ * One review at a time, swipeable on touch (a scroll-snap track, like BundleSlider) with
+ * previous/next arrows and dots below. Every slide stays in the HTML, so all reviews are readable
+ * without JavaScript; the track takes the tallest review's height so the page never jumps.
+ */
+const REVIEW_AUTO_SLIDE_MS = 10_000;
+
+function ReviewSlider() {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+  // The one long review opened with "Read more"; closes again when the slide changes.
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+  // Paused while the pointer or keyboard focus is on the slider, so it never moves mid-read.
+  const [paused, setPaused] = useState(false);
+  // Which reviews are actually cut off at 4 lines at the current width (so "Read more" shows on a
+  // phone for a review that fits on desktop). Measured, not guessed from the text length.
+  const quoteRefs = useRef<(HTMLParagraphElement | null)[]>([]);
+  const [clamped, setClamped] = useState<boolean[]>([]);
+
+  useEffect(() => {
+    const measure = () =>
+      setClamped(quoteRefs.current.map((quote) => !!quote && quote.scrollHeight > quote.clientHeight + 1));
+    measure();
+    const observer = new ResizeObserver(measure);
+    if (trackRef.current) observer.observe(trackRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  // Auto-advance every 10 seconds. Restarts after any manual move, stops while a review is opened
+  // with "Read more" or the tab is hidden, and is off for visitors who ask for reduced motion.
+  useEffect(() => {
+    if (paused || expandedIndex !== null) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const timer = window.setTimeout(() => {
+      if (document.visibilityState === 'visible') scrollToIndex(activeIndex + 1);
+    }, REVIEW_AUTO_SLIDE_MS);
+    return () => window.clearTimeout(timer);
+  }, [activeIndex, expandedIndex, paused]);
+
+  function scrollToIndex(index: number) {
+    const track = trackRef.current;
+    if (!track) return;
+    // Wraps around: next on the last review goes back to the first, and vice versa.
+    const wrapped = (index + REVIEWS.length) % REVIEWS.length;
+    track.scrollTo({ left: track.clientWidth * wrapped, behavior: 'smooth' });
+  }
+
+  function handleScroll() {
+    const track = trackRef.current;
+    if (!track || track.clientWidth === 0) return;
+    const index = Math.max(0, Math.min(REVIEWS.length - 1, Math.round(track.scrollLeft / track.clientWidth)));
+    if (index !== activeIndex) setExpandedIndex(null);
+    setActiveIndex(index);
+  }
+
+  return (
+    <div
+      aria-roledescription="carousel"
+      aria-label="Renter reviews"
+      onPointerEnter={() => setPaused(true)}
+      onPointerLeave={() => setPaused(false)}
+      onFocus={() => setPaused(true)}
+      onBlur={() => setPaused(false)}
+      className="flex w-full flex-col items-center"
+    >
+      <div
+        ref={trackRef}
+        onScroll={handleScroll}
+        className="relative flex w-full snap-x snap-mandatory overflow-x-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]"
+      >
+        {REVIEWS.map((review, index) => (
+          <figure
+            key={review.author}
+            aria-roledescription="slide"
+            aria-label={`${index + 1} of ${REVIEWS.length}`}
+            className="flex w-full shrink-0 snap-center flex-col items-center px-1"
+          >
+            <span className="mb-2 flex items-center gap-0.5 text-[#f5b400]">
+              <span className="sr-only">Rated 5 out of 5</span>
+              {Array.from({ length: 5 }, (_, star) => (
+                <svg key={star} aria-hidden="true" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                  <path d="M9.05 2.93c.3-.92 1.6-.92 1.9 0l1.26 3.88a1 1 0 0 0 .95.69h4.08c.97 0 1.37 1.24.59 1.81l-3.3 2.4a1 1 0 0 0-.37 1.11l1.27 3.88c.3.92-.76 1.69-1.54 1.12l-3.3-2.4a1 1 0 0 0-1.18 0l-3.3 2.4c-.78.57-1.83-.2-1.54-1.12l1.27-3.88a1 1 0 0 0-.36-1.12l-3.3-2.4c-.79-.56-.38-1.8.58-1.8h4.08a1 1 0 0 0 .95-.7l1.26-3.87Z" />
+                </svg>
+              ))}
+            </span>
+            {/* Long reviews show 4 lines until "Read more" (the full text stays in the HTML), so
+                the longest one doesn't make the whole slider tall. */}
+            <blockquote className="text-pretty text-sm italic leading-relaxed text-ink sm:text-balance sm:text-[15px]">
+              <p
+                ref={(quote) => {
+                  quoteRefs.current[index] = quote;
+                }}
+                className={expandedIndex === index ? '' : 'line-clamp-4'}
+              >
+                {review.quote}
+              </p>
+            </blockquote>
+            {(clamped[index] || expandedIndex === index) && (
+              <button
+                type="button"
+                onClick={() => setExpandedIndex(expandedIndex === index ? null : index)}
+                aria-expanded={expandedIndex === index}
+                className="mt-1 text-xs font-semibold text-accent underline underline-offset-2 hover:text-brand-forest-dark"
+              >
+                {expandedIndex === index ? 'Show less' : 'Read more'}
+              </button>
+            )}
+            <figcaption className="mt-3 flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 text-xs">
+              <span className="font-semibold text-ink">&mdash; {review.author}</span>
+              <span className="flex items-center gap-1 text-ink-muted">
+                <CheckCircleIcon className="h-3.5 w-3.5 text-accent" />
+                GearBnB Renter
+              </span>
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+
+      <div className="mt-3 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => scrollToIndex(activeIndex - 1)}
+          aria-label="Previous review"
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-line bg-surface text-ink shadow-sm transition-colors hover:bg-surface-strong"
+        >
+          <ChevronIcon direction="left" className="h-4 w-4" />
+        </button>
+        <div className="flex items-center gap-2">
+          {REVIEWS.map((review, index) => (
+            <button
+              key={review.author}
+              type="button"
+              onClick={() => scrollToIndex(index)}
+              aria-label={`Show review by ${review.author}`}
+              aria-current={index === activeIndex}
+              className={`h-2 rounded-full transition-all ${
+                index === activeIndex ? 'w-6 bg-brand-forest' : 'w-2 bg-line hover:bg-ink-faint'
+              }`}
+            />
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => scrollToIndex(activeIndex + 1)}
+          aria-label="Next review"
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-line bg-surface text-ink shadow-sm transition-colors hover:bg-surface-strong"
+        >
+          <ChevronIcon direction="right" className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 interface FeatureCardProps {
   icon: ReactNode;
   title: string;
@@ -384,9 +572,9 @@ const FAQ_ITEMS: FaqItem[] = [
     answer: (
       <>
         <p>
-          We’re based in Talon Uno, Las Piñas City, Philippines. Our exact pickup location and address will be provided
-          once your booking is confirmed. You can also view our location on Google Maps for directions and nearby
-          landmarks.
+          We're based in Talon Uno, Las Piñas City. We offer camping gear rental across Metro Manila, Calabarzon and
+          nearby areas. We share the exact pickup address once we confirm your booking. Open our Google Maps pin for
+          directions and nearby landmarks.
         </p>
         <a
           href="https://www.google.com/maps/place/GearBnB+Camping+Gears+Rental/@14.4461908,120.9940844,17z/data=!3m1!4b1!4m6!3m5!1s0x3397d3090cbbd26f:0x665f11a5d4c66dde!8m2!3d14.4461908!4d120.9966593!16s%2Fg%2F11z8h467l7?entry=ttu&g_ep=EgoyMDI2MDkxNi4wIKXMDSoASAFQAw%3D%3D"
@@ -412,7 +600,7 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: 'Do you sell camping gear?',
     answer:
-      'We don’t sell camping gear. We offer camping gear rentals, including tents, sleeping gear, cooking equipment, and complete camping packages for different types of trips.',
+      'No. We offer camping gear for rent, including tents, sleeping gear, cooking equipment and complete camping packages for every type of trip.',
   },
   {
     question: 'Can you help me find a campsite?',
@@ -421,7 +609,7 @@ const FAQ_ITEMS: FaqItem[] = [
   },
   {
     question: 'How do I get started?',
-    answer: "Browse our packages or build your own kit, pick your dates, and book, we'll guide you through verification and payment from there.",
+    answer: "Browse our packages or build your own kit. Pick your dates and book. We'll guide you through verification and payment from there.",
   },
 ];
 
@@ -481,8 +669,8 @@ export default function LandingPage() {
        * Static: no scroll-driven show/hide, no fixed/sticky positioning. */}
       <section className="relative">
         <img
-          src="/images/background_landpage.png"
-          alt=""
+          src="/images/landing-hero.webp"
+          alt="Dome tent with a camping chair and table on a grassy hill above a mountain lake at sunset"
           className="absolute inset-0 h-full w-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-brand-forest/80" />
@@ -502,16 +690,14 @@ export default function LandingPage() {
           <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white">
             Located in Las Piñas City
           </span>
-          {/* text-2xl below sm (not text-3xl): at 320-375px, "...the Philippines Made Easy" still
-              wrapped to 3-4 lines even at 30px — one word (Philippines) is long enough that a
-              smaller step was needed to keep this heading from dominating the whole first screen
-              on a short device. Wraps to 2 lines at every width down to 320px at this size. */}
+          {/* text-2xl below sm (not text-3xl): keeps this heading from dominating the whole first
+              screen on a short device. */}
           <h1 className="font-serif text-2xl font-bold leading-[1.2] tracking-tight text-white sm:text-5xl sm:leading-tight">
-            Camping Gears Rental in the Philippines Made Easy
+            Camping Gear for Rent in Metro Manila Made Easy
           </h1>
           <p className="max-w-xl text-base text-white">
-            Great camping trips start with the right gear, and you deserve a reliable camping gear rental in the
-            Philippines.
+            Great camping trips start with the right gear. Get reliable camping gear rental in Metro Manila, with tents,
+            beds and full kits ready for pickup.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
             <button
@@ -519,7 +705,7 @@ export default function LandingPage() {
               onClick={() => navigate('/catalog')}
               className="rounded-lg bg-brand-forest px-6 py-3 text-sm font-semibold text-white shadow-sm ring-1 ring-white/20 transition-colors hover:bg-brand-forest-dark"
             >
-              Rent Your Gears
+              Rent Camping Gear
             </button>
             <button
               type="button"
@@ -594,8 +780,8 @@ export default function LandingPage() {
             <h2 className="font-serif text-2xl font-bold text-ink sm:text-3xl">
               How To Rent Camping Gear from GearBnB?
             </h2>
-            <p className="max-w-xl text-sm text-ink-muted">
-              From picking your gear to pickup day, here&rsquo;s exactly what to expect.
+            <p className="max-w-2xl text-balance text-sm text-ink-muted">
+              Camping is better when you get to focus on the adventure. That&rsquo;s why we make getting camping gear for rent simple, with four clear steps from picking your gear to pickup day.
             </p>
           </div>
 
@@ -641,10 +827,10 @@ export default function LandingPage() {
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
           <div className="flex flex-col items-center gap-2 text-center">
             <h2 className="font-serif text-2xl font-bold text-ink sm:text-3xl">
-              Explore the Best Outdoor Adventure Gear
+              Browse Our Camping Gear for Rent
             </h2>
             <p className="max-w-xl text-sm text-ink-muted">
-              High-quality, ready-to-rent equipment for your next adventure.
+              High-quality camping gear rental in Metro Manila, with every piece ready for your next adventure.
             </p>
           </div>
 
@@ -739,7 +925,7 @@ export default function LandingPage() {
       </section>
 
       {/* Why rent with us */}
-      <section className="bg-page-band px-5 py-10 sm:px-6 sm:py-16">
+      <section className="bg-page-band px-5 pb-6 pt-10 sm:px-6 sm:pb-8 sm:pt-16">
         <div className="mx-auto grid w-full max-w-5xl gap-10 lg:grid-cols-2 lg:items-center">
           {/* py-6 below sm (was py-10): only scoped to the mobile size step below — the badge
               itself still gets sm:py-10/lg:py-0 exactly as before from `sm` up. */}
@@ -762,7 +948,7 @@ export default function LandingPage() {
              * balanced side-by-side pairing with the benefit-card grid there. */}
             <div className="h-44 w-44 overflow-hidden rounded-full drop-shadow-2xl sm:h-80 sm:w-80">
               <img
-                src="/brand_assets/GEARBNB_logo.png"
+                src="/brand_assets/gearbnb-logo-960.webp"
                 alt="GearBnB"
                 className="h-full w-full scale-150 object-cover"
               />
@@ -791,14 +977,19 @@ export default function LandingPage() {
             </button>
           </div>
         </div>
+
+        {/* Real renters' reviews, between two thin lines. */}
+        <div className="mx-auto mt-8 w-full max-w-xl border-y border-ink-faint/60 py-6 text-center sm:mt-10 sm:py-8">
+          <ReviewSlider />
+        </div>
       </section>
 
       {/* Bundles — id targeted by the footer's "Adventure Bundles" link. */}
-      <section id="adventure-bundles" className="px-5 py-10 sm:px-6 sm:py-16">
+      <section id="adventure-bundles" className="px-5 pb-10 pt-6 sm:px-6 sm:pb-16 sm:pt-8">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
           <div className="flex flex-col items-center gap-2 text-center">
-            <h2 className="font-serif text-2xl font-bold text-ink sm:text-3xl">
-              Adventure Bundles for Every Explorer
+            <h2 className="text-balance font-serif text-2xl font-bold text-ink sm:text-3xl">
+              Camping Bundles for Every Camper
             </h2>
             <p className="max-w-xl text-sm text-ink-muted">
               Ready-made packages that bundle everything you need into one simple booking.
@@ -823,7 +1014,7 @@ export default function LandingPage() {
       <section className="bg-page-band px-5 py-10 sm:px-6 sm:py-16">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
           <div className="flex flex-col items-center gap-2 text-center">
-            <h2 className="font-serif text-2xl font-bold text-ink sm:text-3xl">View Our Camp Setups</h2>
+            <h2 className="font-serif text-2xl font-bold text-ink sm:text-3xl">View Our Camping Gear Rental Setups</h2>
             <p className="max-w-xl text-sm text-ink-muted">
               Take a look at our camping setups and real photos shared by our renters. Explore the gallery and get
               inspired for your next trip.
@@ -870,24 +1061,24 @@ export default function LandingPage() {
         <div className="relative mx-auto grid w-full max-w-5xl gap-10 lg:grid-cols-2 lg:items-center">
           <div className="flex flex-col items-center gap-5 text-center lg:items-start lg:text-left">
             <h2 className="font-serif text-2xl font-bold text-white drop-shadow-sm sm:text-4xl">
-              Gear Up for Your Next Adventure
+              Camping Gear for Rent in Las Piñas City
             </h2>
             <p className="text-sm text-white">
               Make your next camping trip easier with{' '}
               <Link to="/about-us" className="underline underline-offset-2 hover:text-white/80">
                 GearBnB
               </Link>
-              . We are proudly located in{' '}
+              . Pick up your gear at{' '}
               <a
                 href="https://www.google.com/maps/place/GearBnB+Camping+Gears+Rental/@14.4461908,120.9966593,17z/data=!3m1!4b1!4m6!3m5!1s0x3397d3090cbbd26f:0x665f11a5d4c66dde!8m2!3d14.4461908!4d120.9966593!16s%2Fg%2F11z8h467l7?entry=ttu&g_ep=EgoyMDI2MDkxNi4wIKXMDSoASAFQAw%3D%3D"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="underline underline-offset-2 hover:text-white/80"
               >
-                Las Piñas City
-              </a>{' '}
-              and serves nearby cities in Metro Manila, Calabarzon, and surrounding areas. Get the gear you need and
-              enjoy more time outdoors, making memories that last.
+                our location in Talon Uno, Las Piñas City
+              </a>
+              . We serve campers across Metro Manila, Calabarzon and nearby areas. Get the gear you need and spend more
+              time outdoors with your people.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3 lg:justify-start">
               <button

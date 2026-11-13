@@ -11,7 +11,22 @@ import { REQUIRED_VERIFICATION_DOCUMENTS, filterCartToSelection, useRental } fro
 import { supabase } from '../../supabase';
 import type { VerificationDocs, VerificationDocumentKey } from '../../types/gearbnb';
 import { BYO_RENTAL_AGREEMENT_URL, TERMS_AND_CONDITIONS_URL } from '../../config/legalDocuments';
-import { VERIFICATION_BUCKET, VERIFICATION_KIND_MAP, ensureFreshSession } from '../../utils/rmsApi';
+import { toAvailabilityTimestamp } from '../../utils/duration';
+import {
+  VERIFICATION_BUCKET,
+  VERIFICATION_KIND_MAP,
+  ensureFreshSession,
+  fetchSavedDocuments,
+  type RmsSavedDocument,
+} from '../../utils/rmsApi';
+import {
+  applySavedDocuments,
+  describeSavedDocument,
+  dropUnusableSavedSlots,
+  isSlotFilled,
+  reusableFor,
+  savedDocumentMeta,
+} from '../../utils/savedDocuments';
 
 type DocumentKey = VerificationDocumentKey;
 export type ExpectedKind = 'image' | 'video' | 'document';
@@ -201,7 +216,7 @@ interface TextFieldProps {
  *  same fact, and announcing "star" alongside it would just be noise. */
 function RequiredMark() {
   return (
-    <span aria-hidden="true" className="text-red-600 dark:text-red-400">
+    <span aria-hidden="true" className="text-red-600">
       {' '}
       *
     </span>
@@ -314,7 +329,7 @@ export function DocumentDropzone({
           'relative flex h-28 flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed p-3 text-center transition-colors sm:h-36',
           uploading ? 'cursor-wait' : 'cursor-pointer',
           error
-            ? 'border-red-400 bg-red-50 dark:border-red-500 dark:bg-red-500/10'
+            ? 'border-red-400 bg-red-50'
             : uploaded
               ? 'border-brand-forest bg-brand-forest/10'
               : isDragActive
@@ -339,7 +354,7 @@ export function DocumentDropzone({
               onRemove();
             }}
             aria-label={`Remove ${config.title}`}
-            className="absolute right-2 top-2 rounded-full bg-surface p-1 text-ink-muted shadow hover:text-red-600 dark:hover:text-red-400"
+            className="absolute right-2 top-2 rounded-full bg-surface p-1 text-ink-muted shadow hover:text-red-600"
           >
             <XMarkIcon className="h-4 w-4" />
           </button>
@@ -369,7 +384,7 @@ export function DocumentDropzone({
                 <span>Uploaded</span>
               </div>
             ) : (
-              <p className="text-xs font-medium text-red-600 dark:text-red-400">Upload failed, try again</p>
+              <p className="text-xs font-medium text-red-600">Upload failed, try again</p>
             )}
             <p className="max-w-full truncate px-2 text-xs text-ink-muted">
               {file.name} · {formatFileSize(file.size)}
@@ -396,7 +411,35 @@ export function DocumentDropzone({
       </label>
 
       <p className="text-xs text-ink-muted">{config.helperText}</p>
-      {error && <p className="text-xs font-medium text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p className="text-xs font-medium text-red-600">{error}</p>}
+    </div>
+  );
+}
+
+/** A slot filled by a document the customer already saved: nothing to upload, with a way to replace it. */
+export function SavedDocumentCard({ title, details, onReplace }: { title: string; details: string; onReplace: () => void }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-sm font-medium text-ink">
+        {title}
+        <RequiredMark />
+      </span>
+      <div className="flex flex-col gap-2 rounded-xl border border-brand-forest/30 bg-brand-forest/10 p-4">
+        <div className="flex items-start gap-2 text-accent">
+          <CheckCircleIcon className="mt-0.5 h-5 w-5 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold">Using your saved document</p>
+            <p className="text-xs">{details}</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onReplace}
+          className="self-start text-xs font-semibold text-accent underline underline-offset-2 hover:text-brand-forest-dark"
+        >
+          Replace with a new file
+        </button>
+      </div>
     </div>
   );
 }
@@ -448,6 +491,67 @@ export default function VerificationUpload({ onSubmit }: VerificationUploadProps
       trackedUrls.forEach((url) => URL.revokeObjectURL(url));
     };
   }, []);
+
+  // Documents this customer already has saved from an earlier booking (the RMS keeps approved ones for a limited
+  // time after upload). They are filled in automatically, once, so a returning renter does not upload them
+  // again; every one can be replaced. A failed lookup just means the form asks for uploads, exactly as before.
+  const [saved, setSaved] = useState<{ retentionDays: number; documents: RmsSavedDocument[] } | null>(null);
+  const savedAppliedRef = useRef(false);
+  // Slots the customer chose to replace: never refilled automatically.
+  const replacedRef = useRef<Set<DocumentKey>>(new Set());
+  const userId = user?.id;
+  // The booking's return time (midnight when no time is chosen yet), so only documents that will still be held
+  // after the rental are offered. Same helper the availability checks use.
+  const returnAt = toAvailabilityTimestamp(cart.tripDetails.returnDate, cart.tripDetails.preferredTime);
+
+  // A returning renter's contact details come from their account (name and phone saved at sign-up or
+  // in Profile, and the account email), so saved documents plus these can complete this section with
+  // nothing to type. Only EMPTY fields are filled, once per visit, so anything typed (or cleared to
+  // retype) here is never overwritten.
+  const contactPrefilledRef = useRef(false);
+  useEffect(() => {
+    if (!user || contactPrefilledRef.current) return;
+    contactPrefilledRef.current = true;
+    const meta = user.user_metadata ?? {};
+    const accountName = typeof meta.full_name === 'string' ? meta.full_name.trim() : '';
+    const accountPhone = typeof meta.phone === 'string' ? meta.phone.trim().replace(/^\+63/, '0') : '';
+    const accountEmail = user.email ?? '';
+    const fill: Partial<Pick<VerificationDocs, 'fullName' | 'phone' | 'email'>> = {};
+    if (!verificationDocs.fullName.trim() && accountName) fill.fullName = accountName;
+    if (!verificationDocs.phone.trim() && accountPhone) fill.phone = accountPhone;
+    if (!verificationDocs.email.trim() && accountEmail) fill.email = accountEmail;
+    if (Object.keys(fill).length > 0) updateVerificationDocs(fill);
+    // Runs once per visit by design (see contactPrefilledRef); the field values are read at that moment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, updateVerificationDocs]);
+
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    fetchSavedDocuments(returnAt)
+      .then((result) => {
+        if (cancelled) return;
+        savedAppliedRef.current = false; // a fresh answer (e.g. for new dates) is applied again
+        setSaved(result);
+      })
+      .catch(() => {
+        // Nothing saved, or the lookup failed: the customer uploads as usual.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, returnAt]);
+
+  useEffect(() => {
+    if (!saved || savedAppliedRef.current) return;
+    savedAppliedRef.current = true;
+    // First drop any saved document that no longer qualifies for these dates (the customer may have changed them),
+    // then fill the EMPTY slots, so anything the customer already uploaded is left alone.
+    const pruned = dropUnusableSavedSlots(verificationDocs.documents, saved.documents);
+    const { documents, filled } = applySavedDocuments(pruned, saved.documents, replacedRef.current);
+    const changed = filled.length > 0 || Object.keys(pruned).some((k) => pruned[k as DocumentKey] !== verificationDocs.documents[k as DocumentKey]);
+    if (changed) updateVerificationDocs({ documents, confirmed: false });
+  }, [saved, verificationDocs.documents, updateVerificationDocs]);
 
   function handleContactChange(
     field: keyof Pick<VerificationDocs, 'fullName' | 'phone' | 'email'>,
@@ -539,6 +643,43 @@ export default function VerificationUpload({ onSubmit }: VerificationUploadProps
     });
   }
 
+  /** "Replace": drops the saved document from this slot so a new file can be uploaded instead. */
+  function handleReplaceSaved(key: DocumentKey) {
+    replacedRef.current.add(key);
+    setDocumentSlot(key, null);
+  }
+
+  /** Back to the saved document after having chosen to replace it. */
+  function handleUseSaved(key: DocumentKey) {
+    const doc = reusableFor(key, saved?.documents ?? null);
+    const meta = doc ? savedDocumentMeta(doc) : null;
+    if (!meta) return;
+    replacedRef.current.delete(key);
+    uploadGenerationRef.current[key] += 1; // drop any in-flight upload for this slot
+    const previousUrl = previews[key];
+    if (previousUrl) {
+      URL.revokeObjectURL(previousUrl);
+      objectUrlsRef.current.delete(previousUrl);
+    }
+    setFiles((prev) => ({ ...prev, [key]: null }));
+    setPreviews((prev) => ({ ...prev, [key]: null }));
+    setFileErrors((prev) => ({ ...prev, [key]: null }));
+    setUploading((prev) => ({ ...prev, [key]: false }));
+    updateVerificationDocs({ documents: { ...verificationDocs.documents, [key]: meta }, confirmed: false });
+  }
+
+  /** "Upload new documents instead": drops every saved document in one go. */
+  function handleReplaceAllSaved() {
+    const documents = { ...verificationDocs.documents };
+    for (const slot of DOCUMENT_SLOTS) {
+      if (documents[slot.key]?.savedDocument) {
+        replacedRef.current.add(slot.key);
+        documents[slot.key] = null;
+      }
+    }
+    updateVerificationDocs({ documents, confirmed: false });
+  }
+
   function handleTermsChange(accepted: boolean) {
     updateVerificationDocs({ termsAccepted: accepted, confirmed: false });
   }
@@ -547,9 +688,9 @@ export default function VerificationUpload({ onSubmit }: VerificationUploadProps
     updateVerificationDocs({ byoAgreementAccepted: accepted, confirmed: false });
   }
 
-  const allDocumentsUploaded = REQUIRED_VERIFICATION_DOCUMENTS.every(
-    (key) => verificationDocs.documents[key]?.storagePath,
-  );
+  // Filled by an upload that finished, or by a saved document.
+  const allDocumentsUploaded = REQUIRED_VERIFICATION_DOCUMENTS.every((key) => isSlotFilled(verificationDocs.documents[key]));
+  const savedInUseCount = DOCUMENT_SLOTS.filter((slot) => verificationDocs.documents[slot.key]?.savedDocument).length;
   const anyUploadInProgress = REQUIRED_VERIFICATION_DOCUMENTS.some((key) => uploading[key]);
   const contactInfoComplete = Boolean(
     verificationDocs.fullName.trim() && verificationDocs.phone.trim() && verificationDocs.email.trim(),
@@ -575,7 +716,7 @@ export default function VerificationUpload({ onSubmit }: VerificationUploadProps
         {/* Explains the marker once, up front, rather than leaving a bare asterisk to be guessed
             at. Not aria-hidden — unlike the individual marks, this legend is the explanation. */}
         <p className="text-xs text-ink-faint">
-          <span className="font-semibold text-red-600 dark:text-red-400">*</span> Required, every field below must
+          <span className="font-semibold text-red-600">*</span> Required, every field below must
           be completed before you can submit.
         </p>
       </div>
@@ -618,21 +759,63 @@ export default function VerificationUpload({ onSubmit }: VerificationUploadProps
             Upload 2 valid government IDs, a short video verification, and proof of billing.
           </p>
         </div>
+        {savedInUseCount > 0 && saved && (
+          <div className="flex flex-col gap-2 rounded-xl border border-brand-forest/30 bg-brand-forest/10 p-4 text-sm text-accent">
+            <p>
+              <span className="font-semibold">Welcome back! </span>
+              We filled in {savedInUseCount === 1 ? 'a document' : `${savedInUseCount} documents`} you already verified on an earlier
+              booking, so you don&apos;t have to upload {savedInUseCount === 1 ? 'it' : 'them'} again. Our team will still see{' '}
+              {savedInUseCount === 1 ? 'it' : 'them'} with your booking. We keep your documents for {saved.retentionDays} days after you
+              upload them. You can replace any of them below.
+            </p>
+            <button
+              type="button"
+              onClick={handleReplaceAllSaved}
+              className="self-start text-xs font-semibold underline underline-offset-2 hover:text-brand-forest-dark"
+            >
+              Upload new documents instead
+            </button>
+          </div>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
-          {DOCUMENT_SLOTS.map((slot) => (
-            <DocumentDropzone
-              key={slot.key}
-              config={slot}
-              file={files[slot.key]}
-              previewUrl={previews[slot.key]}
-              error={fileErrors[slot.key]}
-              uploading={uploading[slot.key]}
-              uploaded={Boolean(verificationDocs.documents[slot.key]?.storagePath)}
-              persistedFileName={verificationDocs.documents[slot.key]?.name ?? null}
-              onSelect={(file) => handleDocumentSelect(slot, file)}
-              onRemove={() => handleDocumentRemove(slot.key)}
-            />
-          ))}
+          {DOCUMENT_SLOTS.map((slot) => {
+            const meta = verificationDocs.documents[slot.key];
+            if (meta?.savedDocument) {
+              return (
+                <SavedDocumentCard
+                  key={slot.key}
+                  title={slot.title}
+                  details={describeSavedDocument(meta.savedDocument)}
+                  onReplace={() => handleReplaceSaved(slot.key)}
+                />
+              );
+            }
+            const reusable = !meta && !uploading[slot.key] ? reusableFor(slot.key, saved?.documents ?? null) : null;
+            return (
+              <div key={slot.key} className="flex flex-col gap-1.5">
+                <DocumentDropzone
+                  config={slot}
+                  file={files[slot.key]}
+                  previewUrl={previews[slot.key]}
+                  error={fileErrors[slot.key]}
+                  uploading={uploading[slot.key]}
+                  uploaded={Boolean(meta?.storagePath)}
+                  persistedFileName={meta?.name ?? null}
+                  onSelect={(file) => handleDocumentSelect(slot, file)}
+                  onRemove={() => handleDocumentRemove(slot.key)}
+                />
+                {reusable && (
+                  <button
+                    type="button"
+                    onClick={() => handleUseSaved(slot.key)}
+                    className="self-start text-xs font-medium text-accent underline underline-offset-2"
+                  >
+                    Use my saved {slot.title} instead
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
       </section>
 
@@ -697,14 +880,16 @@ export default function VerificationUpload({ onSubmit }: VerificationUploadProps
         disabled={!canSubmit}
         className="w-full rounded-lg bg-brand-forest px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-forest-dark disabled:cursor-not-allowed disabled:bg-surface-strong"
       >
+        {/* The section counts as complete as soon as everything is in (see isVerificationComplete);
+            this button just moves on to the Payment Summary. */}
         {anyUploadInProgress
           ? 'Uploading documents…'
-          : verificationDocs.confirmed
-            ? 'Verification Details Saved ✓'
-            : 'Save Verification Details'}
+          : canSubmit
+            ? 'Verification Complete ✓ Continue'
+            : 'Complete the details above to continue'}
       </button>
 
-      <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300">
+      <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
         <InfoCircleIcon className="h-5 w-5 shrink-0" />
         <p>
           <span className="font-semibold">What happens next: </span>

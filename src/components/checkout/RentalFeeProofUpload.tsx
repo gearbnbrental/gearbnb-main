@@ -117,11 +117,11 @@ function PaidStatus({ paidCentavos }: { paidCentavos: number }) {
 
 function PendingStatus({ amountClaimedCentavos }: { amountClaimedCentavos: number | null }) {
   return (
-    <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-400/30 dark:bg-amber-400/10">
-      <ClockIcon className="h-5 w-5 shrink-0 text-amber-700 dark:text-amber-300" />
+    <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+      <ClockIcon className="h-5 w-5 shrink-0 text-amber-700" />
       <div className="flex flex-col gap-1">
-        <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Payment Proof Under Review</p>
-        <p className="text-sm text-amber-800/80 dark:text-amber-300/80">
+        <p className="text-sm font-semibold text-amber-800">Payment Proof Under Review</p>
+        <p className="text-sm text-amber-800/80">
           Your rental fee payment proof is currently being reviewed by GearBnB.
           {amountClaimedCentavos !== null && ` Submitted amount: ${formatCurrency(amountClaimedCentavos / 100)}.`}
         </p>
@@ -132,16 +132,16 @@ function PendingStatus({ amountClaimedCentavos }: { amountClaimedCentavos: numbe
 
 function RejectedNotice({ reviewNote }: { reviewNote: string | null }) {
   return (
-    <div className="flex items-start gap-3 rounded-xl border border-red-300 bg-red-50 p-4 dark:border-red-500/30 dark:bg-red-500/10">
-      <AlertIcon className="h-5 w-5 shrink-0 text-red-600 dark:text-red-400" />
+    <div className="flex items-start gap-3 rounded-xl border border-red-300 bg-red-50 p-4">
+      <AlertIcon className="h-5 w-5 shrink-0 text-red-600" />
       <div className="flex flex-col gap-2">
         <div>
-          <p className="text-sm font-semibold text-red-700 dark:text-red-400">Payment Proof Rejected</p>
-          <p className="text-sm text-red-700/90 dark:text-red-400/90">
+          <p className="text-sm font-semibold text-red-700">Payment Proof Rejected</p>
+          <p className="text-sm text-red-700/90">
             Please submit a new proof of payment.
           </p>
         </div>
-        {reviewNote && <p className="text-sm text-red-700/90 dark:text-red-400/90">{reviewNote}</p>}
+        {reviewNote && <p className="text-sm text-red-700/90">{reviewNote}</p>}
       </div>
     </div>
   );
@@ -192,7 +192,7 @@ function ProofDropzone({ file, previewUrl, error, disabled, onSelect, onRemove }
           'relative flex h-24 flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed p-3 text-center transition-colors sm:h-32',
           disabled ? 'cursor-wait' : 'cursor-pointer',
           error
-            ? 'border-red-400 bg-red-50 dark:border-red-500 dark:bg-red-500/10'
+            ? 'border-red-400 bg-red-50'
             : hasFile
               ? 'border-brand-forest bg-brand-forest/10'
               : isDragActive
@@ -217,7 +217,7 @@ function ProofDropzone({ file, previewUrl, error, disabled, onSelect, onRemove }
               onRemove();
             }}
             aria-label="Remove selected file"
-            className="absolute right-2 top-2 rounded-full bg-surface p-1 text-ink-muted shadow hover:text-red-600 dark:hover:text-red-400"
+            className="absolute right-2 top-2 rounded-full bg-surface p-1 text-ink-muted shadow hover:text-red-600"
           >
             <XMarkIcon className="h-4 w-4" />
           </button>
@@ -248,7 +248,7 @@ function ProofDropzone({ file, previewUrl, error, disabled, onSelect, onRemove }
       </label>
 
       {error && (
-        <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+        <p role="alert" className="text-xs font-medium text-red-600">
           {error}
         </p>
       )}
@@ -293,14 +293,12 @@ export default function RentalFeeProofUpload({
   const [fileError, setFileError] = useState<string | null>(null);
   const [amountPaid, setAmountPaid] = useState('0.00');
   const [methodId, setMethodId] = useState('');
-  const [referenceNumber, setReferenceNumber] = useState('');
   const [detailsError, setDetailsError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const methodSelectId = useId();
   const amountFieldId = useId();
-  const referenceFieldId = useId();
 
   const objectUrlRef = useRef<string | null>(null);
 
@@ -397,12 +395,10 @@ export default function RentalFeeProofUpload({
         storagePath: path,
         amountClaimedCentavos: amountCentavos,
         method: selectedMethod.rmsMethod,
-        referenceNumber: referenceNumber.trim() || undefined,
       });
       resetSelection();
       setAmountPaid('0.00');
       setMethodId('');
-      setReferenceNumber('');
       onProofSubmitted?.();
     } catch (err) {
       setSubmitError(
@@ -469,24 +465,10 @@ export default function RentalFeeProofUpload({
                 </select>
               </label>
 
-              <div className="sm:col-span-2">
-                <label htmlFor={referenceFieldId} className="flex flex-col gap-1.5">
-                  <span className="text-sm font-medium text-ink">Reference Number (optional)</span>
-                  <input
-                    id={referenceFieldId}
-                    type="text"
-                    disabled={submitting}
-                    value={referenceNumber}
-                    onChange={(e) => setReferenceNumber(e.target.value)}
-                    placeholder="Transaction/reference number from your receipt"
-                    className="rounded-lg border border-line px-3 py-2.5 text-sm text-ink shadow-sm outline-none transition-colors focus:border-brand-forest focus:ring-2 focus:ring-brand-forest/20"
-                  />
-                </label>
-              </div>
             </div>
 
             {detailsError && (
-              <p role="alert" className="text-sm font-medium text-red-600 dark:text-red-400">
+              <p role="alert" className="text-sm font-medium text-red-600">
                 {detailsError}
               </p>
             )}
@@ -501,7 +483,7 @@ export default function RentalFeeProofUpload({
             />
 
             {submitError && (
-              <p role="alert" className="text-sm font-medium text-red-600 dark:text-red-400">
+              <p role="alert" className="text-sm font-medium text-red-600">
                 {submitError}
               </p>
             )}

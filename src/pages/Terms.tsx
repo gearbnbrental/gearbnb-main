@@ -10,6 +10,14 @@ interface TermsSection {
   bullets: string[];
 }
 
+/** The deposit tiers (utils/securityDeposit.ts), in words. */
+const DEPOSIT_TIER_ROWS: [string, string][] = [
+  ['Below ₱1,000', '₱300'],
+  ['₱1,000 to below ₱4,000', '₱500'],
+  ['₱4,000 to ₱6,000', '₱900'],
+  ['Above ₱6,000', '₱1,200'],
+];
+
 const GENERAL_TERMS: TermsSection[] = [
   {
     id: '4.1',
@@ -150,8 +158,8 @@ export default function Terms() {
           >
             BYO Rental Agreement
           </a>{' '}
-          instead, the same care, damage, cancellation, and liability terms, but with a security deposit set per
-          booking based on the items selected rather than a fixed package amount.
+          instead, the same care, damage, cancellation, and liability terms, but with a security deposit based on the
+          rental total (see Section 3) rather than a fixed package amount.
         </p>
       </div>
 
@@ -160,8 +168,10 @@ export default function Terms() {
           Section 3, Fully Refundable Security Deposit
         </h2>
         <p className="text-base leading-relaxed text-ink-muted">
-          A refundable security deposit is required upon confirmation of every booking, returned in full once all
-          rented items come back complete and undamaged.
+          A refundable security deposit is required for every booking, payable within 24 hours of checking out
+          (while we review your documents), and returned in full once all rented items come back complete and
+          undamaged. A package on its own has the deposit below. Build Your Own, and a package whose add-ons bring
+          the total into a higher tier, use the tiers further down.
         </p>
         <div className="overflow-x-auto rounded-xl border border-line">
           <table className="w-full min-w-[360px] text-left text-sm sm:text-base">
@@ -176,6 +186,24 @@ export default function Terms() {
                 <tr key={kit.id}>
                   <td className="px-4 py-3 text-ink">{kit.name}</td>
                   <td className="px-4 py-3 text-right font-medium text-ink">{formatCurrency(kit.depositAmount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="overflow-x-auto rounded-xl border border-line">
+          <table className="w-full min-w-[360px] text-left text-sm sm:text-base">
+            <thead className="bg-surface-muted text-xs font-semibold uppercase tracking-wide text-ink-muted">
+              <tr>
+                <th className="px-4 py-3 font-semibold">Rental total (gear and add-ons, before discounts)</th>
+                <th className="px-4 py-3 text-right font-semibold">Deposit Amount</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line-soft">
+              {DEPOSIT_TIER_ROWS.map(([range, amount]) => (
+                <tr key={range}>
+                  <td className="px-4 py-3 text-ink">{range}</td>
+                  <td className="px-4 py-3 text-right font-medium text-ink">{amount}</td>
                 </tr>
               ))}
             </tbody>

@@ -1,12 +1,16 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, type ComponentType } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, type ComponentType } from 'react';
 import { BrowserRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import BackToTop from './components/BackToTop';
+import CookieConsent from './components/CookieConsent';
+import AccessibilityWidget from './components/AccessibilityWidget';
+import { readCookieConsent } from './utils/cookieConsent';
 import ErrorBoundary from './components/ErrorBoundary';
 import FloatingHelp from './components/FloatingHelp';
 import Footer from './components/Footer';
 import Navbar from './components/Navbar';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CatalogProvider } from './context/CatalogContext';
+import { PromoProvider } from './context/PromoContext';
 import { RentalProvider } from './context/RentalContext';
 
 // LandingPage stays a static import because it is the entry route for a typical first visit.
@@ -52,6 +56,7 @@ const MyBookings = lazyWithRetry(() => import('./pages/MyBookings'));
 const PathACatalog = lazyWithRetry(() => import('./pages/PathACatalog'));
 const PathBCatalog = lazyWithRetry(() => import('./pages/PathBCatalog'));
 const PrivacyPolicy = lazyWithRetry(() => import('./pages/PrivacyPolicy'));
+const DataDeletion = lazyWithRetry(() => import('./pages/DataDeletion'));
 const Profile = lazyWithRetry(() => import('./pages/Profile'));
 const ResetPassword = lazyWithRetry(() => import('./pages/ResetPassword'));
 const Terms = lazyWithRetry(() => import('./pages/Terms'));
@@ -116,15 +121,38 @@ function ScrollToTop() {
   return null;
 }
 
+/**
+ * Meta Pixel PageView for each page change inside the site. The snippet in index.html already
+ * counts the first page; the site then switches pages without reloading, so later pages would
+ * otherwise never be counted. Does nothing where the pixel isn't loaded (local development).
+ */
+function MetaPixelPageViews() {
+  const { pathname } = useLocation();
+  const firstPage = useRef(true);
+  useEffect(() => {
+    if (firstPage.current) {
+      firstPage.current = false;
+      return;
+    }
+    // Only with the visitor's consent (the pixel isn't even loaded without it).
+    if (readCookieConsent() === 'granted') window.fbq?.('track', 'PageView');
+  }, [pathname]);
+  return null;
+}
+
 function App() {
   return (
     <AuthProvider>
       <CatalogProvider>
         <RentalProvider>
           <BrowserRouter>
+            <PromoProvider>
             <div className="min-h-screen">
               <VerificationGate />
               <ScrollToTop />
+              <MetaPixelPageViews />
+              <CookieConsent />
+              <AccessibilityWidget />
               <Navbar />
 
               <ErrorBoundary>
@@ -177,6 +205,7 @@ function App() {
                       path="/privacy-policy"
                       element={<PrivacyPolicy />}
                     />
+                    <Route path="/data-deletion" element={<DataDeletion />} />
                   </Routes>
                 </Suspense>
               </ErrorBoundary>
@@ -186,6 +215,7 @@ function App() {
               <BackToTop />
               <FloatingHelp />
             </div>
+            </PromoProvider>
           </BrowserRouter>
         </RentalProvider>
       </CatalogProvider>
