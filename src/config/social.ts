@@ -24,3 +24,8 @@ export const MESSENGER_URL = 'https://m.me/1053993614458909';
  * sends no email itself; this constant is display/contact-only (a `mailto:` link).
  */
 export const CONTACT_EMAIL: string | null = 'customersupport@gearbnbrental.com';
+
+/** Customer contact number: `tel:` links and the LocalBusiness schema use CONTACT_PHONE_E164,
+ *  people see CONTACT_PHONE_DISPLAY. */
+export const CONTACT_PHONE_E164 = '+639765952432';
+export const CONTACT_PHONE_DISPLAY = '+63 976 595 2432';

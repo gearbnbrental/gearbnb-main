@@ -72,11 +72,11 @@ function FaqRow({
         <span className="text-sm font-medium text-ink">{entry.question}</span>
         <ChevronDownIcon className={`h-4 w-4 shrink-0 text-ink-muted transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
-      {open && (
-        <p className="whitespace-pre-line pb-2.5 text-sm text-ink-muted">
-          <AnswerWithLinks answer={entry.answer} linkTargets={linkTargets} onOpenKind={onOpenKind} />
-        </p>
-      )}
+      {/* Always in the page, hidden while closed: search engines and the page's Markdown version
+          read every answer, matching the FAQPage data. */}
+      <p hidden={!open} className="whitespace-pre-line pb-2.5 text-sm text-ink-muted">
+        <AnswerWithLinks answer={entry.answer} linkTargets={linkTargets} onOpenKind={onOpenKind} />
+      </p>
     </div>
   );
 }
@@ -84,9 +84,8 @@ function FaqRow({
 /**
  * "Frequently Asked Questions" block shared by the gear and package details popups (see
  * GearDetailsDialog/PackageDetailsDialog) — real, visible tap-to-expand content for whoever opened
- * the popup, plus the same content again as FAQPage JSON-LD. See that JSON-LD helper's own doc
- * comment for why it has no real search-visibility payoff as things stand (this popup has no URL
- * of its own for Google to credit it to).
+ * the popup, plus the same content again as FAQPage JSON-LD, which search engines credit to the
+ * product's own address (/catalog/camping-packages/:slug, /catalog/build-your-own/:slug).
  */
 export default function ProductFaqSection({
   entries,

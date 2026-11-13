@@ -1,7 +1,10 @@
 ﻿import { usePageMeta } from '../hooks/usePageMeta';
 import { PAGE_META } from '../config/pageMeta';
 import { useMemo, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import NotFound from './NotFound';
+import { packagePageMeta } from '../config/productMeta';
+import { PACKAGES_PATH, findBySlug, packagePath, packageSlug } from '../utils/productSlug';
 import { MESSENGER_URL } from '../config/social';
 import { ArrowRightIcon, CampfireIcon, ChevronDownIcon, GearPlaceholderIcon } from '../components/icons';
 import BackLink from '../components/BackLink';
@@ -119,16 +122,19 @@ interface PackageCardProps {
   /** The page-wide color the customer picked ("Black"/"Khaki"), if the page offers one — decides
    *  which edition of a multi-color kit this card shows and adds to the cart. */
   color?: string;
+  /** This package's own address is open (/catalog/camping-packages/:slug): show its details. */
+  detailsOpen: boolean;
+  onOpenDetails: () => void;
+  onCloseDetails: () => void;
 }
 
-function PackageCard({ kit, dateRange, selectedDuration, dateStock, color }: PackageCardProps) {
+function PackageCard({ kit, dateRange, selectedDuration, dateStock, color, detailsOpen, onOpenDetails, onCloseDetails }: PackageCardProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
   const { cart, addKit, removeKit, addKitExtra, removeKitExtra } = useRental();
   const [imageFailed, setImageFailed] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
-  const [detailsOpen, setDetailsOpen] = useState(false);
 
   // The specific edition chosen (if any) becomes the cart item's real identity — this is what
   // gets submitted as the booking's package_id, so "Khaki" must never silently save as "Black".
@@ -369,7 +375,8 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color }: Pac
               if (isSelected) handleRemove();
               else handleAdd();
             }}
-            onClose={() => setDetailsOpen(false)}
+            onClose={onCloseDetails}
+            headingLevel="h1"
           />
         )}
 
@@ -399,13 +406,19 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color }: Pac
         {bestFor && <p className="-mt-1 text-xs font-medium text-accent sm:-mt-2 sm:text-sm">Best {lead} {bestFor}</p>}
         {/* Trial: opens the package's own "View Details" popup (Best For line, full description,
             FAQ, and everything that used to show inline here). */}
-        <button
-          type="button"
-          onClick={() => setDetailsOpen(true)}
+        {/* A real link to the package's own address (crawlers follow it); a click opens the
+            details over this page without reloading. */}
+        <a
+          href={packagePath(kit)}
+          onClick={(event) => {
+            if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+            event.preventDefault();
+            onOpenDetails();
+          }}
           className="self-start text-[11px] font-medium text-accent underline underline-offset-2 sm:text-xs"
         >
           View Details
-        </button>
+        </a>
 
         {isSelected && kit.extras && kit.extras.length > 0 && (
           <div className="flex flex-col gap-1.5 rounded-lg bg-surface-muted p-2 sm:gap-2 sm:p-3">
@@ -1062,8 +1075,21 @@ function PackageAddOnsSection({
 export default function PathACatalog() {
   // Lets the floating corner buttons sit just above this page's sticky bar, whatever its height.
   const stickyBarRef = useStickyBarRef();
-  usePageMeta(PAGE_META.packages.title, PAGE_META.packages.description);
   const { kits, catalogState, retryCatalog, packageDetailsFailed } = useCatalog();
+  // /catalog/camping-packages/:slug opens that package's details over this page.
+  const { slug } = useParams<{ slug?: string }>();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const activeKit = findBySlug(kits, slug, packageSlug);
+  // An address for a package that doesn't exist (renamed or removed) shows the 404 page.
+  const unknownSlug = !!slug && catalogState === 'ready' && kits.length > 0 && !activeKit;
+  const pageMeta = activeKit ? packagePageMeta(activeKit) : unknownSlug ? PAGE_META.notFound : PAGE_META.packages;
+  usePageMeta(pageMeta.title, pageMeta.description);
+  const openDetails = (kit: PackageKit) => navigate(packagePath(kit), { state: { fromCatalog: true } });
+  // Back to the catalog: one step back when the details were opened from it, otherwise (a direct
+  // visit to the product's address) replace the address so Back doesn't reopen them.
+  const closeDetails = () =>
+    (location.state as { fromCatalog?: boolean } | null)?.fromCatalog ? navigate(-1) : navigate(PACKAGES_PATH, { replace: true });
   const { cart, totals, updateTripDetails } = useRental();
   // The package in the cart for the dates being browsed, if any — what the extras section attaches to.
   const kitForTheseDates = cartForDates(cart, cart.tripDetails).selectedKits[0] ?? null;
@@ -1137,8 +1163,13 @@ export default function PathACatalog() {
   // The one color switch for the whole page (Black/Khaki), built from every package edition's color.
   const [chosenColor, setChosenColor] = useState<string | null>(null);
   const colorOptions = useMemo(() => packageColorOptions(visibleKits), [visibleKits]);
+  // Until the customer picks one: a color the package whose address is open comes in (so a direct
+  // visit to it isn't hidden by the switch), otherwise the first.
+  const defaultColor =
+    colorOptions.find((option) => activeKit?.editions?.some((edition) => edition.label.toLowerCase() === option.toLowerCase())) ??
+    colorOptions[0];
   const activeColor =
-    colorOptions.length > 1 ? (chosenColor && colorOptions.includes(chosenColor) ? chosenColor : colorOptions[0]) : undefined;
+    colorOptions.length > 1 ? (chosenColor && colorOptions.includes(chosenColor) ? chosenColor : defaultColor) : undefined;
   // Strict: a package is shown only if it comes in the chosen color.
   const displayKits = activeColor ? filterPackagesByColor(visibleKits, activeColor) : visibleKits;
 
@@ -1197,6 +1228,9 @@ export default function PathACatalog() {
     updateTripDetails(range);
   }
 
+  if (unknownSlug) return <NotFound />;
+  const PageHeading = activeKit ? 'h2' : 'h1';
+
   return (
     // pb-56 — see Cart.tsx's identical comment: this route's lifted floating buttons (both Need
     // Help and, once scrolled far enough, Back to Top) reach up to ~208px above the viewport
@@ -1205,7 +1239,8 @@ export default function PathACatalog() {
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 p-4 sm:gap-6 sm:p-6">
         <BackLink to="/catalog" label="Back to Browse Gear" />
         <div className="flex flex-col gap-1">
-          <h1 className="font-serif text-lg font-semibold text-ink sm:text-xl">Choose a Camping Package</h1>
+          {/* With a package's details open, its name is the page's one h1. */}
+          <PageHeading className="font-serif text-lg font-semibold text-ink sm:text-xl">Choose a Camping Package</PageHeading>
           <p className="text-sm text-ink-muted">
             Ready-made camping kits with tent, sleeping gear and seating, bundled and priced as one unit. Want to pick
             each piece?{' '}
@@ -1460,6 +1495,9 @@ export default function PathACatalog() {
                     selectedDuration={selectedDuration}
                     dateStock={packageDateStock}
                     color={activeColor}
+                    detailsOpen={activeKit?.id === kit.id}
+                    onOpenDetails={() => openDetails(kit)}
+                    onCloseDetails={closeDetails}
                   />
                 ))}
               </div>

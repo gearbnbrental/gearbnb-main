@@ -1,8 +1,19 @@
 # Apache / LiteSpeed (e.g. Hostinger shared hosting). Ignored by hosts that don't read .htaccess.
 # Keep the headers in sync with public/_headers (see the CSP source notes there).
 
-# SPA fallback for react-router's BrowserRouter. Real files and directories are served as-is;
-# anything that looks like a file (has an extension, e.g. a stale /assets/*.js) still gets a real 404.
+# Addresses the site doesn't have get a real 404 status, answered with the "page not found" page.
+# The app still loads on it, so a product added in the RMS after the last build still shows.
+ErrorDocument 404 /_pages/404.html
+
+# Markdown versions of the pages (/_md/*.md) and /llms.txt, for AI agents.
+<IfModule mod_mime.c>
+  AddType text/markdown .md
+  AddCharset utf-8 .md .txt
+</IfModule>
+
+# Only known addresses are answered: real files, each pre-built page, and the app-only pages
+# (/cart, /login, ...), which get index.html. The build (prerenderRouteMeta in vite.config.ts)
+# writes those rules below the anchor; everything else falls through to the 404 above.
 <IfModule mod_rewrite.c>
   RewriteEngine On
 
@@ -13,10 +24,6 @@
   RewriteRule ^(.*)$ https://gearbnbrental.com/$1 [R=301,L]
 
   RewriteRule ^index\.html$ - [L]
-  RewriteCond %{REQUEST_FILENAME} !-f
-  RewriteCond %{REQUEST_FILENAME} !-d
-  RewriteCond %{REQUEST_URI} !\.[A-Za-z0-9]{1,8}$
-  RewriteRule . /index.html [L]
 </IfModule>
 
 <IfModule mod_headers.c>

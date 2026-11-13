@@ -308,8 +308,9 @@ export default function AboutUs() {
       </section>
 
       {/* Have questions — horizontal banner reusing an existing GearBnB camp photo as the
-          backdrop, matching the reference's imagery + message CTA banner. */}
-      <section className="px-5 py-10 sm:px-6 sm:py-20">
+          backdrop, matching the reference's imagery + message CTA banner. The footer's "Contact Us"
+          links here. */}
+      <section id="contact" className="scroll-mt-20 px-5 py-10 sm:px-6 sm:py-20">
         <div className="relative mx-auto isolate flex w-full max-w-5xl min-h-[220px] items-center overflow-hidden rounded-2xl sm:min-h-[260px]">
           <img
             src="/images/camp-setups/camp-setup-3.webp"

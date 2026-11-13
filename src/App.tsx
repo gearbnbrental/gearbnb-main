@@ -12,6 +12,8 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { CatalogProvider } from './context/CatalogContext';
 import { PromoProvider } from './context/PromoContext';
 import { RentalProvider } from './context/RentalContext';
+import { useCatalog } from './context/useCatalog';
+import { registerRentalTools, type CatalogSnapshot, type ModelContext } from './utils/webMcp';
 
 // LandingPage stays a static import because it is the entry route for a typical first visit.
 // Every other route is code-split so customers do not load unnecessary page code up front.
@@ -53,6 +55,7 @@ const EventPlan = lazyWithRetry(() => import('./pages/EventPlan'));
 const ForgotPassword = lazyWithRetry(() => import('./pages/ForgotPassword'));
 const Login = lazyWithRetry(() => import('./pages/Login'));
 const MyBookings = lazyWithRetry(() => import('./pages/MyBookings'));
+const NotFound = lazyWithRetry(() => import('./pages/NotFound'));
 const PathACatalog = lazyWithRetry(() => import('./pages/PathACatalog'));
 const PathBCatalog = lazyWithRetry(() => import('./pages/PathBCatalog'));
 const PrivacyPolicy = lazyWithRetry(() => import('./pages/PrivacyPolicy'));
@@ -101,15 +104,32 @@ function VerificationGate() {
   return null;
 }
 
+/** "/catalog/camping-packages/stargazer-kit" -> "/catalog/camping-packages": a product's details
+ *  open over its catalog page, so moving between the two keeps the catalog's scroll position. */
+const catalogOf = (pathname: string) => pathname.match(/^\/catalog\/(camping-packages|build-your-own)(?=\/|$)/)?.[0] ?? null;
+
 /**
  * Resets the window scroll position whenever the route changes.
- * Hash URLs are preserved for intentional section links.
+ * Hash URLs scroll to that section instead (e.g. /about-us#contact).
  */
 function ScrollToTop() {
   const { pathname, hash } = useLocation();
+  const previousPath = useRef(pathname);
 
   useLayoutEffect(() => {
-    if (hash) return;
+    const from = previousPath.current;
+    previousPath.current = pathname;
+    if (hash) {
+      // Once the page (often a lazy-loaded one) has rendered that section; gives up after 3s.
+      let tries = 0;
+      const timer = window.setInterval(() => {
+        const target = document.getElementById(decodeURIComponent(hash.slice(1)));
+        if (target) target.scrollIntoView();
+        if (target || ++tries >= 30) window.clearInterval(timer);
+      }, 100);
+      return () => window.clearInterval(timer);
+    }
+    if (from !== pathname && catalogOf(from) !== null && catalogOf(from) === catalogOf(pathname)) return;
 
     window.scrollTo({
       top: 0,
@@ -117,6 +137,24 @@ function ScrollToTop() {
       behavior: 'instant',
     });
   }, [pathname, hash]);
+
+  return null;
+}
+
+/**
+ * Registers the read-only WebMCP tools (search the catalog, item details, rental policies) once,
+ * on page load, for AI agents in browsers that support them. They read the catalog as it is when
+ * called, so they never need re-registering.
+ */
+function WebMcpTools() {
+  const { kits, gearKinds } = useCatalog();
+  const catalog = useRef<CatalogSnapshot>({ kits, gearKinds });
+  catalog.current = { kits, gearKinds };
+
+  useEffect(() => {
+    const modelContext = (navigator as Navigator & { modelContext?: ModelContext }).modelContext;
+    return registerRentalTools(modelContext, () => catalog.current);
+  }, []);
 
   return null;
 }
@@ -151,6 +189,7 @@ function App() {
               <VerificationGate />
               <ScrollToTop />
               <MetaPixelPageViews />
+              <WebMcpTools />
               <CookieConsent />
               <AccessibilityWidget />
               <Navbar />
@@ -161,12 +200,15 @@ function App() {
                     <Route path="/" element={<LandingPage />} />
 
                     <Route path="/catalog" element={<CatalogChooser />} />
+                    {/* With a slug, a product's own address: its catalog page with that product's
+                        details open. One route each, so the catalog keeps its dates and filters
+                        while details open and close. */}
                     <Route
-                      path="/catalog/camping-packages"
+                      path="/catalog/camping-packages/:slug?"
                       element={<PathACatalog />}
                     />
                     <Route
-                      path="/catalog/build-your-own"
+                      path="/catalog/build-your-own/:slug?"
                       element={<PathBCatalog />}
                     />
 
@@ -206,6 +248,7 @@ function App() {
                       element={<PrivacyPolicy />}
                     />
                     <Route path="/data-deletion" element={<DataDeletion />} />
+                    <Route path="*" element={<NotFound />} />
                   </Routes>
                 </Suspense>
               </ErrorBoundary>

@@ -1,3 +1,4 @@
-# SPA fallback for react-router's BrowserRouter (Netlify / Cloudflare Pages format).
-# Real files (assets, images, index.html itself) are served as-is; only unknown paths fall back.
-/*    /index.html   200
+# Netlify / Cloudflare Pages format. The build (prerenderRouteMeta in vite.config.ts) adds a rule
+# per pre-built page and per app-only page (/cart, /login, ...) above this line; any other address
+# gets the "page not found" page with a real 404 status.
+/*    /_pages/404.html   404

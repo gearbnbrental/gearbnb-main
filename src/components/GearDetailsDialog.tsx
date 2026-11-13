@@ -84,6 +84,8 @@ interface GearDetailsDialogProps {
    *  full-width button becomes "← Back to Package" (calls `onBack`) instead of "Close" — the small
    *  ✕ in the corner still fully closes everything via the ordinary `onClose`. */
   viewOnly?: { onBack: () => void; backLabel?: string };
+  /** h1 when this is the page's main subject (the gear's own address is open). */
+  headingLevel?: 'h1' | 'h2';
 }
 
 /**
@@ -93,7 +95,15 @@ interface GearDetailsDialogProps {
  * (including the FAQPage JSON-LD below) is something Google can credit to a specific address — see
  * this feature's own design discussion for what a real per-product URL would additionally buy.
  */
-export default function GearDetailsDialog({ kind, quantity, onQuantityChange, onClose, addOnsSection, viewOnly }: GearDetailsDialogProps) {
+export default function GearDetailsDialog({
+  kind,
+  quantity,
+  onQuantityChange,
+  onClose,
+  addOnsSection,
+  viewOnly,
+  headingLevel: Heading = 'h2',
+}: GearDetailsDialogProps) {
   useProductViewOpen();
   const gallery: LightboxImage[] =
     kind.images && kind.images.length > 0
@@ -240,10 +250,10 @@ export default function GearDetailsDialog({ kind, quantity, onQuantityChange, on
         <div className="flex flex-col gap-4 p-5 sm:p-6">
           <div className="flex flex-col gap-1">
             <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">{kind.category}</p>
-            <h2 className="flex flex-wrap items-center gap-x-2 gap-y-1 font-serif text-xl font-bold text-ink sm:text-2xl">
+            <Heading className="flex flex-wrap items-center gap-x-2 gap-y-1 font-serif text-xl font-bold text-ink sm:text-2xl">
               {cleanGearName(kind.name)}
               {!viewOnly && badgePromo && <OffBadge offer={formatPromoOffer(badgePromo)} size="large" className="my-1" />}
-            </h2>
+            </Heading>
             {bestFor ? (
               <p className="-mt-1 text-sm font-semibold text-accent">Best {lead} {bestFor}</p>
             ) : (

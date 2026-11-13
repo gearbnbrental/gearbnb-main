@@ -7,6 +7,8 @@
  * Change a title or description here and both stay in sync.
  */
 
+import { HOME_FAQ } from './homeFaq.ts';
+
 export const SITE_URL = 'https://gearbnbrental.com';
 export const SITE_NAME = 'GearBnB';
 /** Default link-preview image (1200x630) for any page that doesn't set its own `image`. */
@@ -35,6 +37,16 @@ export const ORGANIZATION_JSON_LD = {
   description:
     'Camping gear for rent in Las Piñas City. GearBnB offers camping gear rental in Metro Manila, including tents, sleeping gear, cooking equipment and complete camping packages.',
   email: 'customersupport@gearbnbrental.com',
+  telephone: '+639765952432',
+  contactPoint: {
+    '@type': 'ContactPoint',
+    contactType: 'customer service',
+    telephone: '+639765952432',
+    email: 'customersupport@gearbnbrental.com',
+    url: 'https://m.me/1053993614458909',
+    areaServed: 'PH',
+    availableLanguage: ['English', 'Filipino'],
+  },
   address: {
     '@type': 'PostalAddress',
     streetAddress: 'Talon Uno',
@@ -127,6 +139,31 @@ export const ABOUT_US_JSON_LD = {
   ],
 } as const;
 
+/** Homepage schema: the site itself (WebSite) and its FAQ, next to the shared LocalBusiness block. */
+export const HOME_JSON_LD = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'WebSite',
+      '@id': 'https://gearbnbrental.com/#website',
+      url: 'https://gearbnbrental.com/',
+      name: 'GearBnB',
+      description: 'Camping gear rental in Las Piñas City and Metro Manila: complete camping packages or gear by the piece.',
+      inLanguage: 'en',
+      publisher: { '@id': 'https://gearbnbrental.com/#business' },
+    },
+    {
+      '@type': 'FAQPage',
+      '@id': 'https://gearbnbrental.com/#faq',
+      mainEntity: HOME_FAQ.map(({ question, answer }) => ({
+        '@type': 'Question',
+        name: question,
+        acceptedAnswer: { '@type': 'Answer', text: answer },
+      })),
+    },
+  ],
+};
+
 export interface PageMeta {
   title: string;
   description: string;
@@ -143,6 +180,7 @@ export const PAGE_META = {
     title: 'Camping Gear for Rent in Las Piñas & Metro Manila | GearBnB',
     description:
       'Camping gear rental in Metro Manila made easy. Rent tents, beds, chairs and full camping kits from trusted brands. Pick up in Las Piñas City. Book online.',
+    jsonLd: HOME_JSON_LD,
   },
   catalog: {
     title: 'Camping Kits for Rent in Metro Manila | GearBnB',
@@ -184,6 +222,16 @@ export const PAGE_META = {
     title: 'Terms of Service | GearBnB',
     description: 'The terms for using gearbnbrental.com and renting camping gear from GearBnB.',
   },
+  rentalTerms: {
+    title: 'Rental Terms & Security Deposit | GearBnB',
+    description:
+      "GearBnB's rental terms: security deposit amounts, the 24-hour deposit deadline, refunds, and the Kit and Build Your Own rental agreements.",
+  },
+  notFound: {
+    title: 'Page Not Found | GearBnB',
+    description: "This page doesn't exist. Browse GearBnB's camping packages or rent camping gear by the piece.",
+    robots: 'noindex, follow',
+  },
   dataDeletion: {
     title: 'User Data Deletion | GearBnB',
     description: 'How to delete your GearBnB account and personal data, including data from Facebook Login and Google Sign-In.',
@@ -200,6 +248,20 @@ export const PRERENDERED_PAGES: { path: string; meta: PageMeta }[] = [
   { path: '/plan-an-event', meta: PAGE_META.events },
   { path: '/about-us', meta: PAGE_META.about },
   { path: '/privacy-policy', meta: PAGE_META.privacy },
+  { path: '/terms', meta: PAGE_META.rentalTerms },
   { path: '/terms-of-service', meta: PAGE_META.terms },
   { path: '/data-deletion', meta: PAGE_META.dataDeletion },
+];
+
+/** App pages with no pre-built HTML (private or personal): the server answers them with the
+ * empty app shell. Every other address that isn't a pre-built page or a file gets a real 404.
+ * Must list every non-prerendered route in App.tsx (checked by appRoutes.test.ts). */
+export const CLIENT_ONLY_PATHS = [
+  '/cart',
+  '/checkout',
+  '/login',
+  '/forgot-password',
+  '/reset-password',
+  '/my-bookings',
+  '/profile',
 ];

@@ -83,6 +83,8 @@ interface PackageDetailsDialogProps {
   isSelected: boolean;
   onToggleSelected: () => void;
   onClose: () => void;
+  /** h1 when this is the page's main subject (the package's own address is open). */
+  headingLevel?: 'h1' | 'h2';
 }
 
 /**
@@ -108,6 +110,7 @@ export default function PackageDetailsDialog({
   isSelected,
   onToggleSelected,
   onClose,
+  headingLevel: Heading = 'h2',
 }: PackageDetailsDialogProps) {
   useProductViewOpen();
   const { gearKinds } = useCatalog();
@@ -256,10 +259,10 @@ export default function PackageDetailsDialog({
         <div className="flex flex-col gap-4 p-5 sm:p-6">
           <div className="flex flex-col gap-1">
             <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Package{paxRange ? ` · ${paxRange}` : ''}</p>
-            <h2 className="flex flex-wrap items-center gap-x-2 gap-y-1 font-serif text-xl font-bold text-ink sm:text-2xl">
+            <Heading className="flex flex-wrap items-center gap-x-2 gap-y-1 font-serif text-xl font-bold text-ink sm:text-2xl">
               {name}
               {badgePromo && <OffBadge offer={formatPromoOffer(badgePromo)} size="large" className="my-1" />}
-            </h2>
+            </Heading>
             {bestFor && <p className="-mt-1 text-sm font-semibold text-accent">Best {lead} {bestFor}</p>}
           </div>
 

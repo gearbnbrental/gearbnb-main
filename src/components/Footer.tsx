@@ -1,6 +1,6 @@
 ﻿import { Link, useNavigate } from 'react-router-dom';
-import { CONTACT_EMAIL, MESSENGER_URL } from '../config/social';
-import { ChatBubbleIcon, MailIcon } from './icons';
+import { CONTACT_EMAIL, CONTACT_PHONE_DISPLAY, CONTACT_PHONE_E164, MESSENGER_URL } from '../config/social';
+import { ChatBubbleIcon, MailIcon, PhoneIcon } from './icons';
 import SocialLinks from './SocialLinks';
 import { openCookieSettings } from '../utils/cookieConsent';
 
@@ -85,6 +85,12 @@ export default function Footer() {
             <Link to="/plan-an-event" className="w-fit text-left text-sm text-white hover:opacity-80">
               Plan an Event
             </Link>
+            <Link to="/about-us" className="w-fit text-left text-sm text-white hover:opacity-80">
+              About Us
+            </Link>
+            <Link to="/about-us#contact" className="w-fit text-left text-sm text-white hover:opacity-80">
+              Contact Us
+            </Link>
           </div>
 
           <div className="flex flex-col gap-1.5 sm:gap-2">
@@ -150,6 +156,15 @@ export default function Footer() {
                 <span className="min-w-0 break-words">{CONTACT_EMAIL}</span>
               </a>
             )}
+            <a
+              href={`tel:${CONTACT_PHONE_E164}`}
+              className="flex items-center gap-2.5 text-sm text-white transition-opacity hover:opacity-80"
+            >
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10 sm:h-8 sm:w-8">
+                <PhoneIcon className="h-4 w-4" />
+              </span>
+              {CONTACT_PHONE_DISPLAY}
+            </a>
             <a
               href={MESSENGER_URL}
               target="_blank"

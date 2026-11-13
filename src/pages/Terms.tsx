@@ -2,6 +2,8 @@
 import { useLocation } from 'react-router-dom';
 import { BYO_RENTAL_AGREEMENT_URL, TERMS_AND_CONDITIONS_URL } from '../config/legalDocuments';
 import { useCatalog } from '../context/useCatalog';
+import { PAGE_META } from '../config/pageMeta';
+import { usePageMeta } from '../hooks/usePageMeta';
 import { formatCurrency } from '../utils/format';
 
 interface TermsSection {
@@ -109,6 +111,7 @@ const GENERAL_TERMS: TermsSection[] = [
 ];
 
 export default function Terms() {
+  usePageMeta(PAGE_META.rentalTerms.title, PAGE_META.rentalTerms.description);
   const location = useLocation();
   // The real, authoritative package list and deposit amounts — same shared catalog source
   // PathACatalog's own package grid already reads (CatalogContext's `kits`, live Supabase/RMS

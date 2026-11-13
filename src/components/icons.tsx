@@ -148,6 +148,18 @@ export function MailIcon({ className }: { className?: string }) {
   );
 }
 
+export function PhoneIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className={className}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M2.25 6.75c0 8.28 6.72 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.37c0-.52-.35-.97-.85-1.09l-4.42-1.1c-.44-.11-.9.05-1.17.41l-.97 1.29c-.28.37-.77.53-1.2.37a12.04 12.04 0 0 1-7.14-7.14c-.16-.43 0-.92.37-1.2l1.29-.97c.36-.27.52-.73.41-1.17l-1.1-4.42a1.12 1.12 0 0 0-1.09-.85H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z"
+      />
+    </svg>
+  );
+}
+
 /** A small campfire/flame glyph — used as the "help while you're deciding" icon on the
  * post-package-grid CTA, echoing the client's camping-themed reference. */
 export function CampfireIcon({ className }: { className?: string }) {

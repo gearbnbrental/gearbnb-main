@@ -1,7 +1,10 @@
 ﻿import { usePageMeta } from '../hooks/usePageMeta';
 import { PAGE_META } from '../config/pageMeta';
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import NotFound from './NotFound';
+import { gearPageMeta } from '../config/productMeta';
+import { BUILD_YOUR_OWN_PATH, findBySlug, gearPath, gearSlug } from '../utils/productSlug';
 import BackLink from '../components/BackLink';
 import FilterPill from '../components/FilterPill';
 import { ChevronIcon, GearPlaceholderIcon } from '../components/icons';
@@ -41,7 +44,7 @@ import {
 import { formatCurrency, formatTripDate } from '../utils/format';
 import { toRmsBrand, type RmsAvailabilityRequest, type RmsAvailabilityResult } from '../utils/rmsApi';
 import { useAvailabilityCheck } from '../hooks/useAvailabilityCheck';
-import { resolveGearVariant, sizeCapacityToShow } from '../utils/gearVariants';
+import { resolveGearVariant, sizeCapacityToShow, withDefaultVariant } from '../utils/gearVariants';
 import ColorSwitch from '../components/ColorSwitch';
 import { filterGearByColor, gearColorOptions, supportsColorFilter } from '../utils/colorFilter';
 import { orderGearKinds } from '../utils/gearOrder';
@@ -322,6 +325,10 @@ interface GearCardProps {
   onAddOnQuantityChange: (addOn: BookableAddOn, next: number) => void;
 }
 
+/** Map key for a gear kind's add-on selections, as GearCard and its details both read them. */
+const addOnQuantityMap = (selections: BookableAddOnSelection[]) =>
+  new Map(selections.map((a) => [`${a.category}|${a.brand}|${a.model ?? ''}`, a.quantity]));
+
 function GearCard({
   kind,
   quantity,
@@ -337,11 +344,11 @@ function GearCard({
   alsoInCartFor,
   onQuantityChange,
   onAddOnQuantityChange,
-}: GearCardProps) {
+  onOpenDetails,
+}: GearCardProps & { onOpenDetails: () => void }) {
   const [imageFailed, setImageFailed] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const addOnQuantities = new Map(addOnSelections.map((a) => [`${a.category}|${a.brand}|${a.model ?? ''}`, a.quantity]));
+  const addOnQuantities = addOnQuantityMap(addOnSelections);
   const isSelected = quantity > 0;
   const cardBestFor = splitBestForLine(kind.description ?? '');
 
@@ -449,13 +456,19 @@ function GearCard({
         {/* Trial: opens the new details popup (gallery, description, FAQ) — see GearDetailsDialog's
             own doc comment. A plain text link, not styled as a button, so it reads as secondary to
             the card's own quantity control below. */}
-        <button
-          type="button"
-          onClick={() => setDetailsOpen(true)}
+        {/* A real link to the gear's own address (crawlers follow it); a click opens the details
+            over this page without reloading. */}
+        <a
+          href={gearPath(kind)}
+          onClick={(event) => {
+            if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+            event.preventDefault();
+            onOpenDetails();
+          }}
           className="self-start text-[11px] font-medium text-accent underline underline-offset-2 sm:text-xs"
         >
           View Details
-        </button>
+        </a>
 
         {/* Stacked below `sm` so the QuantityStepper (a fixed ~136px: two h-9 buttons + a w-12
             input) gets the full width of the card instead of being squeezed beside the price —
@@ -568,32 +581,51 @@ function GearCard({
           onNavigate={() => {}}
         />
       )}
-      {detailsOpen && (
-        <GearDetailsDialog
-          kind={kind}
-          quantity={quantity}
-          onQuantityChange={onQuantityChange}
-          onClose={() => setDetailsOpen(false)}
-          addOnsSection={{
-            addOnQuantities,
-            getPrice: (addOn) => (hasDuration ? getGearKindPrice(addOn, tripDetails) : null),
-            hasDuration,
-            showUpsell,
-            showExtraDayRate,
-            onAddOnQuantityChange,
-          }}
-        />
-      )}
     </div>
+  );
+}
+
+/** A gear kind's details (its own address, /catalog/build-your-own/:slug), with the same quantity
+ *  and add-on controls as its card. Rendered by the page, not the card, so it shows even when the
+ *  card is on another category, page or color. */
+function GearCardDetails({
+  kind,
+  quantity,
+  addOnSelections,
+  tripDetails,
+  hasDuration,
+  showUpsell,
+  showExtraDayRate,
+  onQuantityChange,
+  onAddOnQuantityChange,
+  onClose,
+}: GearCardProps & { onClose: () => void }) {
+  return (
+    <GearDetailsDialog
+      kind={kind}
+      quantity={quantity}
+      onQuantityChange={onQuantityChange}
+      onClose={onClose}
+      headingLevel="h1"
+      addOnsSection={{
+        addOnQuantities: addOnQuantityMap(addOnSelections),
+        getPrice: (addOn) => (hasDuration ? getGearKindPrice(addOn, tripDetails) : null),
+        hasDuration,
+        showUpsell,
+        showExtraDayRate,
+        onAddOnQuantityChange,
+      }}
+    />
   );
 }
 
 export default function PathBCatalog() {
   // Lets the floating corner buttons sit just above this page's sticky bar, whatever its height.
   const stickyBarRef = useStickyBarRef();
-  usePageMeta(PAGE_META.buildYourOwn.title, PAGE_META.buildYourOwn.description);
   const navigate = useNavigate();
   const location = useLocation();
+  // /catalog/build-your-own/:slug opens that gear's details over this page.
+  const { slug } = useParams<{ slug?: string }>();
   const { user } = useAuth();
   const { gearCatalogState, retryGearCatalog } = useCatalog();
   const { cart, totals, updateTripDetails, setByoGearQuantity, setByoAddOnQuantity } = useRental();
@@ -608,6 +640,11 @@ export default function PathBCatalog() {
   }, [cart.tripDetails.startDate, cart.tripDetails.returnDate, cart.tripDetails.preferredTime]);
   const catalogGearKinds = useDateAwareGearKinds(stockWindow);
   const gearKinds = useMemo(() => orderGearKinds(catalogGearKinds), [catalogGearKinds]);
+  const slugKind = findBySlug(gearKinds, slug, gearSlug);
+  // An address for gear that doesn't exist (renamed or removed) shows the 404 page.
+  const unknownSlug = !!slug && gearCatalogState === 'ready' && gearKinds.length > 0 && !slugKind;
+  const pageMeta = slugKind ? gearPageMeta(slugKind) : unknownSlug ? PAGE_META.notFound : PAGE_META.buildYourOwn;
+  usePageMeta(pageMeta.title, pageMeta.description);
   // Restored from any already-saved dates (same reasoning as PathACatalog's own selectedDuration
   // state) so navigating away and back — or simply reloading — doesn't silently drop a duration
   // the customer already picked while `cart.tripDetails` itself already remembers it.
@@ -725,7 +762,8 @@ export default function PathBCatalog() {
   const activeCategory =
     chosenCategory && categories.includes(chosenCategory)
       ? chosenCategory
-      : (categories.find((category) => category.toLowerCase() === 'tent') ?? categories[0] ?? '');
+      : // Until the customer picks one: the category of the gear whose address is open, then Tent.
+        (slugKind?.category ?? categories.find((category) => category.toLowerCase() === 'tent') ?? categories[0] ?? '');
 
   const normalizedSearch = searchQuery.trim().toLowerCase();
   // With no "All" pill, a search looks across every category (otherwise a search for "chair" while
@@ -817,14 +855,62 @@ export default function PathBCatalog() {
     updateTripDetails(getDurationRange('72h', cart.tripDetails.startDate || TODAY, clamped));
   }
 
+  /** Everything a gear kind's card, and its details, show and change. */
+  function gearCardProps(kind: BookableGearKind): GearCardProps {
+    const key = byoGearKey(kind);
+    // This gear's cart line for the dates being browsed (add-ons hang off it).
+    const lineKey = byoLineKey(kind, browsingDates);
+    const price = hasDuration ? getGearKindPrice(kind, cart.tripDetails) : null;
+    return {
+      kind,
+      quantity: gearSelections.get(key) ?? 0,
+      addOnSelections: cart.byoAddOns[lineKey] ?? [],
+      tripDetails: cart.tripDetails,
+      hasDuration,
+      showUpsell: selectedPreset === '48h',
+      showExtraDayRate: selectedPreset === '72h',
+      price,
+      unavailableForDates: unavailableNames.has(kindDisplayName(kind)),
+      promoNote: gearCardPromoNote(basketPromo, kind.category),
+      promoSaving: gearCardPromoSaving(basketPromo, kind.category, price),
+      alsoInCartFor: gearAlsoInCartFor.get(key) ?? [],
+      onQuantityChange: (next) => {
+        const current = gearSelections.get(key) ?? 0;
+        if (next > current && !requireAuth()) return;
+        setByoGearQuantity(kind, next);
+      },
+      onAddOnQuantityChange: (addOn, next) => {
+        const current = (cart.byoAddOns[lineKey] ?? []).find((a) => byoGearKey(a) === byoGearKey(addOn))?.quantity ?? 0;
+        if (next > current && !requireAuth()) return;
+        setByoAddOnQuantity(lineKey, addOn, next);
+      },
+    };
+  }
+
+  // The open gear in the page's color when it comes in it, otherwise its default color.
+  const detailsKind = slugKind
+    ? activeColor && supportsColorFilter(slugKind) && slugKind.variants?.some((variant) => variant.color === activeColor)
+      ? resolveGearVariant(slugKind, activeColor)
+      : withDefaultVariant(slugKind)
+    : null;
+  // Back to the catalog: one step back when the details were opened from it, otherwise (a direct
+  // visit to the gear's address) replace the address so Back doesn't reopen them.
+  const closeDetails = () =>
+    (location.state as { fromCatalog?: boolean } | null)?.fromCatalog ? navigate(-1) : navigate(BUILD_YOUR_OWN_PATH, { replace: true });
+
+  if (unknownSlug) return <NotFound />;
+  const PageHeading = slugKind ? 'h2' : 'h1';
+
   return (
     // pb-56 — see Cart.tsx's identical comment: this route's lifted floating buttons reach up to
     // ~208px above the viewport bottom, more than pb-28 (112px) cleared.
     <div className="flex min-h-screen flex-col pb-56">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 p-4 sm:gap-6 sm:p-6">
         <BackLink to="/catalog" label="Back to Browse Gear" />
+        {detailsKind && <GearCardDetails {...gearCardProps(detailsKind)} onClose={closeDetails} />}
         <div className="flex flex-col gap-1">
-          <h1 className="font-serif text-lg font-semibold text-ink sm:text-xl">Build Your Own Camping Setup</h1>
+          {/* With a gear's details open, its name is the page's one h1. */}
+          <PageHeading className="font-serif text-lg font-semibold text-ink sm:text-xl">Build Your Own Camping Setup</PageHeading>
           <p className="text-sm text-ink-muted">
             Rent tents, beds, chairs, coolers and more by the piece. Pick your rental duration first, then mix and match
             individual gear. Prefer a ready-made kit?{' '}
@@ -1105,35 +1191,11 @@ export default function PathBCatalog() {
                         // price and name — and its own cart identity. Single-color gear passes
                         // through unchanged.
                         const kind = resolveGearVariant(baseKind, supportsColorFilter(baseKind) ? activeColor : undefined);
-                        const key = byoGearKey(kind);
-                        // This gear's cart line for the dates being browsed (add-ons hang off it).
-                        const lineKey = byoLineKey(kind, browsingDates);
                         return (
                           <GearCard
-                            key={key}
-                            kind={kind}
-                            quantity={gearSelections.get(key) ?? 0}
-                            addOnSelections={cart.byoAddOns[lineKey] ?? []}
-                            tripDetails={cart.tripDetails}
-                            hasDuration={hasDuration}
-                            showUpsell={selectedPreset === '48h'}
-                            showExtraDayRate={selectedPreset === '72h'}
-                            price={hasDuration ? getGearKindPrice(kind, cart.tripDetails) : null}
-                            unavailableForDates={unavailableNames.has(kindDisplayName(kind))}
-                            promoNote={gearCardPromoNote(basketPromo, kind.category)}
-                            promoSaving={gearCardPromoSaving(basketPromo, kind.category, hasDuration ? getGearKindPrice(kind, cart.tripDetails) : null)}
-                            alsoInCartFor={gearAlsoInCartFor.get(key) ?? []}
-                            onQuantityChange={(next) => {
-                              const current = gearSelections.get(key) ?? 0;
-                              if (next > current && !requireAuth()) return;
-                              setByoGearQuantity(kind, next);
-                            }}
-                            onAddOnQuantityChange={(addOn, next) => {
-                              const current =
-                                (cart.byoAddOns[lineKey] ?? []).find((a) => byoGearKey(a) === byoGearKey(addOn))?.quantity ?? 0;
-                              if (next > current && !requireAuth()) return;
-                              setByoAddOnQuantity(lineKey, addOn, next);
-                            }}
+                            key={byoGearKey(kind)}
+                            {...gearCardProps(kind)}
+                            onOpenDetails={() => navigate(gearPath(kind), { state: { fromCatalog: true } })}
                           />
                         );
                       })}
