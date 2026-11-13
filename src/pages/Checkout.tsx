@@ -21,6 +21,8 @@ export default function Checkout() {
   const [submittedBooking, setSubmittedBooking] = useState<RmsBookingResult | null>(null);
   // The deposit proof was uploaded from the confirmation screen (stops the countdown).
   const [proofSent, setProofSent] = useState(false);
+  // "Pay Now" on the confirmation screen scrolls down to the payment details and proof upload.
+  const paymentSectionRef = useRef<HTMLDivElement>(null);
   // Checkout books what's checked for ITS dates (each cart entry keeps the dates it was added for),
   // so the trip dates everything below reads are set to those, the same as the Cart page does.
   const { cart, updateTripDetails, totals } = useRental();
@@ -86,17 +88,35 @@ export default function Checkout() {
             <div className="flex flex-col gap-3 text-center">
               <h2 className="font-serif text-lg font-semibold text-ink">Pay Your Security Deposit Now</h2>
               <p className="text-sm text-ink-muted">
-                In the meantime, pay your security deposit so we can reserve your gear as soon as your booking is
-                approved. It's fully refundable, including if we can't approve your booking.
+                In the meantime, kindly pay your security deposit so we can reserve your gear as soon as your booking
+                is approved.
+              </p>
+              <p className="text-sm text-ink-muted">
+                If we can't approve your booking, your deposit is refunded in full. Once your booking is approved,
+                refunds follow the rules in your rental agreement.{' '}
+                {/* New tab: leaving this screen would lose the payment details and upload below. */}
+                <a
+                  href="/terms#deposit"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-accent underline underline-offset-2"
+                >
+                  Read more about the security deposit
+                </a>
               </p>
               <p className="text-3xl font-bold text-ink">{formatCurrency(submittedBooking.depositCentavos / 100)}</p>
-              {submittedBooking.depositReason && (
-                <p className="text-xs text-ink-muted">
-                  {submittedBooking.depositReason === 'TIER'
-                    ? 'Based on your rental total (gear and add-ons, before any discount).'
-                    : "Your package's security deposit."}
-                </p>
-              )}
+              <button
+                type="button"
+                onClick={() =>
+                  paymentSectionRef.current?.scrollIntoView({
+                    behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+                    block: 'start',
+                  })
+                }
+                className="mx-auto inline-flex min-h-11 items-center rounded-lg bg-brand-forest px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-forest-dark"
+              >
+                Pay Now ↓
+              </button>
             </div>
 
             {submittedBooking.depositDueAt && (
@@ -110,28 +130,31 @@ export default function Checkout() {
 
             {/* With the booking id (tiered-deposit RMS) the renter pays and uploads right here.
                 Without it, the instructions are shown and the upload happens in My Bookings. */}
-            {submittedBooking.bookingId ? (
-              <DepositProofUpload
-                bookingId={submittedBooking.bookingId}
-                requiredCentavos={submittedBooking.depositCentavos}
-                verifiedCentavos={0}
-                verified={false}
-                proofStatus={proofSent ? 'PENDING_REVIEW' : null}
-                reviewNote={null}
-                amountClaimedCentavos={null}
-                addOnDepositCentavos={0}
-                isByoBooking={false}
-                hasPackageAddOns={false}
-                onProofSubmitted={() => setProofSent(true)}
-              />
-            ) : (
-              <>
-                <PaymentInstructionsSection />
-                <p className="text-center text-sm text-ink-muted">
-                  After paying, upload your proof of payment in My Bookings.
-                </p>
-              </>
-            )}
+            {/* scroll-mt clears the sticky header when "Pay Now" scrolls here. */}
+            <div ref={paymentSectionRef} className="flex scroll-mt-24 flex-col gap-6 sm:gap-8">
+              {submittedBooking.bookingId ? (
+                <DepositProofUpload
+                  bookingId={submittedBooking.bookingId}
+                  requiredCentavos={submittedBooking.depositCentavos}
+                  verifiedCentavos={0}
+                  verified={false}
+                  proofStatus={proofSent ? 'PENDING_REVIEW' : null}
+                  reviewNote={null}
+                  amountClaimedCentavos={null}
+                  addOnDepositCentavos={0}
+                  isByoBooking={false}
+                  hasPackageAddOns={false}
+                  onProofSubmitted={() => setProofSent(true)}
+                />
+              ) : (
+                <>
+                  <PaymentInstructionsSection />
+                  <p className="text-center text-sm text-ink-muted">
+                    After paying, upload your proof of payment in My Bookings.
+                  </p>
+                </>
+              )}
+            </div>
           </>
         )}
 

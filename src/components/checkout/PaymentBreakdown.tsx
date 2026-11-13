@@ -884,16 +884,20 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
               {isVerificationComplete(verificationDocs, isByoOnly) ? 'Complete' : 'Incomplete, see above'}
             </dd>
 
-            <dt className="text-ink-muted">Terms &amp; Conditions</dt>
-            <dd className="text-right font-medium text-ink">
-              {verificationDocs.termsAccepted ? 'Accepted' : 'Not yet accepted'}
-            </dd>
-
-            {isByoOnly && (
+            {/* Only the agreement this booking actually uses: a BYO booking never sees the Kit
+                Terms & Conditions checkbox, so showing it here as "Not yet accepted" misled renters. */}
+            {isByoOnly ? (
               <>
                 <dt className="text-ink-muted">BYO Rental Agreement</dt>
                 <dd className="text-right font-medium text-ink">
                   {verificationDocs.byoAgreementAccepted ? 'Accepted' : 'Not yet accepted'}
+                </dd>
+              </>
+            ) : (
+              <>
+                <dt className="text-ink-muted">Terms &amp; Conditions</dt>
+                <dd className="text-right font-medium text-ink">
+                  {verificationDocs.termsAccepted ? 'Accepted' : 'Not yet accepted'}
                 </dd>
               </>
             )}
@@ -1010,7 +1014,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
       <ConfirmDialog
         open={showSubmitConfirm}
         title="Submit this booking request?"
-        message="This creates a real booking request with GearBnB, you won't be able to edit your selections here once submitted."
+        message="This creates a real booking request with GearBnB. You won't be able to edit your selections here once it's submitted. If you need to make any changes after that, just let us know on Messenger or at +63 976 595 2432."
         confirmLabel="Submit Booking Request"
         onCancel={() => setShowSubmitConfirm(false)}
         onConfirm={performSubmit}
