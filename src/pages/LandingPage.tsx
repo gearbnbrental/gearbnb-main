@@ -9,6 +9,16 @@ import { HOME_FAQ } from '../config/homeFaq';
 import ImageLightbox from '../components/ImageLightbox';
 import PathSelectionCards from '../components/PathSelectionCards';
 import SocialIconLink from '../components/SocialIconLink';
+import {
+  BeginnerFriendlyIcon,
+  DepositReviewIcon,
+  EasyConvenientIcon,
+  MemorableTripsIcon,
+  PickupDeliveryIcon,
+  QualityGearIcon,
+  SelectGearIcon,
+  VerifyBookIcon,
+} from '../components/GearbnbIcons';
 import { ChatBubbleIcon, CheckCircleIcon, ChevronIcon, GearPlaceholderIcon } from '../components/icons';
 import { useCatalog } from '../context/useCatalog';
 import type { BookableGearKind, PackageKit } from '../types/gearbnb';
@@ -17,62 +27,6 @@ import { orderGearKinds } from '../utils/gearOrder';
 import { sizeCapacityToShow, splitKindsByColor } from '../utils/gearVariants';
 import { parsePackageContentsFromText, summarizeIncludedCategories } from '../utils/packageContents';
 import { cleanGearName } from '../utils/gearName';
-
-function PathsIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className={className}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4 19.5h4.5L15 6h4.5M4 6h4.5L15 19.5h4.5" />
-    </svg>
-  );
-}
-
-function ShieldIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className={className}>
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M12 3.75 5.25 6.375v5.25c0 4.24 2.888 8.108 6.75 9.093 3.862-.985 6.75-4.853 6.75-9.093v-5.25L12 3.75Zm-2.25 8.25 1.75 1.75 3.25-3.75"
-      />
-    </svg>
-  );
-}
-
-function TruckIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className={className}>
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M3.75 6.75h9v9h-9v-9Zm9 3h3.375L18.75 12v3.75H12.75m-6-1.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Zm10.5 0a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z"
-      />
-    </svg>
-  );
-}
-
-function ReceiptIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className={className}>
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M6.75 3.75h10.5v16.5l-2.25-1.5-2.25 1.5-2.25-1.5-2.25 1.5-1.5-1.5V3.75Zm2.25 4.5h6m-6 3h6m-6 3h3.75"
-      />
-    </svg>
-  );
-}
-
-function CalendarCheckIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className={className}>
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M6.75 3v2.25M17.25 3v2.25M3.75 8.25h16.5M4.5 6h15a.75.75 0 0 1 .75.75V19.5a.75.75 0 0 1-.75.75h-15a.75.75 0 0 1-.75-.75V6.75A.75.75 0 0 1 4.5 6Zm3.75 8.25 2.25 2.25 4.5-4.5"
-      />
-    </svg>
-  );
-}
 
 interface ProcessStep {
   title: string;
@@ -84,22 +38,22 @@ const PROCESS_STEPS: ProcessStep[] = [
   {
     title: 'Select Gear',
     description: "Choose between selecting our pre-selected camping packages or build your own setup.",
-    icon: <PathsIcon className="h-5 w-5" />,
+    icon: <SelectGearIcon className="h-5 w-5" />,
   },
   {
     title: 'Verify & Book',
     description: 'Submit trip dates, fulfillment preference (pickup/delivery), and identity verification documents.',
-    icon: <CalendarCheckIcon className="h-5 w-5" />,
+    icon: <VerifyBookIcon className="h-5 w-5" />,
   },
   {
     title: 'Deposit & Admin Review',
     description: 'Pay the refundable security deposit within 24 hours while we review your documents. Your gear is reserved once you are approved.',
-    icon: <ReceiptIcon className="h-5 w-5" />,
+    icon: <DepositReviewIcon className="h-5 w-5" />,
   },
   {
     title: 'Pick Up / Grab Delivery',
     description: 'Receive your camping gear on your start date.',
-    icon: <TruckIcon className="h-5 w-5" />,
+    icon: <PickupDeliveryIcon className="h-5 w-5" />,
   },
 ];
 
@@ -594,22 +548,22 @@ function FeatureCard({ icon, title, description }: FeatureCardProps) {
 
 const FEATURES: FeatureCardProps[] = [
   {
-    icon: <ShieldIcon className="h-5 w-5" />,
+    icon: <QualityGearIcon className="h-5 w-5" />,
     title: 'Quality Gear',
     description: 'Rent carefully selected gear from trusted outdoor brands without the cost of buying everything yourself.',
   },
   {
-    icon: <PathsIcon className="h-5 w-5" />,
+    icon: <EasyConvenientIcon className="h-5 w-5" />,
     title: 'Easy and Convenient',
     description: 'Choose what you need, book your rental, and enjoy camping without the hassle of storing or maintaining gear.',
   },
   {
-    icon: <CalendarCheckIcon className="h-5 w-5" />,
+    icon: <BeginnerFriendlyIcon className="h-5 w-5" />,
     title: 'Beginner-Friendly',
     description: 'Get practical recommendations to help you choose the right gear and feel confident on your first trip.',
   },
   {
-    icon: <TruckIcon className="h-5 w-5" />,
+    icon: <MemorableTripsIcon className="h-5 w-5" />,
     title: 'Made for Memorable Trips',
     description: 'Spend less time worrying about your setup and more time enjoying the outdoors with the people who matter.',
   },

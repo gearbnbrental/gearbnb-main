@@ -3,15 +3,15 @@ import { Link, useNavigate } from 'react-router-dom';
 import BirSealBadge from '../components/BirSealBadge';
 import FaqAccordion, { type FaqItem } from '../components/FaqAccordion';
 import {
-  CheckCircleIcon,
-  ClockIcon,
-  CompassIcon,
-  CreditCardIcon,
-  GearPlaceholderIcon,
-  LeafIcon,
-  ShieldCheckIcon,
-  TruckIcon,
-} from '../components/icons';
+  DepositReviewIcon,
+  PickupDeliveryIcon,
+  PromiseMemorableIcon,
+  PromisePreparedIcon,
+  PromiseSimpleIcon,
+  ReserveDatesIcon,
+  SelectGearIcon,
+} from '../components/GearbnbIcons';
+import { CheckCircleIcon } from '../components/icons';
 import { MESSENGER_URL, TIKTOK_URL } from '../config/social';
 import { usePageMeta } from '../hooks/usePageMeta';
 import { PAGE_META } from '../config/pageMeta';
@@ -98,28 +98,28 @@ const PROCESS_STEPS: ProcessStep[] = [
     title: 'Choose your setup',
     description:
       'Pick one of our ready-made camping packages, or build your own setup piece by piece. New to camping? Start with a package and add extras as you go.',
-    icon: GearPlaceholderIcon,
+    icon: SelectGearIcon,
   },
   {
     number: 2,
     title: 'Book your dates and verify',
     description:
       'Choose a 48-hour, 72-hour or longer rental, pick self pickup or Grab delivery, and upload your IDs so we can confirm it is really you.',
-    icon: ClockIcon,
+    icon: ReserveDatesIcon,
   },
   {
     number: 3,
     title: 'Secure your gear with a deposit',
     description:
       'Pay the refundable security deposit within 24 hours of booking. Our team reviews your documents in the meantime, and your gear is set aside for you once you are approved.',
-    icon: CreditCardIcon,
+    icon: DepositReviewIcon,
   },
   {
     number: 4,
     title: 'Pick it up or get it delivered',
     description:
       'Collect your gear in Las Piñas City or have it brought to you by Grab on your start date. Our chat support operates 24/7, so let us know your preferred time at least 24 hours before your rental date.',
-    icon: TruckIcon,
+    icon: PickupDeliveryIcon,
   },
 ];
 
@@ -133,17 +133,17 @@ const VALUES: ValueCard[] = [
   {
     title: 'Simple',
     description: 'Camping should feel simple, not stressful. We take the second-guessing out of your trip.',
-    icon: LeafIcon,
+    icon: PromiseSimpleIcon,
   },
   {
     title: 'Prepared',
     description: "We'll make sure you have the right equipment and information to feel confident outdoors.",
-    icon: ShieldCheckIcon,
+    icon: PromisePreparedIcon,
   },
   {
     title: 'Memorable',
     description: 'Your trip should be about the experience. We take care of the gear, so you can enjoy the moment.',
-    icon: CompassIcon,
+    icon: PromiseMemorableIcon,
   },
 ];
 
@@ -424,7 +424,7 @@ export default function AboutUs() {
                       "section icons should be white" request; the badge is what keeps a white
                       icon visible against this card's own light background. */}
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-forest text-white">
-                    <step.icon className="h-4 w-4" />
+                    <step.icon className="h-5 w-5" />
                   </span>
                 </div>
                 <h3 className="text-base font-semibold text-ink">{step.title}</h3>
