@@ -231,19 +231,19 @@ function BundleSlide({ kit, onSelect }: { kit: PackageKit; onSelect: () => void 
  * grid, native touch/drag scrolling on mobile plus arrow buttons and dot pagination on larger
  * screens. No carousel library: just CSS scroll-snap and Element.scrollBy/scrollTo, consistent
  * with this app's existing no-extra-dependency approach. */
+/** One slide's full stride in a slider track (its own width plus the gap after it). Every slide
+ * in a track is the same width, so this is a reliable unit for both scrolling and index math. */
+function getSlideStride(track: HTMLDivElement): number {
+  const first = track.firstElementChild as HTMLElement | null;
+  if (!first) return track.clientWidth;
+  const second = track.children[1] as HTMLElement | undefined;
+  const gap = second ? second.offsetLeft - first.offsetLeft - first.offsetWidth : 20;
+  return first.offsetWidth + gap;
+}
+
 function BundleSlider({ kits, onSelect }: { kits: PackageKit[]; onSelect: () => void }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
-
-  /** One slide's full stride (its own width plus the gap after it) — every slide in this track
-   * is the same width, so this is a reliable unit for both scrollBy and index math. */
-  function getSlideStride(track: HTMLDivElement): number {
-    const first = track.firstElementChild as HTMLElement | null;
-    if (!first) return track.clientWidth;
-    const second = track.children[1] as HTMLElement | undefined;
-    const gap = second ? second.offsetLeft - first.offsetLeft - first.offsetWidth : 20;
-    return first.offsetWidth + gap;
-  }
 
   function scrollByDirection(direction: 'left' | 'right') {
     const track = trackRef.current;
@@ -370,10 +370,37 @@ const REVIEWS: Review[] = [
   },
 ];
 
+/** "Raymond Chiong Jr." -> "RC": the first letters of the first two words, for the avatar. */
+function reviewerInitials(name: string): string {
+  return name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((word) => word[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
+const STAR_PATH =
+  'M9.05 2.93c.3-.92 1.6-.92 1.9 0l1.26 3.88a1 1 0 0 0 .95.69h4.08c.97 0 1.37 1.24.59 1.81l-3.3 2.4a1 1 0 0 0-.37 1.11l1.27 3.88c.3.92-.76 1.69-1.54 1.12l-3.3-2.4a1 1 0 0 0-1.18 0l-3.3 2.4c-.78.57-1.83-.2-1.54-1.12l1.27-3.88a1 1 0 0 0-.36-1.12l-3.3-2.4c-.79-.56-.38-1.8.58-1.8h4.08a1 1 0 0 0 .95-.7l1.26-3.87Z';
+
+function FiveStars({ className }: { className: string }) {
+  return (
+    <span className="flex items-center gap-0.5 text-[#f5b400]">
+      <span className="sr-only">Rated 5 out of 5</span>
+      {Array.from({ length: 5 }, (_, star) => (
+        <svg key={star} aria-hidden="true" viewBox="0 0 20 20" fill="currentColor" className={className}>
+          <path d={STAR_PATH} />
+        </svg>
+      ))}
+    </span>
+  );
+}
+
 /**
- * One review at a time, swipeable on touch (a scroll-snap track, like BundleSlider) with
- * previous/next arrows and dots below. Every slide stays in the HTML, so all reviews are readable
- * without JavaScript; the track takes the tallest review's height so the page never jumps.
+ * Review cards in a swipeable scroll-snap track (like BundleSlider): the review in focus sits in
+ * the middle at full size, with the ones before and after it showing at the sides, smaller and
+ * faded. Swiping, the arrows, the dots or tapping a side card brings that review to the middle.
+ * Every review stays in the HTML (and is never aria-hidden), so all of them are readable without
+ * JavaScript and by screen readers.
  */
 const REVIEW_AUTO_SLIDE_MS = 10_000;
 
@@ -409,18 +436,21 @@ function ReviewSlider() {
     return () => window.clearTimeout(timer);
   }, [activeIndex, expandedIndex, paused]);
 
+  // The track's side padding is half its width minus half a card, so at scrollLeft = index × stride
+  // that card sits exactly in the middle.
   function scrollToIndex(index: number) {
     const track = trackRef.current;
     if (!track) return;
     // Wraps around: next on the last review goes back to the first, and vice versa.
     const wrapped = (index + REVIEWS.length) % REVIEWS.length;
-    track.scrollTo({ left: track.clientWidth * wrapped, behavior: 'smooth' });
+    track.scrollTo({ left: getSlideStride(track) * wrapped, behavior: 'smooth' });
   }
 
   function handleScroll() {
     const track = trackRef.current;
     if (!track || track.clientWidth === 0) return;
-    const index = Math.max(0, Math.min(REVIEWS.length - 1, Math.round(track.scrollLeft / track.clientWidth)));
+    const stride = getSlideStride(track);
+    const index = Math.max(0, Math.min(REVIEWS.length - 1, Math.round(track.scrollLeft / stride)));
     if (index !== activeIndex) setExpandedIndex(null);
     setActiveIndex(index);
   }
@@ -435,65 +465,83 @@ function ReviewSlider() {
       onBlur={() => setPaused(false)}
       className="flex w-full flex-col items-center"
     >
-      <div
-        ref={trackRef}
-        onScroll={handleScroll}
-        className="relative flex w-full snap-x snap-mandatory overflow-x-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]"
-      >
-        {REVIEWS.map((review, index) => (
-          <figure
-            key={review.author}
-            aria-roledescription="slide"
-            aria-label={`${index + 1} of ${REVIEWS.length}`}
-            className="flex w-full shrink-0 snap-center flex-col items-center px-1"
-          >
-            <span className="mb-2 flex items-center gap-0.5 text-[#f5b400]">
-              <span className="sr-only">Rated 5 out of 5</span>
-              {Array.from({ length: 5 }, (_, star) => (
-                <svg key={star} aria-hidden="true" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
-                  <path d="M9.05 2.93c.3-.92 1.6-.92 1.9 0l1.26 3.88a1 1 0 0 0 .95.69h4.08c.97 0 1.37 1.24.59 1.81l-3.3 2.4a1 1 0 0 0-.37 1.11l1.27 3.88c.3.92-.76 1.69-1.54 1.12l-3.3-2.4a1 1 0 0 0-1.18 0l-3.3 2.4c-.78.57-1.83-.2-1.54-1.12l1.27-3.88a1 1 0 0 0-.36-1.12l-3.3-2.4c-.79-.56-.38-1.8.58-1.8h4.08a1 1 0 0 0 .95-.7l1.26-3.87Z" />
-                </svg>
-              ))}
-            </span>
-            {/* Long reviews show 4 lines until "Read more" (the full text stays in the HTML), so
-                the longest one doesn't make the whole slider tall. */}
-            <blockquote className="text-pretty text-sm italic leading-relaxed text-ink sm:text-balance sm:text-[15px]">
-              <p
-                ref={(quote) => {
-                  quoteRefs.current[index] = quote;
-                }}
-                className={expandedIndex === index ? '' : 'line-clamp-4'}
-              >
-                {review.quote}
-              </p>
-            </blockquote>
-            {(clamped[index] || expandedIndex === index) && (
-              <button
-                type="button"
-                onClick={() => setExpandedIndex(expandedIndex === index ? null : index)}
-                aria-expanded={expandedIndex === index}
-                className="mt-1 text-xs font-semibold text-accent underline underline-offset-2 hover:text-brand-forest-dark"
-              >
-                {expandedIndex === index ? 'Show less' : 'Read more'}
-              </button>
-            )}
-            <figcaption className="mt-3 flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 text-xs">
-              <span className="font-semibold text-ink">&mdash; {review.author}</span>
-              <span className="flex items-center gap-1 text-ink-muted">
-                <CheckCircleIcon className="h-3.5 w-3.5 text-accent" />
-                GearBnB Renter
+      {/* The track runs the full width of the screen (cancelling the section's side padding).
+          Cards are 80% of it on phones, so the neighbours peek in at the edges, and 380px from
+          `sm` up, so a couple of whole reviews show either side. The side padding (half the
+          track minus half a card) is what lets the first and last cards reach the middle; the
+          screen edges fade out. Sizes are in cqw (the track's own width), since a percentage
+          would be measured against the section instead. */}
+      <div className="@container -mx-5 w-[calc(100%+2.5rem)] sm:-mx-6 sm:w-[calc(100%+3rem)]">
+        <div
+          ref={trackRef}
+          onScroll={handleScroll}
+          className="relative flex w-full snap-x snap-mandatory gap-3 overflow-x-auto px-[10cqw] py-3 [mask-image:linear-gradient(to_right,transparent,black_6%,black_94%,transparent)] sm:gap-5 sm:px-[calc(50cqw-190px)] [&::-webkit-scrollbar]:hidden [scrollbar-width:none]"
+        >
+          {REVIEWS.map((review, index) => (
+            <figure
+              key={review.author}
+              aria-roledescription="slide"
+              aria-label={`${index + 1} of ${REVIEWS.length}`}
+              onClick={() => index !== activeIndex && scrollToIndex(index)}
+              className={`relative flex w-[80cqw] shrink-0 snap-center flex-col rounded-3xl bg-surface p-6 text-left transition duration-300 motion-reduce:transition-none sm:w-[380px] sm:p-7 ${
+                index === activeIndex ? 'scale-100 opacity-100 shadow-xl' : 'scale-[0.92] cursor-pointer opacity-60 shadow-md'
+              }`}
+            >
+              <span aria-hidden="true" className="pointer-events-none absolute right-5 top-1 font-serif text-8xl leading-none text-brand-forest/15">
+                &ldquo;
               </span>
-            </figcaption>
-          </figure>
-        ))}
+              <FiveStars className="h-4 w-4" />
+              {/* Long reviews show 5 lines until "Read more" (the full text stays in the HTML), so
+                  the longest one doesn't make the whole slider tall. */}
+              <blockquote className="mt-4 text-pretty text-sm leading-relaxed text-ink sm:text-[15px]">
+                <p
+                  ref={(quote) => {
+                    quoteRefs.current[index] = quote;
+                  }}
+                  className={expandedIndex === index ? '' : 'line-clamp-5'}
+                >
+                  {review.quote}
+                </p>
+              </blockquote>
+              {(clamped[index] || expandedIndex === index) && (
+                <button
+                  type="button"
+                  onClick={() => setExpandedIndex(expandedIndex === index ? null : index)}
+                  aria-expanded={expandedIndex === index}
+                  className="mt-2 self-start text-xs font-semibold text-accent underline underline-offset-2 hover:text-brand-forest-dark"
+                >
+                  {expandedIndex === index ? 'Show less' : 'Read more'}
+                </button>
+              )}
+              {/* mt-auto keeps the name at the bottom of every card, whatever the review's length. */}
+              <figcaption className="mt-auto flex items-center gap-3 pt-5">
+                <span className="flex w-full items-center gap-3 border-t border-line pt-4">
+                  <span
+                    aria-hidden="true"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-forest text-sm font-bold text-white"
+                  >
+                    {reviewerInitials(review.author)}
+                  </span>
+                  <span className="flex flex-col">
+                    <span className="text-sm font-semibold text-ink">{review.author}</span>
+                    <span className="flex items-center gap-1 text-xs text-ink-muted">
+                      <CheckCircleIcon className="h-3.5 w-3.5 text-accent" />
+                      GearBnB Renter
+                    </span>
+                  </span>
+                </span>
+              </figcaption>
+            </figure>
+          ))}
+        </div>
       </div>
 
-      <div className="mt-3 flex items-center gap-3">
+      <div className="mt-5 flex items-center gap-3">
         <button
           type="button"
           onClick={() => scrollToIndex(activeIndex - 1)}
           aria-label="Previous review"
-          className="flex h-8 w-8 items-center justify-center rounded-full border border-line bg-surface text-ink shadow-sm transition-colors hover:bg-surface-strong"
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-white/30 bg-white/10 text-white transition-colors hover:bg-white/20"
         >
           <ChevronIcon direction="left" className="h-4 w-4" />
         </button>
@@ -506,7 +554,7 @@ function ReviewSlider() {
               aria-label={`Show review by ${review.author}`}
               aria-current={index === activeIndex}
               className={`h-2 rounded-full transition-all ${
-                index === activeIndex ? 'w-6 bg-brand-forest' : 'w-2 bg-line hover:bg-ink-faint'
+                index === activeIndex ? 'w-6 bg-white' : 'w-2 bg-white/40 hover:bg-white/70'
               }`}
             />
           ))}
@@ -515,7 +563,7 @@ function ReviewSlider() {
           type="button"
           onClick={() => scrollToIndex(activeIndex + 1)}
           aria-label="Next review"
-          className="flex h-8 w-8 items-center justify-center rounded-full border border-line bg-surface text-ink shadow-sm transition-colors hover:bg-surface-strong"
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-white/30 bg-white/10 text-white transition-colors hover:bg-white/20"
         >
           <ChevronIcon direction="right" className="h-4 w-4" />
         </button>
@@ -899,7 +947,7 @@ export default function LandingPage() {
       </section>
 
       {/* Why rent with us */}
-      <section className="bg-page-band px-5 pb-6 pt-10 sm:px-6 sm:pb-8 sm:pt-16">
+      <section className="bg-page-band px-5 py-10 sm:px-6 sm:py-16">
         <div className="mx-auto grid w-full max-w-5xl gap-10 lg:grid-cols-2 lg:items-center">
           {/* py-6 below sm (was py-10): only scoped to the mobile size step below — the badge
               itself still gets sm:py-10/lg:py-0 exactly as before from `sm` up. */}
@@ -952,14 +1000,33 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* Real renters' reviews, between two thin lines. */}
-        <div className="mx-auto mt-8 w-full max-w-xl border-y border-ink-faint/60 py-6 text-center sm:mt-10 sm:py-8">
+      </section>
+
+      {/* Testimonials: real renters' reviews on a dark forest band, so the section stands apart
+          from the light ones around it. The soft olive glows match the footer's. */}
+      <section className="relative isolate overflow-hidden bg-brand-forest px-5 py-12 sm:px-6 sm:py-20">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 -z-10 [background:radial-gradient(50%_60%_at_0%_0%,color-mix(in_srgb,var(--color-brand-olive)_35%,transparent),transparent_70%),radial-gradient(45%_55%_at_100%_100%,color-mix(in_srgb,var(--color-brand-olive)_30%,transparent),transparent_70%)]"
+        />
+        <div className="flex flex-col items-center gap-8 text-center sm:gap-10">
+          <div className="flex max-w-5xl flex-col items-center gap-3">
+            <span className="text-xs font-bold uppercase tracking-[0.18em] text-brand-cream">Testimonials</span>
+            <h2 className="text-balance font-serif text-2xl font-bold text-white sm:text-4xl">What Our Renters Say</h2>
+            <p className="max-w-xl text-sm text-white/80 sm:text-base">
+              Real reviews from families, couples and first-time campers who rented their camping gear from GearBnB.
+            </p>
+            <div className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-1.5">
+              <FiveStars className="h-4 w-4" />
+              <span className="text-xs font-semibold text-white">5-star reviews from real renters</span>
+            </div>
+          </div>
           <ReviewSlider />
         </div>
       </section>
 
       {/* Bundles — id targeted by the footer's "Adventure Bundles" link. */}
-      <section id="adventure-bundles" className="px-5 pb-10 pt-6 sm:px-6 sm:pb-16 sm:pt-8">
+      <section id="adventure-bundles" className="px-5 py-10 sm:px-6 sm:py-16">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
           <div className="flex flex-col items-center gap-2 text-center">
             <h2 className="text-balance font-serif text-2xl font-bold text-ink sm:text-3xl">

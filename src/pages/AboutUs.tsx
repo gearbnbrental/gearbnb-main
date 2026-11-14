@@ -6,6 +6,7 @@ import {
   CheckCircleIcon,
   ClockIcon,
   CompassIcon,
+  CreditCardIcon,
   GearPlaceholderIcon,
   LeafIcon,
   ShieldCheckIcon,
@@ -89,26 +90,35 @@ interface ProcessStep {
   icon: ComponentType<{ className?: string }>;
 }
 
+// The same four steps as the homepage's "How To Rent" section, worded for this page so the two
+// don't repeat each other.
 const PROCESS_STEPS: ProcessStep[] = [
   {
     number: 1,
     title: 'Choose your setup',
     description:
-      'Pick a ready-made package or build your own camping essentials rental. New to camping? Start with a beginner camping setup and add pieces as you gain confidence.',
+      'Pick one of our ready-made camping packages, or build your own setup piece by piece. New to camping? Start with a package and add extras as you go.',
     icon: GearPlaceholderIcon,
   },
   {
     number: 2,
-    title: 'Reserve your dates',
+    title: 'Book your dates and verify',
     description:
-      'GearBnB offers 48-hour, 72-hour, and extended-day rental periods. This gives you enough time to set up, enjoy your trip, and pack down without rushing.',
+      'Choose a 48-hour, 72-hour or longer rental, pick self pickup or Grab delivery, and upload your IDs so we can confirm it is really you.',
     icon: ClockIcon,
   },
   {
     number: 3,
-    title: 'Get your gear delivered or picked up',
+    title: 'Secure your gear with a deposit',
     description:
-      'Choose Grab delivery or in-person pickup. Our chat support operates 24/7, so let us know your preferred time at least 24 hours before your rental date.',
+      'Pay the refundable security deposit within 24 hours of booking. Our team reviews your documents in the meantime, and your gear is set aside for you once you are approved.',
+    icon: CreditCardIcon,
+  },
+  {
+    number: 4,
+    title: 'Pick it up or get it delivered',
+    description:
+      'Collect your gear in Las Piñas City or have it brought to you by Grab on your start date. Our chat support operates 24/7, so let us know your preferred time at least 24 hours before your rental date.',
     icon: TruckIcon,
   },
 ];
@@ -398,10 +408,12 @@ export default function AboutUs() {
             <h2 className="font-serif text-2xl font-bold text-ink sm:text-3xl">
               How Does Camping Equipment Rental Work with GearBnB?
             </h2>
-            <p className="max-w-xl text-sm text-ink-muted sm:text-base">Renting your gear takes three simple steps.</p>
+            <p className="max-w-xl text-sm text-ink-muted sm:text-base">
+              From choosing your gear to pickup day, renting camping equipment with GearBnB takes four simple steps.
+            </p>
           </div>
 
-          <div className="grid gap-6 rounded-2xl bg-surface-muted p-6 sm:grid-cols-3 sm:p-8">
+          <div className="grid gap-6 rounded-2xl bg-surface-muted p-6 sm:grid-cols-2 sm:p-8 lg:grid-cols-4">
             {PROCESS_STEPS.map((step) => (
               <div key={step.number} className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-5 shadow-sm">
                 <div className="flex items-center gap-2.5">
