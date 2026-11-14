@@ -13,7 +13,7 @@ import { CatalogProvider } from './context/CatalogContext';
 import { PromoProvider } from './context/PromoContext';
 import { RentalProvider } from './context/RentalContext';
 import { useCatalog } from './context/useCatalog';
-import { registerRentalTools, type CatalogSnapshot, type ModelContext } from './utils/webMcp';
+import type { CatalogSnapshot, ModelContext } from './utils/webMcp';
 
 // LandingPage stays a static import because it is the entry route for a typical first visit.
 // Every other route is code-split so customers do not load unnecessary page code up front.
@@ -144,7 +144,8 @@ function ScrollToTop() {
 /**
  * Registers the read-only WebMCP tools (search the catalog, item details, rental policies) once,
  * on page load, for AI agents in browsers that support them. They read the catalog as it is when
- * called, so they never need re-registering.
+ * called, so they never need re-registering. The tools' code is only downloaded by browsers that
+ * have WebMCP.
  */
 function WebMcpTools() {
   const { kits, gearKinds } = useCatalog();
@@ -153,7 +154,18 @@ function WebMcpTools() {
 
   useEffect(() => {
     const modelContext = (navigator as Navigator & { modelContext?: ModelContext }).modelContext;
-    return registerRentalTools(modelContext, () => catalog.current);
+    if (!modelContext) return;
+    let unregister: (() => void) | null = null;
+    let unmounted = false;
+    import('./utils/webMcp')
+      .then(({ registerRentalTools }) => {
+        if (!unmounted) unregister = registerRentalTools(modelContext, () => catalog.current);
+      })
+      .catch(() => {}); // Offline or a stale deploy: the site works the same without the tools.
+    return () => {
+      unmounted = true;
+      unregister?.();
+    };
   }, []);
 
   return null;

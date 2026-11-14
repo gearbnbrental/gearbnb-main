@@ -151,7 +151,7 @@ const GEAR_PAGE_SOURCES = ['src/components/GearDetailsDialog.tsx', 'src/config/p
 /** YYYY-MM-DD the page's source last changed: today when it has uncommitted changes, otherwise
  *  its last commit. Today when git isn't available. */
 function lastChanged(root: string, files: string[]): string {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = new Date().toLocaleDateString('en-CA') // YYYY-MM-DD in local time, like git's %cs
   try {
     const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim()
     if (git('status', '--porcelain', '--', ...files)) return today
@@ -309,7 +309,7 @@ function prerenderRouteMeta(): Plugin {
         headerRules.push(
           `  <Files "${base}.html">`,
           `    Header always set Link "<${markdownPathFor(path)}>; rel=\\"alternate\\"; type=\\"text/markdown\\", </llms.txt>; rel=\\"describedby\\"; type=\\"text/plain\\""`,
-          `    Header always merge Vary Accept`,
+          `    Header always append Vary Accept`,
           `  </Files>`,
         )
         netlifyRules.push(`${path}    /_pages/${base}.html   200`)
@@ -349,7 +349,7 @@ function prerenderRouteMeta(): Plugin {
           ...headerRules,
           '  <FilesMatch "\\.md$">',
           '    Header always set X-Robots-Tag "noindex"',
-          '    Header always merge Vary Accept',
+          '    Header always append Vary Accept',
           '  </FilesMatch>',
           '</IfModule>',
           '',

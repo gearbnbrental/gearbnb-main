@@ -22,6 +22,24 @@ function bestForSentence(description: string | undefined): string {
   return bestFor ? `Best ${lead} ${bestFor.replace(/\.$/, '')}.` : '';
 }
 
+/** Joins the sentences into a meta description of at most `max` characters (search engines cut
+ *  longer ones off): a sentence that doesn't fit whole is cut at a word, or left out when too
+ *  little room is left. */
+export function fitDescription(sentences: string[], max = 160): string {
+  let result = '';
+  for (const sentence of sentences.filter(Boolean)) {
+    const next = result ? `${result} ${sentence}` : sentence;
+    if (next.length <= max) {
+      result = next;
+      continue;
+    }
+    const room = max - result.length - 2; // the space before it and the "…"
+    if (room >= 40) result = `${result} ${sentence.slice(0, room).replace(/[\s,;:]+\S*$/, '')}…`;
+    break;
+  }
+  return result;
+}
+
 function offer(url: string, pricing: { '48h': number; '72h': number }, inStock: boolean) {
   const tier = (price: number, hours: number) => ({
     '@type': 'UnitPriceSpecification',
@@ -55,13 +73,11 @@ function breadcrumb(url: string, listName: string, listPath: string, name: strin
 
 export function packagePageMeta(kit: PackageKit): PageMeta {
   const url = SITE_URL + packagePath(kit);
-  const description = [
+  const description = fitDescription([
     `Rent ${kit.name} for ${priceSentence(kit.pricing)}.`,
     bestForSentence(kit.description),
     'Pick up in Las Piñas City or book Grab delivery.',
-  ]
-    .filter(Boolean)
-    .join(' ');
+  ]);
   const images = [kit.imageUrl, ...(kit.images ?? [])].filter((src, i, all) => src && all.indexOf(src) === i);
   return {
     title: `${kit.name} Rental${kit.paxRange ? ` (${kit.paxRange})` : ''} | GearBnB`,
@@ -89,13 +105,11 @@ export function packagePageMeta(kit: PackageKit): PageMeta {
 export function gearPageMeta(kind: BookableGearKind): PageMeta {
   const url = SITE_URL + gearPath(kind);
   const name = cleanGearName(kind.name);
-  const description = [
+  const description = fitDescription([
     `Rent the ${name} for ${priceSentence(kind.pricing)}.`,
     bestForSentence(kind.description),
     'Pick up in Las Piñas City or book Grab delivery.',
-  ]
-    .filter(Boolean)
-    .join(' ');
+  ]);
   const images = (kind.images?.length ? kind.images : kind.imageUrl ? [kind.imageUrl] : []).filter(Boolean);
   return {
     title: `${name} for Rent | GearBnB`,
