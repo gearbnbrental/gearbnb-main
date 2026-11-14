@@ -174,9 +174,9 @@ const SECTIONS: LegalSection[] = [
         <li>
           Collect your gear at our{' '}
           <a className={legalLinkClass} href={MAPS_URL} target="_blank" rel="noopener noreferrer">location</a> on your
-          start date, in person or through your own Grab.
+          start date, in person or through your own Lalamove or Grab.
         </li>
-        <li>Choose self pickup or Grab delivery. You book and pay for your own Grab. GearBnB does not charge or arrange delivery. We do not allow Lalamove. Confirm your pickup or delivery arrangements with us at least 24 hours before your start date.</li>
+        <li>Choose self pickup or Lalamove or Grab delivery. You book and pay for your own Lalamove or Grab. GearBnB does not charge or arrange delivery. Confirm your pickup or delivery arrangements with us at least 24 hours before your start date.</li>
         <li>At handover we complete a condition checklist with you. Check the checklist and report any issue before you leave. The checklist is the record of the gear condition at handover. We assume any issue you do not report at receipt happened during the rental period.</li>
         <li>Return all gear and accessories on your end date at the same time of day you picked up the gear. Return the gear clean and dry.</li>
         <li>A late return costs you your full security deposit plus a late fee of 50% of the package fee for each day you are late. If you expect to be late, tell us as early as possible.</li>

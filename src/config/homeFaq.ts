@@ -3,6 +3,8 @@
  * answers into the homepage's FAQPage schema (see HOME_JSON_LD in pageMeta.ts), so the two can
  * never disagree. Plain text only; `link` is shown under the answer.
  */
+import { MESSENGER_URL } from './social.ts';
+
 export interface HomeFaqEntry {
   question: string;
   answer: string;
@@ -32,7 +34,8 @@ export const HOME_FAQ: HomeFaqEntry[] = [
   {
     question: 'Do you sell camping gear?',
     answer:
-      'No. We offer camping gear for rent, including tents, sleeping gear, cooking equipment and complete camping packages for every type of trip.',
+      'Yes, we have selected tents for sale. Send us a message to ask which tents are available, their prices and other details. We also offer camping gear for rent, including tents, sleeping gear, cooking equipment and complete camping packages for every type of trip.',
+    link: { href: MESSENGER_URL, label: 'Message Us About Tents for Sale' },
   },
   {
     question: 'Can you help me find a campsite?',

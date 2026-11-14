@@ -1,8 +1,8 @@
 ﻿import { useEffect, useRef, useState } from 'react';
 import { useStickyBarHeight } from '../utils/stickyBar';
 import { useLocation } from 'react-router-dom';
-import { MESSENGER_URL, TIKTOK_URL } from '../config/social';
-import { ChatBubbleIcon, TikTokIcon } from './icons';
+import { CONTACT_PHONE_DISPLAY, CONTACT_PHONE_E164, MESSENGER_URL, TIKTOK_URL } from '../config/social';
+import { ChatBubbleIcon, PhoneIcon, TikTokIcon } from './icons';
 
 function XMarkIcon({ className }: { className?: string }) {
   return (
@@ -129,6 +129,17 @@ export default function FloatingHelp() {
               >
                 <ChatBubbleIcon className="h-4.5 w-4.5" />
                 Messenger
+              </a>
+              {/* A real tel: link in international format, so phones dial it; the label carries
+                  the number for screen readers. The number also shows in the footer and the
+                  LocalBusiness schema, which is where search engines and AI tools read it. */}
+              <a
+                href={`tel:${CONTACT_PHONE_E164}`}
+                aria-label={`Call GearBnB at ${CONTACT_PHONE_DISPLAY}`}
+                className="flex items-center justify-center gap-2 rounded-full bg-brand-forest px-4 py-3 text-sm font-semibold text-white shadow-sm transition-transform hover:-translate-y-0.5 hover:bg-brand-forest-dark motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+              >
+                <PhoneIcon className="h-4.5 w-4.5" />
+                Call Us
               </a>
               <a
                 href={TIKTOK_URL}

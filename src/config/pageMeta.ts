@@ -107,7 +107,7 @@ export const ABOUT_US_JSON_LD = {
           name: 'How do I rent camping gear from GearBnB?',
           acceptedAnswer: {
             '@type': 'Answer',
-            text: 'If you need help, you can send us a message on Messenger or TikTok. You can also directly browse available gear or packages and select your rental period. Choose Grab delivery or pick up and confirm your time at least 24 hours before your rental date.',
+            text: 'If you need help, you can send us a message on Messenger or TikTok. You can also directly browse available gear or packages and select your rental period. Choose pickup or Lalamove or Grab delivery, and confirm your time at least 24 hours before your rental date.',
           },
         },
         {

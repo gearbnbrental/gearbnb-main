@@ -1,10 +1,10 @@
 /**
  * GearBnB's own illustrated icon set for the homepage and About Us sections (how renting works,
- * why rent with us, our promise). Same style as the site's other icons in icons.tsx: a 24×24 grid,
- * 1.5 line weight, rounded ends, drawn in currentColor so the tile they sit on sets the color
- * (white on forest green). Decorative: the card titles next to them carry the meaning.
+ * why rent with us, our promise): a 24×24 grid, 1.5 line weight, rounded ends, drawn in
+ * currentColor. Shown through IconSpot below. Decorative: the card titles next to them carry the
+ * meaning.
  */
-import type { ReactNode } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 
 interface IconProps {
   className?: string;
@@ -24,6 +24,25 @@ function GearbnbIcon({ className = 'h-5 w-5', children }: IconProps & { children
     >
       {children}
     </svg>
+  );
+}
+
+/**
+ * The "spot illustration" look for these icons: no tile, the icon in deep forest green centered
+ * over a soft, hand-shaped cream blob, with a small gold dot at the top right. Gold also fills the
+ * icons' solid details (stars, flames, the lantern light). `lg` is for the larger promise cards.
+ */
+export function IconSpot({ icon: Icon, size = 'md' }: { icon: ComponentType<IconProps>; size?: 'md' | 'lg' }) {
+  const large = size === 'lg';
+  return (
+    <span
+      aria-hidden="true"
+      className={`relative flex shrink-0 items-center justify-center text-brand-forest-dark ${large ? 'h-16 w-16' : 'h-14 w-14'}`}
+    >
+      <span className="absolute inset-0.5 -rotate-[8deg] rounded-[58%_42%_55%_45%/52%_44%_56%_48%] bg-brand-cream" />
+      <span className="absolute right-0 top-0 h-2.5 w-2.5 rounded-full bg-[#f6c445]/85" />
+      <Icon className={`relative [&_[fill=currentColor]]:fill-[#e0a100] ${large ? 'h-10 w-10' : 'h-9 w-9'}`} />
+    </span>
   );
 }
 
@@ -82,7 +101,7 @@ export function ReserveDatesIcon({ className }: IconProps) {
   );
 }
 
-/** A car with gear on the roof: pickup or Grab delivery. */
+/** A car with gear on the roof: pickup or Lalamove/Grab delivery. */
 export function PickupDeliveryIcon({ className }: IconProps) {
   return (
     <GearbnbIcon className={className}>

@@ -1,6 +1,6 @@
 ﻿import { usePageMeta } from '../hooks/usePageMeta';
 import { PAGE_META } from '../config/pageMeta';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import CampSetupsGallery from '../components/CampSetupsGallery';
 import { CAMP_SETUP_PHOTOS } from '../config/campSetups';
@@ -9,15 +9,13 @@ import { HOME_FAQ } from '../config/homeFaq';
 import ImageLightbox from '../components/ImageLightbox';
 import PathSelectionCards from '../components/PathSelectionCards';
 import SocialIconLink from '../components/SocialIconLink';
+import StepArrow, { STEP_GRID_GAP } from '../components/StepArrow';
 import {
   BeginnerFriendlyIcon,
-  DepositReviewIcon,
   EasyConvenientIcon,
+  IconSpot,
   MemorableTripsIcon,
-  PickupDeliveryIcon,
   QualityGearIcon,
-  SelectGearIcon,
-  VerifyBookIcon,
 } from '../components/GearbnbIcons';
 import { ChatBubbleIcon, CheckCircleIcon, ChevronIcon, GearPlaceholderIcon } from '../components/icons';
 import { useCatalog } from '../context/useCatalog';
@@ -31,29 +29,24 @@ import { cleanGearName } from '../utils/gearName';
 interface ProcessStep {
   title: string;
   description: string;
-  icon: ReactNode;
 }
 
 const PROCESS_STEPS: ProcessStep[] = [
   {
     title: 'Select Gear',
     description: "Choose between selecting our pre-selected camping packages or build your own setup.",
-    icon: <SelectGearIcon className="h-5 w-5" />,
   },
   {
     title: 'Verify & Book',
     description: 'Submit trip dates, fulfillment preference (pickup/delivery), and identity verification documents.',
-    icon: <VerifyBookIcon className="h-5 w-5" />,
   },
   {
     title: 'Deposit & Admin Review',
     description: 'Pay the refundable security deposit within 24 hours while we review your documents. Your gear is reserved once you are approved.',
-    icon: <DepositReviewIcon className="h-5 w-5" />,
   },
   {
-    title: 'Pick Up / Grab Delivery',
-    description: 'Receive your camping gear on your start date.',
-    icon: <PickupDeliveryIcon className="h-5 w-5" />,
+    title: 'Pick Up or Delivery',
+    description: 'Pick up your camping gear in Las Piñas City or have it delivered by Lalamove or Grab on your start date.',
   },
 ];
 
@@ -350,63 +343,127 @@ function FiveStars({ className }: { className: string }) {
 }
 
 /**
- * Review cards in a swipeable scroll-snap track (like BundleSlider): the review in focus sits in
- * the middle at full size, with the ones before and after it showing at the sides, smaller and
- * faded. Swiping, the arrows, the dots or tapping a side card brings that review to the middle.
- * Every review stays in the HTML (and is never aria-hidden), so all of them are readable without
- * JavaScript and by screen readers.
+ * An endless slider of review cards: the review in focus sits in the middle at full size, the ones
+ * before and after it show at the sides, smaller and faded, and the last review is followed by the
+ * first again. Swiping, the arrows, the dots or tapping a side card brings that review to the
+ * middle.
+ *
+ * How it loops: once the app runs, the track holds three copies of the reviews and starts on the
+ * middle one. Whenever scrolling stops on the first or last copy, the track jumps (no animation)
+ * to the same review in the middle copy, so there are always reviews on both sides. The extra
+ * copies are hidden from screen readers, and the pre-built HTML has a single copy, so every review
+ * is read once, with or without JavaScript.
  */
 const REVIEW_AUTO_SLIDE_MS = 10_000;
+const REVIEW_COUNT = REVIEWS.length;
 
 function ReviewSlider() {
   const trackRef = useRef<HTMLDivElement>(null);
-  const [activeIndex, setActiveIndex] = useState(0);
+  // One copy in the pre-built HTML; three once the app runs (see above).
+  const [looping, setLooping] = useState(false);
+  const slideCount = looping ? REVIEW_COUNT * 3 : REVIEW_COUNT;
+  // Which card is in the middle of the track; the review it shows is position % REVIEW_COUNT.
+  const [position, setPosition] = useState(0);
+  const positionRef = useRef(0);
+  const activeIndex = position % REVIEW_COUNT;
   // The one long review opened with "Read more"; closes again when the slide changes.
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   // Paused while the pointer or keyboard focus is on the slider, so it never moves mid-read.
   const [paused, setPaused] = useState(false);
-  // Which reviews are actually cut off at 4 lines at the current width (so "Read more" shows on a
+  // Which cards are actually cut off at 5 lines at the current width (so "Read more" shows on a
   // phone for a review that fits on desktop). Measured, not guessed from the text length.
   const quoteRefs = useRef<(HTMLParagraphElement | null)[]>([]);
   const [clamped, setClamped] = useState<boolean[]>([]);
+  const settleTimer = useRef<number | undefined>(undefined);
+
+  // Before the first paint: switch to three copies and start on the middle one.
+  useLayoutEffect(() => setLooping(true), []);
+  useLayoutEffect(() => {
+    const track = trackRef.current;
+    if (!looping || !track) return;
+    positionRef.current = REVIEW_COUNT;
+    setPosition(REVIEW_COUNT);
+    track.scrollTo({ left: getSlideStride(track) * REVIEW_COUNT, behavior: 'instant' });
+  }, [looping]);
 
   useEffect(() => {
-    const measure = () =>
+    const track = trackRef.current;
+    if (!track) return;
+    const measure = () => {
       setClamped(quoteRefs.current.map((quote) => !!quote && quote.scrollHeight > quote.clientHeight + 1));
+      // A new width means a new card stride: keep the same card in the middle.
+      track.scrollTo({ left: getSlideStride(track) * positionRef.current, behavior: 'instant' });
+    };
     measure();
     const observer = new ResizeObserver(measure);
-    if (trackRef.current) observer.observe(trackRef.current);
+    observer.observe(track);
     return () => observer.disconnect();
-  }, []);
+  }, [looping]);
 
-  // Auto-advance every 10 seconds. Restarts after any manual move, stops while a review is opened
-  // with "Read more" or the tab is hidden, and is off for visitors who ask for reduced motion.
+  // Once scrolling has stopped on an outer copy, jump to the same review in the middle copy.
+  // `scrollend` where the browser has it (fires after the finger lifts), otherwise a short pause.
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!looping || !track) return;
+    const recenter = () => {
+      const stride = getSlideStride(track);
+      const at = Math.round(track.scrollLeft / stride);
+      if (at >= REVIEW_COUNT && at < REVIEW_COUNT * 2) return;
+      const middle = REVIEW_COUNT + (((at % REVIEW_COUNT) + REVIEW_COUNT) % REVIEW_COUNT);
+      track.scrollTo({ left: stride * middle, behavior: 'instant' });
+    };
+    // Undefined (not null) in browsers without the event.
+    if (track.onscrollend !== undefined) {
+      track.addEventListener('scrollend', recenter);
+      return () => track.removeEventListener('scrollend', recenter);
+    }
+    const onScroll = () => {
+      window.clearTimeout(settleTimer.current);
+      settleTimer.current = window.setTimeout(recenter, 150);
+    };
+    track.addEventListener('scroll', onScroll);
+    return () => {
+      track.removeEventListener('scroll', onScroll);
+      window.clearTimeout(settleTimer.current);
+    };
+  }, [looping]);
+
+  // Auto-advance every 10 seconds, always forwards. Restarts after any manual move, stops while a
+  // review is opened with "Read more" or the tab is hidden, and is off for visitors who ask for
+  // reduced motion.
   useEffect(() => {
     if (paused || expandedIndex !== null) return;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const timer = window.setTimeout(() => {
-      if (document.visibilityState === 'visible') scrollToIndex(activeIndex + 1);
+      const track = trackRef.current;
+      if (!track || document.visibilityState !== 'visible') return;
+      // Before the copies exist, the last review wraps back to the first.
+      const next = looping ? position + 1 : (position + 1) % REVIEW_COUNT;
+      track.scrollTo({ left: getSlideStride(track) * next, behavior: 'smooth' });
     }, REVIEW_AUTO_SLIDE_MS);
     return () => window.clearTimeout(timer);
-  }, [activeIndex, expandedIndex, paused]);
+  }, [position, expandedIndex, paused, looping]);
 
-  // The track's side padding is half its width minus half a card, so at scrollLeft = index × stride
-  // that card sits exactly in the middle.
-  function scrollToIndex(index: number) {
+  // The track's side padding is half its width minus half a card, so at scrollLeft = position ×
+  // stride that card sits exactly in the middle.
+  function scrollToPosition(next: number) {
     const track = trackRef.current;
     if (!track) return;
-    // Wraps around: next on the last review goes back to the first, and vice versa.
-    const wrapped = (index + REVIEWS.length) % REVIEWS.length;
-    track.scrollTo({ left: getSlideStride(track) * wrapped, behavior: 'smooth' });
+    // Without the copies (before the app has started) the ends wrap round instead.
+    const target = looping ? Math.max(0, Math.min(slideCount - 1, next)) : (next + REVIEW_COUNT) % REVIEW_COUNT;
+    track.scrollTo({ left: getSlideStride(track) * target, behavior: 'smooth' });
   }
+
+  /** The nearest card showing review `index`, for the dots. */
+  const positionOf = (index: number) => position - activeIndex + index;
 
   function handleScroll() {
     const track = trackRef.current;
     if (!track || track.clientWidth === 0) return;
-    const stride = getSlideStride(track);
-    const index = Math.max(0, Math.min(REVIEWS.length - 1, Math.round(track.scrollLeft / stride)));
-    if (index !== activeIndex) setExpandedIndex(null);
-    setActiveIndex(index);
+    const next = Math.max(0, Math.min(slideCount - 1, Math.round(track.scrollLeft / getSlideStride(track))));
+    if (next % REVIEW_COUNT !== activeIndex) setExpandedIndex(null);
+    positionRef.current = next;
+    setPosition(next);
   }
 
   return (
@@ -422,21 +479,27 @@ function ReviewSlider() {
       {/* The track runs the full width of the screen (cancelling the section's side padding).
           Cards are 80% of it on phones, so the neighbours peek in at the edges, and 380px from
           `sm` up, so a couple of whole reviews show either side. The side padding (half the
-          track minus half a card) is what lets the first and last cards reach the middle; the
-          screen edges fade out. Sizes are in cqw (the track's own width), since a percentage
-          would be measured against the section instead. */}
+          track minus half a card) is what lets a card reach the middle; the screen edges fade
+          out. Sizes are in cqw (the track's own width), since a percentage would be measured
+          against the section instead. */}
       <div className="@container -mx-5 w-[calc(100%+2.5rem)] sm:-mx-6 sm:w-[calc(100%+3rem)]">
         <div
           ref={trackRef}
           onScroll={handleScroll}
           className="relative flex w-full snap-x snap-mandatory gap-3 overflow-x-auto px-[10cqw] py-3 [mask-image:linear-gradient(to_right,transparent,black_6%,black_94%,transparent)] sm:gap-5 sm:px-[calc(50cqw-190px)] [&::-webkit-scrollbar]:hidden [scrollbar-width:none]"
         >
-          {REVIEWS.map((review, index) => (
+          {Array.from({ length: slideCount }, (_, slide) => {
+            const index = slide % REVIEW_COUNT;
+            const review = REVIEWS[index];
+            // The first and last copies only exist for the loop: hidden from screen readers.
+            const copy = looping && (slide < REVIEW_COUNT || slide >= REVIEW_COUNT * 2);
+            return (
             <figure
-              key={review.author}
-              aria-roledescription="slide"
-              aria-label={`${index + 1} of ${REVIEWS.length}`}
-              onClick={() => index !== activeIndex && scrollToIndex(index)}
+              key={slide}
+              aria-roledescription={copy ? undefined : 'slide'}
+              aria-label={copy ? undefined : `${index + 1} of ${REVIEW_COUNT}`}
+              aria-hidden={copy || undefined}
+              onClick={() => slide !== position && scrollToPosition(slide)}
               className={`relative flex w-[80cqw] shrink-0 snap-center flex-col rounded-3xl bg-surface p-6 text-left transition duration-300 motion-reduce:transition-none sm:w-[380px] sm:p-7 ${
                 index === activeIndex ? 'scale-100 opacity-100 shadow-xl' : 'scale-[0.92] cursor-pointer opacity-60 shadow-md'
               }`}
@@ -450,18 +513,19 @@ function ReviewSlider() {
               <blockquote className="mt-4 text-pretty text-sm leading-relaxed text-ink sm:text-[15px]">
                 <p
                   ref={(quote) => {
-                    quoteRefs.current[index] = quote;
+                    quoteRefs.current[slide] = quote;
                   }}
                   className={expandedIndex === index ? '' : 'line-clamp-5'}
                 >
                   {review.quote}
                 </p>
               </blockquote>
-              {(clamped[index] || expandedIndex === index) && (
+              {(clamped[slide] || expandedIndex === index) && (
                 <button
                   type="button"
                   onClick={() => setExpandedIndex(expandedIndex === index ? null : index)}
                   aria-expanded={expandedIndex === index}
+                  tabIndex={copy ? -1 : undefined}
                   className="mt-2 self-start text-xs font-semibold text-accent underline underline-offset-2 hover:text-brand-forest-dark"
                 >
                   {expandedIndex === index ? 'Show less' : 'Read more'}
@@ -486,14 +550,15 @@ function ReviewSlider() {
                 </span>
               </figcaption>
             </figure>
-          ))}
+            );
+          })}
         </div>
       </div>
 
       <div className="mt-5 flex items-center gap-3">
         <button
           type="button"
-          onClick={() => scrollToIndex(activeIndex - 1)}
+          onClick={() => scrollToPosition(position - 1)}
           aria-label="Previous review"
           className="flex h-10 w-10 items-center justify-center rounded-full border border-white/30 bg-white/10 text-white transition-colors hover:bg-white/20"
         >
@@ -504,7 +569,7 @@ function ReviewSlider() {
             <button
               key={review.author}
               type="button"
-              onClick={() => scrollToIndex(index)}
+              onClick={() => scrollToPosition(positionOf(index))}
               aria-label={`Show review by ${review.author}`}
               aria-current={index === activeIndex}
               className={`h-2 rounded-full transition-all ${
@@ -515,7 +580,7 @@ function ReviewSlider() {
         </div>
         <button
           type="button"
-          onClick={() => scrollToIndex(activeIndex + 1)}
+          onClick={() => scrollToPosition(position + 1)}
           aria-label="Next review"
           className="flex h-10 w-10 items-center justify-center rounded-full border border-white/30 bg-white/10 text-white transition-colors hover:bg-white/20"
         >
@@ -527,7 +592,7 @@ function ReviewSlider() {
 }
 
 interface FeatureCardProps {
-  icon: ReactNode;
+  icon: ComponentType<{ className?: string }>;
   title: string;
   description: string;
 }
@@ -535,11 +600,7 @@ interface FeatureCardProps {
 function FeatureCard({ icon, title, description }: FeatureCardProps) {
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-line bg-surface p-4">
-      {/* Solid fill + white icon, not a tinted badge — per the client's "section icons should be
-          white" request; the solid brand-forest background is what keeps a white glyph visible. */}
-      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-forest text-white">
-        {icon}
-      </div>
+      <IconSpot icon={icon} />
       <h3 className="text-sm font-semibold text-ink">{title}</h3>
       <p className="text-sm text-ink-muted">{description}</p>
     </div>
@@ -548,22 +609,22 @@ function FeatureCard({ icon, title, description }: FeatureCardProps) {
 
 const FEATURES: FeatureCardProps[] = [
   {
-    icon: <QualityGearIcon className="h-5 w-5" />,
+    icon: QualityGearIcon,
     title: 'Quality Gear',
     description: 'Rent carefully selected gear from trusted outdoor brands without the cost of buying everything yourself.',
   },
   {
-    icon: <EasyConvenientIcon className="h-5 w-5" />,
+    icon: EasyConvenientIcon,
     title: 'Easy and Convenient',
     description: 'Choose what you need, book your rental, and enjoy camping without the hassle of storing or maintaining gear.',
   },
   {
-    icon: <BeginnerFriendlyIcon className="h-5 w-5" />,
+    icon: BeginnerFriendlyIcon,
     title: 'Beginner-Friendly',
     description: 'Get practical recommendations to help you choose the right gear and feel confident on your first trip.',
   },
   {
-    icon: <MemorableTripsIcon className="h-5 w-5" />,
+    icon: MemorableTripsIcon,
     title: 'Made for Memorable Trips',
     description: 'Spend less time worrying about your setup and more time enjoying the outdoors with the people who matter.',
   },
@@ -761,19 +822,18 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {/* The gap leaves room for the arrow between cards (see StepArrow). */}
+          <div className={`grid sm:grid-cols-2 lg:grid-cols-4 ${STEP_GRID_GAP}`}>
             {PROCESS_STEPS.map((step, index) => (
-              <div key={step.title} className="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-5">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-forest text-sm font-bold text-white">
-                    {index + 1}
-                  </span>
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-forest text-white">
-                    {step.icon}
-                  </div>
+              <div key={step.title} className="relative flex flex-col gap-3 rounded-2xl border border-line bg-surface p-5">
+                {/* "Step 1" sits close above the title. Bold heading-style text, but not a heading
+                    itself, so each card keeps its title as its one heading. */}
+                <div className="flex flex-col gap-1">
+                  <span className="text-xl font-bold leading-tight text-accent sm:text-2xl">Step {index + 1}</span>
+                  <h3 className="text-sm font-semibold text-ink">{step.title}</h3>
                 </div>
-                <h3 className="text-sm font-semibold text-ink">{step.title}</h3>
                 <p className="text-sm text-ink-muted">{step.description}</p>
+                {index < PROCESS_STEPS.length - 1 && <StepArrow skipOnTwoColumns={index === 1} />}
               </div>
             ))}
           </div>
@@ -900,6 +960,30 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Bundles — id targeted by the footer's "Adventure Bundles" link. */}
+      <section id="adventure-bundles" className="px-5 py-10 sm:px-6 sm:py-16">
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
+          <div className="flex flex-col items-center gap-2 text-center">
+            <h2 className="text-balance font-serif text-2xl font-bold text-ink sm:text-3xl">
+              Camping Bundles for Every Camper
+            </h2>
+            <p className="max-w-xl text-sm text-ink-muted">
+              Ready-made packages that bundle everything you need into one simple booking.
+            </p>
+          </div>
+
+          <BundleSlider kits={kits} onSelect={() => navigate('/catalog/camping-packages')} />
+
+          <button
+            type="button"
+            onClick={() => navigate('/catalog/camping-packages')}
+            className="mx-auto rounded-lg border border-line bg-surface px-6 py-3 text-sm font-semibold text-ink shadow-sm transition-colors hover:bg-surface-strong"
+          >
+            View All Packages
+          </button>
+        </div>
+      </section>
+
       {/* Why rent with us */}
       <section className="bg-page-band px-5 py-10 sm:px-6 sm:py-16">
         <div className="mx-auto grid w-full max-w-5xl gap-10 lg:grid-cols-2 lg:items-center">
@@ -956,12 +1040,13 @@ export default function LandingPage() {
 
       </section>
 
-      {/* Testimonials: real renters' reviews on a dark forest band, so the section stands apart
-          from the light ones around it. The soft olive glows match the footer's. */}
-      <section className="relative isolate overflow-hidden bg-brand-forest px-5 py-12 sm:px-6 sm:py-20">
+      {/* Testimonials: real renters' reviews on a deep forest-to-navy gradient, lit by a warm
+          golden glow (the stars' color) and a soft olive one, so the section pops against the
+          light ones around it. All three gradient colors are dark enough for white text. */}
+      <section className="relative isolate overflow-hidden bg-[linear-gradient(135deg,var(--color-brand-forest-dark)_0%,var(--color-brand-forest)_45%,var(--color-brand-navy)_100%)] px-5 py-12 sm:px-6 sm:py-20">
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 -z-10 [background:radial-gradient(50%_60%_at_0%_0%,color-mix(in_srgb,var(--color-brand-olive)_35%,transparent),transparent_70%),radial-gradient(45%_55%_at_100%_100%,color-mix(in_srgb,var(--color-brand-olive)_30%,transparent),transparent_70%)]"
+          className="pointer-events-none absolute inset-0 -z-10 [background:radial-gradient(45%_55%_at_0%_0%,color-mix(in_srgb,var(--color-brand-olive)_45%,transparent),transparent_70%),radial-gradient(40%_50%_at_100%_100%,color-mix(in_srgb,#f6c445_22%,transparent),transparent_70%),radial-gradient(35%_30%_at_50%_0%,color-mix(in_srgb,var(--color-brand-cream)_12%,transparent),transparent_70%)]"
         />
         <div className="flex flex-col items-center gap-8 text-center sm:gap-10">
           <div className="flex max-w-5xl flex-col items-center gap-3">
@@ -970,36 +1055,8 @@ export default function LandingPage() {
             <p className="max-w-xl text-sm text-white/80 sm:text-base">
               Real reviews from families, couples and first-time campers who rented their camping gear from GearBnB.
             </p>
-            <div className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-1.5">
-              <FiveStars className="h-4 w-4" />
-              <span className="text-xs font-semibold text-white">5-star reviews from real renters</span>
-            </div>
           </div>
           <ReviewSlider />
-        </div>
-      </section>
-
-      {/* Bundles — id targeted by the footer's "Adventure Bundles" link. */}
-      <section id="adventure-bundles" className="px-5 py-10 sm:px-6 sm:py-16">
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
-          <div className="flex flex-col items-center gap-2 text-center">
-            <h2 className="text-balance font-serif text-2xl font-bold text-ink sm:text-3xl">
-              Camping Bundles for Every Camper
-            </h2>
-            <p className="max-w-xl text-sm text-ink-muted">
-              Ready-made packages that bundle everything you need into one simple booking.
-            </p>
-          </div>
-
-          <BundleSlider kits={kits} onSelect={() => navigate('/catalog/camping-packages')} />
-
-          <button
-            type="button"
-            onClick={() => navigate('/catalog/camping-packages')}
-            className="mx-auto rounded-lg border border-line bg-surface px-6 py-3 text-sm font-semibold text-ink shadow-sm transition-colors hover:bg-surface-strong"
-          >
-            View All Packages
-          </button>
         </div>
       </section>
 

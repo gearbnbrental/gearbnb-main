@@ -351,7 +351,7 @@ const SECTIONS: LegalSection[] = [
           ]}
         />
         <p>
-          We do not use payment providers or delivery partners. GCash, your bank and Grab handle your data under their
+          We do not use payment providers or delivery partners. GCash, your bank, Lalamove and Grab handle your data under their
           own privacy policies when you use their services.
         </p>
         <p>
@@ -541,7 +541,7 @@ const SECTIONS: LegalSection[] = [
     body: (
       <p>
         Our site links to services from other companies. These include Google Sign-In, Facebook Login, Google Maps for our pickup
-        location and Messenger, Facebook, Instagram and TikTok for messages. GCash, your bank and Grab also handle data
+        location and Messenger, Facebook, Instagram and TikTok for messages. GCash, your bank, Lalamove and Grab also handle data
         when you use their services. If you accept cookies, Meta Pixel on our site sends visit data to Meta, and our booking system sends booking messages to Meta. See{' '}
         <SectionLink id="cookies">section&nbsp;12</SectionLink>. Each company controls its own data and follows its own
         privacy policy. Read those policies before you use the services.

@@ -8,14 +8,14 @@ import { DEPOSIT_TIERS, TOP_TIER_DEPOSIT_CENTAVOS } from '../utils/securityDepos
 import { CONTACT_EMAIL, CONTACT_PHONE_DISPLAY, MESSENGER_URL } from './social';
 
 export const BUSINESS_SUMMARY =
-  'Camping gear rental in Las Piñas City, Metro Manila, Philippines. Rent a complete camping package or individual gear (tents, beds, chairs, tables, coolers, fans, lights) for 48 or 72 hours, with pickup in Las Piñas or Grab delivery. Book online at gearbnbrental.com.';
+  'Camping gear rental in Las Piñas City, Metro Manila, Philippines. Rent a complete camping package or individual gear (tents, beds, chairs, tables, coolers, fans, lights) for 48 or 72 hours, with pickup in Las Piñas or Lalamove or Grab delivery. Book online at gearbnbrental.com.';
 
 export const HOW_RENTING_WORKS = [
   'Choose a camping package or build your own setup piece by piece, then pick 48 hours, 72 hours, or 72 hours plus extra days.',
   'Check out online with identity verification: two government IDs, a short video holding your ID, and a proof of billing.',
   'Pay the security deposit within 24 hours of checking out, while GearBnB reviews the documents. Unpaid bookings are cancelled automatically and the gear released.',
   "The deposit is refunded in full if a booking isn't approved; after approval, refunds follow the rental agreement.",
-  'Pay the rental fee on or before the rental date. Pick up in Las Piñas City or book Grab delivery (paid by the renter).',
+  'Pay the rental fee on or before the rental date. Pick up in Las Piñas City or book Lalamove or Grab delivery (booked and paid by the renter).',
   'Payment is by GCash or bank transfer.',
 ];
 
