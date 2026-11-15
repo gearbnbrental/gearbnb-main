@@ -202,6 +202,11 @@ export const PAGE_META = {
       'Rent tents, air beds, camping chairs, coolers, fans and lights by the piece. Pick your dates, mix and match your setup and pick up in Las Piñas.',
     image: '/images/og-build-your-own.jpg',
   },
+  shop: {
+    title: 'Camping Gear for Sale | GearBnB',
+    description:
+      "Buy new and used camping gear from GearBnB, priced per piece. See each item's photos, condition and price, then message us to buy it.",
+  },
   events: {
     title: 'Camping Gear Rental for Events & Team Building | GearBnB',
     description:
@@ -245,6 +250,7 @@ export const PRERENDERED_PAGES: { path: string; meta: PageMeta }[] = [
   { path: '/catalog', meta: PAGE_META.catalog },
   { path: '/catalog/camping-packages', meta: PAGE_META.packages },
   { path: '/catalog/build-your-own', meta: PAGE_META.buildYourOwn },
+  { path: '/shop', meta: PAGE_META.shop },
   { path: '/plan-an-event', meta: PAGE_META.events },
   { path: '/about-us', meta: PAGE_META.about },
   { path: '/privacy-policy', meta: PAGE_META.privacy },

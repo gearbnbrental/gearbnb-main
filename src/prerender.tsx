@@ -31,6 +31,7 @@ import NotFound from './pages/NotFound';
 import PathACatalog from './pages/PathACatalog';
 import PathBCatalog from './pages/PathBCatalog';
 import PrivacyPolicy from './pages/PrivacyPolicy';
+import Shop from './pages/Shop';
 import Terms from './pages/Terms';
 import TermsOfService from './pages/TermsOfService';
 import type { PageMeta } from './config/pageMeta';
@@ -48,6 +49,7 @@ const PAGES: Record<string, ComponentType> = {
   '/catalog': CatalogChooser,
   '/catalog/camping-packages': PathACatalog,
   '/catalog/build-your-own': PathBCatalog,
+  '/shop': Shop,
   '/plan-an-event': EventPlan,
   '/about-us': AboutUs,
   '/privacy-policy': PrivacyPolicy,

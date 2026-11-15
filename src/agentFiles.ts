@@ -127,6 +127,7 @@ export function llmsTxt({
       ['/', 'Home'],
       ['/catalog/camping-packages', 'Camping packages'],
       ['/catalog/build-your-own', 'Build your own (gear by the piece)'],
+      ['/shop', 'Shop (camping gear for sale)'],
       ['/plan-an-event', 'Plan an event'],
       ['/about-us', 'About GearBnB'],
     ]),

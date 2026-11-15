@@ -62,6 +62,7 @@ const PrivacyPolicy = lazyWithRetry(() => import('./pages/PrivacyPolicy'));
 const DataDeletion = lazyWithRetry(() => import('./pages/DataDeletion'));
 const Profile = lazyWithRetry(() => import('./pages/Profile'));
 const ResetPassword = lazyWithRetry(() => import('./pages/ResetPassword'));
+const Shop = lazyWithRetry(() => import('./pages/Shop'));
 const Terms = lazyWithRetry(() => import('./pages/Terms'));
 const TermsOfService = lazyWithRetry(() => import('./pages/TermsOfService'));
 
@@ -223,6 +224,9 @@ function App() {
                       path="/catalog/build-your-own/:slug?"
                       element={<PathBCatalog />}
                     />
+
+                    {/* An item's details open over the list at /shop?item=<id>. */}
+                    <Route path="/shop" element={<Shop />} />
 
                     <Route path="/cart" element={<Cart />} />
                     <Route path="/checkout" element={<Checkout />} />

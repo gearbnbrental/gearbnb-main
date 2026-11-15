@@ -138,6 +138,7 @@ const PAGE_SOURCES: Record<string, string[]> = {
   '/': ['src/pages/LandingPage.tsx', 'src/config/homeFaq.ts'],
   '/catalog/camping-packages': ['src/pages/PathACatalog.tsx'],
   '/catalog/build-your-own': ['src/pages/PathBCatalog.tsx'],
+  '/shop': ['src/pages/Shop.tsx', 'src/components/shop/ShopItemCard.tsx'],
   '/plan-an-event': ['src/pages/EventPlan.tsx'],
   '/about-us': ['src/pages/AboutUs.tsx'],
   '/privacy-policy': ['src/pages/PrivacyPolicy.tsx'],
