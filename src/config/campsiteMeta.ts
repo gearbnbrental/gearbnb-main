@@ -6,6 +6,7 @@
  * src/utils/campsites.ts, so the schema always says what the page says.
  */
 import type { Campsite, CampsiteSummary } from '../types/campsite';
+import { safeWebUrl } from '../utils/safeUrl';
 import {
   CAMPSITES_PATH,
   DETAIL_LABELS,
@@ -68,7 +69,7 @@ export function amenityFeatures(campsite: CampsiteSummary) {
 function campgroundJsonLd(campsite: Campsite, url: string) {
   const fee = headlineFee(campsite);
   const images = campsite.photos.map((photo) => photo.url);
-  const sameAs = [campsite.facebookUrl, campsite.websiteUrl].filter(Boolean);
+  const sameAs = [safeWebUrl(campsite.facebookUrl), safeWebUrl(campsite.websiteUrl)].filter(Boolean);
   const reviews = campsite.reviews.slice(0, 10);
   return {
     '@type': 'Campground',
@@ -85,7 +86,7 @@ function campgroundJsonLd(campsite: Campsite, url: string) {
       addressCountry: 'PH',
     },
     geo: { '@type': 'GeoCoordinates', latitude: campsite.lat, longitude: campsite.lng },
-    ...(campsite.googleMapsUrl ? { hasMap: campsite.googleMapsUrl } : {}),
+    ...(safeWebUrl(campsite.googleMapsUrl) ? { hasMap: safeWebUrl(campsite.googleMapsUrl) } : {}),
     ...(campsite.phone ? { telephone: campsite.phone } : {}),
     ...(sameAs.length ? { sameAs } : {}),
     ...(fee.centavos === 0 ? { isAccessibleForFree: true } : fee.text ? { isAccessibleForFree: false, priceRange: fee.text } : {}),

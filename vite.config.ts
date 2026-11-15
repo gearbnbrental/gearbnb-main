@@ -68,6 +68,17 @@ function cspInlineScriptHash(): Plugin {
 const escapeHtml = (value: string) =>
   value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
+/** JSON for a <script type="application/ld+json"> block. Names and descriptions come from the RMS,
+ *  so `<`, `>` and `&` are written as \u escapes: a value containing "</script>" can then never
+ *  end the block early. The JSON means exactly the same. */
+const jsonLdText = (value: unknown) =>
+  JSON.stringify(value)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029')
+
 /** URL path -> file name (no extension) in dist/_pages and dist/_md ("/catalog/build-your-own" -> "catalog--build-your-own"). */
 const pageFileBase = (path: string) => (path === '/' ? 'home' : path.slice(1).replace(/\//g, '--'))
 const markdownPathFor = (path: string) => `/_md/${pageFileBase(path)}.md`
@@ -109,8 +120,8 @@ function withPageMeta(html: string, path: string, meta: PageMeta, { canonical = 
         `<meta name="twitter:title" content="${title}" />`,
         `<meta name="twitter:description" content="${description}" />`,
         `<meta name="twitter:image" content="${image}" />`,
-        `<script type="application/ld+json">${JSON.stringify(ORGANIZATION_JSON_LD)}</script>`,
-        ...(meta.jsonLd ? [`<script type="application/ld+json">${JSON.stringify(meta.jsonLd)}</script>`] : []),
+        `<script type="application/ld+json">${jsonLdText(ORGANIZATION_JSON_LD)}</script>`,
+        ...(meta.jsonLd ? [`<script type="application/ld+json">${jsonLdText(meta.jsonLd)}</script>`] : []),
         ...(meta.robots ? [`<meta name="robots" content="${escapeHtml(meta.robots)}" />`] : []),
       ].join('\n    '),
     )

@@ -3,6 +3,7 @@
  * and the gentle sign-in nudge for campers browsing several campsites.
  */
 import type { CampsiteLeadChannel } from '../types/campsite';
+import { safeWebUrl } from './safeUrl';
 
 export interface ContactChannel {
   channel: CampsiteLeadChannel;
@@ -20,15 +21,17 @@ export interface ContactChannel {
 /** The ways to contact a campsite, in button order, for the ones it has. */
 export function contactChannels(campsite: { facebookUrl: string | null; phone: string | null; websiteUrl: string | null }): ContactChannel[] {
   const channels: ContactChannel[] = [];
-  if (campsite.facebookUrl) {
-    channels.push({ channel: 'FACEBOOK', label: 'Message on Facebook', openLabel: 'Open their Facebook page', verb: 'message them', href: campsite.facebookUrl, newTab: true });
+  const facebook = safeWebUrl(campsite.facebookUrl);
+  const website = safeWebUrl(campsite.websiteUrl);
+  if (facebook) {
+    channels.push({ channel: 'FACEBOOK', label: 'Message on Facebook', openLabel: 'Open their Facebook page', verb: 'message them', href: facebook, newTab: true });
   }
-  if (campsite.phone) {
-    const number = campsite.phone.replace(/[^\d+]/g, '');
+  const number = campsite.phone?.replace(/[^\d+]/g, '') ?? '';
+  if (campsite.phone && /\d{3,}/.test(number)) {
     channels.push({ channel: 'PHONE', label: 'Call', openLabel: `Call ${campsite.phone}`, verb: 'call', href: `tel:${number}`, newTab: false });
   }
-  if (campsite.websiteUrl) {
-    channels.push({ channel: 'WEBSITE', label: 'Website', openLabel: 'Open their website', verb: 'book', href: campsite.websiteUrl, newTab: true });
+  if (website) {
+    channels.push({ channel: 'WEBSITE', label: 'Website', openLabel: 'Open their website', verb: 'book', href: website, newTab: true });
   }
   return channels;
 }

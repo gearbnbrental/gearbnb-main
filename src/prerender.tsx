@@ -102,8 +102,9 @@ export interface PrerenderCatalog {
   gearKinds: BookableGearKind[];
   /** Every published Find A Campsite campsite, with its photos and reviews. */
   campsites: Campsite[];
-  /** Every item for sale in the shop, exactly as GET /api/customer/shop lists it. */
-  shopItems: ShopItem[];
+  /** Every item for sale in the shop, exactly as GET /api/customer/shop lists it; null when it
+   *  couldn't be loaded (the shop page is then built in its loading state, never "nothing for sale"). */
+  shopItems: ShopItem[] | null;
   /** Why a part of the catalog is missing, for the build log. */
   warnings: string[];
 }
@@ -150,7 +151,7 @@ export async function fetchPrerenderCatalog(): Promise<PrerenderCatalog> {
 
   const campsites = await fetchPrerenderCampsites(warnings);
 
-  let shopItems: ShopItem[] = [];
+  let shopItems: ShopItem[] | null = null;
   try {
     shopItems = normalizeShopItems(await withTimeout(fetchShopFromRms(), 'shop'));
   } catch (error) {
@@ -322,7 +323,7 @@ export function productPages(catalog: PrerenderCatalog): ProductPage[] {
     });
   }
   // One page per item for sale, each with Product + Offer schema (see config/shopMeta.ts).
-  for (const item of catalog.shopItems) {
+  for (const item of catalog.shopItems ?? []) {
     add({
       path: shopItemPath(item),
       meta: shopItemPageMeta(item),
@@ -341,7 +342,7 @@ export function catalogPagesJsonLd(products: ProductPage[], catalog: PrerenderCa
   return {
     [PACKAGES_PATH]: catalogJsonLd(PACKAGES_PATH, 'Camping Packages for Rent', list(PACKAGES_PATH)),
     [BUILD_YOUR_OWN_PATH]: catalogJsonLd(BUILD_YOUR_OWN_PATH, 'Camping Gear for Rent by the Piece', list(BUILD_YOUR_OWN_PATH)),
-    [SHOP_PATH]: shopListJsonLd(catalog.shopItems),
+    ...(catalog.shopItems ? { [SHOP_PATH]: shopListJsonLd(catalog.shopItems) } : {}),
   };
 }
 

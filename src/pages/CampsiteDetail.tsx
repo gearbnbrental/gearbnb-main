@@ -18,6 +18,7 @@ import { useRental } from '../context/RentalContext';
 import { usePageMeta } from '../hooks/usePageMeta';
 import type { Campsite } from '../types/campsite';
 import { contactChannels, type ContactChannel } from '../utils/campsiteContact';
+import { safeWebUrl } from '../utils/safeUrl';
 import {
   CAMPSITES_PATH,
   DETAIL_LABELS,
@@ -203,7 +204,7 @@ export default function CampsiteDetail() {
 
   const d = campsite.details;
   const checked = checkedMonth(campsite.detailsCheckedAt);
-  const mapsUrl = campsite.googleMapsUrl ?? `https://www.google.com/maps/search/?api=1&query=${campsite.lat},${campsite.lng}`;
+  const mapsUrl = safeWebUrl(campsite.googleMapsUrl) ?? `https://www.google.com/maps/search/?api=1&query=${campsite.lat},${campsite.lng}`;
   const wazeUrl = `https://waze.com/ul?ll=${campsite.lat},${campsite.lng}&navigate=yes`;
   const fee = headlineFee(campsite);
   const entranceFee = feeText(campsite.entranceFeeCentavos, campsite.feeUnit);
