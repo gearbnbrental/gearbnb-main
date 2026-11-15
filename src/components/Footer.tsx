@@ -82,6 +82,9 @@ export default function Footer() {
             >
               Adventure Bundles
             </button>
+            <Link to="/shop" className="w-fit text-left text-sm text-white hover:opacity-80">
+              Camping Gear for Sale
+            </Link>
             <Link to="/campsites" className="w-fit text-left text-sm text-white hover:opacity-80">
               Find A Campsite
             </Link>

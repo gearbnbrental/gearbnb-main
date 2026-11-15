@@ -3,6 +3,7 @@
  * answers into the homepage's FAQPage schema (see HOME_JSON_LD in pageMeta.ts), so the two can
  * never disagree. Plain text only; `link` is shown under the answer.
  */
+import { CAMPSITES_COMING_SOON } from './features.ts';
 import { MESSENGER_URL } from './social.ts';
 
 export interface HomeFaqEntry {
@@ -39,9 +40,17 @@ export const HOME_FAQ: HomeFaqEntry[] = [
   },
   {
     question: 'Can you help me find a campsite?',
-    answer:
-      'Yes. Our Find A Campsite directory lists campsites near Metro Manila and beyond, with entrance fees, cell signal, restrooms, pet rules and camper reviews. You book the campsite directly with them, and rent your gear from us.',
-    link: { href: '/campsites', label: 'Find A Campsite' },
+    ...(CAMPSITES_COMING_SOON
+      ? {
+          answer:
+            'Yes. Message us about your trip and we can point you toward popular spots. Booking the campsite itself is up to you. Our Find A Campsite directory, with entrance fees, cell signal, restrooms, pet rules and camper reviews, is coming soon.',
+          link: { href: MESSENGER_URL, label: 'Ask Us for a Campsite' },
+        }
+      : {
+          answer:
+            'Yes. Our Find A Campsite directory lists campsites near Metro Manila and beyond, with entrance fees, cell signal, restrooms, pet rules and camper reviews. You book the campsite directly with them, and rent your gear from us.',
+          link: { href: '/campsites', label: 'Find A Campsite' },
+        }),
   },
   {
     question: 'How do I get started?',

@@ -5,6 +5,7 @@
  * facts and the Find A Campsite directory; nothing here books, adds to the cart or reads personal
  * data.
  */
+import { CAMPSITES_COMING_SOON } from '../config/features';
 import { SITE_URL } from '../config/pageMeta';
 import { BUSINESS_SUMMARY, CONTACT_FACTS, DEPOSIT_RULE, HOW_RENTING_WORKS, depositTierLines } from '../config/rentalFacts';
 import { fetchCampsiteDetail, fetchCampsiteList } from '../data/campsites';
@@ -310,10 +311,11 @@ export function campsiteTools(source: CampsiteSource): WebMcpTool[] {
 export function registerRentalTools(
   modelContext: ModelContext | undefined,
   snapshot: () => CatalogSnapshot,
-  campsites: CampsiteSource = liveCampsites(),
+  // No campsite tools until Find A Campsite launches (see config/features.ts).
+  campsites: CampsiteSource | null = CAMPSITES_COMING_SOON ? null : liveCampsites(),
 ): () => void {
   if (!modelContext) return () => {};
-  const tools = [...rentalTools(snapshot), ...campsiteTools(campsites)];
+  const tools = [...rentalTools(snapshot), ...(campsites ? campsiteTools(campsites) : [])];
   try {
     if (modelContext.registerTool) {
       for (const tool of tools) modelContext.registerTool(tool);

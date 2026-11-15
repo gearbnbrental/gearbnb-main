@@ -33,6 +33,7 @@ import NotFound from './pages/NotFound';
 import PathACatalog from './pages/PathACatalog';
 import PathBCatalog from './pages/PathBCatalog';
 import PrivacyPolicy from './pages/PrivacyPolicy';
+import Shop from './pages/Shop';
 import Terms from './pages/Terms';
 import TermsOfService from './pages/TermsOfService';
 import type { PageMeta } from './config/pageMeta';
@@ -45,6 +46,8 @@ import { orderPackageKits } from './utils/gearOrder';
 import { fetchPackageCatalogFromRms } from './utils/rmsApi';
 import { CampsiteDataContext } from './context/CampsiteData';
 import { USING_CAMPSITE_SAMPLES, fetchCampsiteDetail, fetchCampsiteList } from './data/campsites';
+import { CAMPSITES_COMING_SOON } from './config/features';
+import CampsitesComingSoon from './pages/CampsitesComingSoon';
 import { campsitePageMeta, campsitesListJsonLd, provincePageMeta } from './config/campsiteMeta';
 import type { Campsite } from './types/campsite';
 import {
@@ -64,9 +67,10 @@ const PAGES: Record<string, ComponentType> = {
   '/catalog': CatalogChooser,
   '/catalog/camping-packages': PathACatalog,
   '/catalog/build-your-own': PathBCatalog,
+  '/shop': Shop,
   '/plan-an-event': EventPlan,
   '/about-us': AboutUs,
-  '/campsites': Campsites,
+  '/campsites': CAMPSITES_COMING_SOON ? CampsitesComingSoon : Campsites,
   '/privacy-policy': PrivacyPolicy,
   '/terms': Terms,
   '/terms-of-service': TermsOfService,
@@ -145,6 +149,8 @@ export async function fetchPrerenderCatalog(): Promise<PrerenderCatalog> {
 /** Every published campsite with its full details, a few requests at a time. A campsite that
  *  fails is left out (with a warning); if the list itself fails, the directory is built empty. */
 async function fetchPrerenderCampsites(warnings: string[]): Promise<Campsite[]> {
+  // Coming Soon: no campsite pages, schema or llms.txt lines (see config/features.ts).
+  if (CAMPSITES_COMING_SOON) return [];
   if (USING_CAMPSITE_SAMPLES) warnings.push('VITE_CAMPSITE_SAMPLES=1: built with SAMPLE campsites. Never upload this build.');
   let list;
   try {
@@ -354,7 +360,8 @@ export function campsitePages(catalog: PrerenderCatalog): CampsitePage[] {
 /** The directory's CollectionPage + ItemList schema, and the date its list last changed. */
 export function campsiteDirectory(catalog: PrerenderCatalog) {
   return {
-    jsonLd: campsitesListJsonLd(catalog.campsites),
+    // Coming Soon: the page lists no campsites, so it gets no ItemList either.
+    jsonLd: CAMPSITES_COMING_SOON ? undefined : campsitesListJsonLd(catalog.campsites),
     dataChanged: latest(catalog.campsites.map((campsite) => manilaDate(campsite.updatedAt))),
   };
 }

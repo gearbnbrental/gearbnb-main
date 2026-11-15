@@ -4,6 +4,7 @@ import BackToTop from './components/BackToTop';
 import CookieConsent from './components/CookieConsent';
 import AccessibilityWidget from './components/AccessibilityWidget';
 import { readCookieConsent } from './utils/cookieConsent';
+import { CAMPSITES_COMING_SOON } from './config/features';
 import ErrorBoundary from './components/ErrorBoundary';
 import FloatingHelp from './components/FloatingHelp';
 import Footer from './components/Footer';
@@ -49,8 +50,9 @@ function lazyWithRetry<T extends ComponentType<any>>(
 
 const AboutUs = lazyWithRetry(() => import('./pages/AboutUs'));
 const Cart = lazyWithRetry(() => import('./pages/Cart'));
-const CampsiteDetail = lazyWithRetry(() => import('./pages/CampsiteDetail'));
-const Campsites = lazyWithRetry(() => import('./pages/Campsites'));
+// Until launch, every campsite address shows Coming Soon (see config/features.ts).
+const CampsiteDetail = lazyWithRetry(() => (CAMPSITES_COMING_SOON ? import('./pages/CampsitesComingSoon') : import('./pages/CampsiteDetail')));
+const Campsites = lazyWithRetry(() => (CAMPSITES_COMING_SOON ? import('./pages/CampsitesComingSoon') : import('./pages/Campsites')));
 const CatalogChooser = lazyWithRetry(() => import('./pages/CatalogChooser'));
 const Checkout = lazyWithRetry(() => import('./pages/Checkout'));
 const EventPlan = lazyWithRetry(() => import('./pages/EventPlan'));
@@ -64,6 +66,7 @@ const PrivacyPolicy = lazyWithRetry(() => import('./pages/PrivacyPolicy'));
 const DataDeletion = lazyWithRetry(() => import('./pages/DataDeletion'));
 const Profile = lazyWithRetry(() => import('./pages/Profile'));
 const ResetPassword = lazyWithRetry(() => import('./pages/ResetPassword'));
+const Shop = lazyWithRetry(() => import('./pages/Shop'));
 const Terms = lazyWithRetry(() => import('./pages/Terms'));
 const TermsOfService = lazyWithRetry(() => import('./pages/TermsOfService'));
 
@@ -225,6 +228,9 @@ function App() {
                       path="/catalog/build-your-own/:slug?"
                       element={<PathBCatalog />}
                     />
+
+                    {/* An item's details open over the list at /shop?item=<id>. */}
+                    <Route path="/shop" element={<Shop />} />
 
                     <Route path="/cart" element={<Cart />} />
                     <Route path="/checkout" element={<Checkout />} />

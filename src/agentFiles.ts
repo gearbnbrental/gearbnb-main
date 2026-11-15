@@ -5,6 +5,7 @@
  * `Accept: text/markdown`), and /llms.txt summarises the business and links every page.
  */
 import TurndownService from 'turndown';
+import { CAMPSITES_COMING_SOON } from './config/features';
 import { SITE_URL, type PageMeta } from './config/pageMeta';
 import { BUSINESS_SUMMARY, CONTACT_FACTS, DEPOSIT_RULE, HOW_RENTING_WORKS, depositTierLines } from './config/rentalFacts';
 
@@ -132,8 +133,9 @@ export function llmsTxt({
       ['/', 'Home'],
       ['/catalog/camping-packages', 'Camping packages'],
       ['/catalog/build-your-own', 'Build your own (gear by the piece)'],
+      ['/shop', 'Shop (camping gear for sale)'],
       ['/plan-an-event', 'Plan an event'],
-      ['/campsites', 'Find A Campsite (campsite directory)'],
+      ...(CAMPSITES_COMING_SOON ? [] : ([['/campsites', 'Find A Campsite (campsite directory)']] as [string, string][])),
       ['/about-us', 'About GearBnB'],
     ]),
     ...(packages.length ? ['## Camping packages', '', ...productLines(packages), ''] : []),

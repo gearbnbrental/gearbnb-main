@@ -1003,6 +1003,17 @@ export function fetchGearStockForDates(window: { pickupAt: string; returnAt: str
   });
 }
 
+/**
+ * The gear staff listed "For Sale" — GET /api/customer/shop, public/unauthenticated like the gear
+ * catalog. Typed `unknown` on purpose: the body is checked item by item in normalizeShopItems
+ * (utils/shop.ts), which keeps only the fields the shop shows and ignores any it doesn't know yet.
+ * Read-only, so safe to retry a transient failure (see withReadRetry). Errors: 503 with
+ * code SHOP_UNAVAILABLE when the RMS can't load it, 429 with Retry-After when rate limited.
+ */
+export function fetchShopFromRms() {
+  return withReadRetry(() => rmsFetch<unknown>('/api/customer/shop', { requireAuth: false }));
+}
+
 /** The currently RMS-configured customer-facing payment QR codes, exactly as staff last set them
  * on the RMS Settings page. `null` for a method means no QR is currently configured for it — a
  * real, meaningful "coming soon" answer, never treated as "the fetch didn't happen yet." */
