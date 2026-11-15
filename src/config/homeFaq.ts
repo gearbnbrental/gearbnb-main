@@ -39,7 +39,9 @@ export const HOME_FAQ: HomeFaqEntry[] = [
   },
   {
     question: 'Can you help me find a campsite?',
-    answer: 'We can point you toward popular spots based on your trip, but booking the campsite itself is up to you.',
+    answer:
+      'Yes. Our Find A Campsite directory lists campsites near Metro Manila and beyond, with entrance fees, cell signal, restrooms, pet rules and camper reviews. You book the campsite directly with them, and rent your gear from us.',
+    link: { href: '/campsites', label: 'Find A Campsite' },
   },
   {
     question: 'How do I get started?',

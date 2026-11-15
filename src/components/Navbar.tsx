@@ -47,6 +47,7 @@ function mobileNavLinks(user: unknown) {
   return [
     { to: '/', label: 'Home' },
     { to: '/about-us', label: 'About Us' },
+    { to: '/campsites', label: 'Find A Campsite' },
     ...(user ? [{ to: '/my-bookings', label: 'My Bookings' }] : []),
     { to: '/plan-an-event', label: 'Plan An Event' },
   ];
@@ -241,6 +242,13 @@ export default function Navbar() {
                 </Link>
               </div>
             </div>
+
+            <Link
+              to="/campsites"
+              className="hidden whitespace-nowrap rounded-md px-2 py-1.5 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-strong hover:text-ink lg:inline-block"
+            >
+              Find A Campsite
+            </Link>
 
             <Link
               to="/plan-an-event"

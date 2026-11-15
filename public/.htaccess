@@ -5,9 +5,11 @@
 # The app still loads on it, so a product added in the RMS after the last build still shows.
 ErrorDocument 404 /_pages/404.html
 
-# Markdown versions of the pages (/_md/*.md) and /llms.txt, for AI agents.
+# Markdown versions of the pages (/_md/*.md) and /llms.txt, for AI agents. .mjs is the campsite
+# map's helper script: browsers only run it when it's served as JavaScript.
 <IfModule mod_mime.c>
   AddType text/markdown .md
+  AddType text/javascript .mjs
   AddCharset utf-8 .md .txt
 </IfModule>
 
@@ -31,6 +33,6 @@ ErrorDocument 404 /_pages/404.html
   Header always set X-Content-Type-Options "nosniff"
   Header always set X-Frame-Options "DENY"
   Header always set Referrer-Policy "strict-origin-when-cross-origin"
-  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
-  Header always set Content-Security-Policy "default-src 'self'; script-src 'self' https://connect.facebook.net 'sha256-Eh7mxHFHl1U0O+0z4mAE43oEAm8k2IlCD9sEeW0mduM='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://hwsjarimtmsovpcbrolj.supabase.co https://www.facebook.com; media-src 'self' blob:; connect-src 'self' https://hwsjarimtmsovpcbrolj.supabase.co https://admin.gearbnbrental.com https://www.facebook.com https://connect.facebook.net; frame-src https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(self), payment=()"
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self' https://connect.facebook.net 'sha256-Eh7mxHFHl1U0O+0z4mAE43oEAm8k2IlCD9sEeW0mduM='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://hwsjarimtmsovpcbrolj.supabase.co https://www.facebook.com; media-src 'self' blob:; connect-src 'self' https://hwsjarimtmsovpcbrolj.supabase.co https://admin.gearbnbrental.com https://tiles.openfreemap.org https://photon.komoot.io https://api.maptiler.com https://api.openrouteservice.org https://www.facebook.com https://connect.facebook.net; frame-src https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
 </IfModule>

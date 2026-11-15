@@ -49,6 +49,8 @@ function lazyWithRetry<T extends ComponentType<any>>(
 
 const AboutUs = lazyWithRetry(() => import('./pages/AboutUs'));
 const Cart = lazyWithRetry(() => import('./pages/Cart'));
+const CampsiteDetail = lazyWithRetry(() => import('./pages/CampsiteDetail'));
+const Campsites = lazyWithRetry(() => import('./pages/Campsites'));
 const CatalogChooser = lazyWithRetry(() => import('./pages/CatalogChooser'));
 const Checkout = lazyWithRetry(() => import('./pages/Checkout'));
 const EventPlan = lazyWithRetry(() => import('./pages/EventPlan'));
@@ -233,6 +235,11 @@ function App() {
                     />
 
                     <Route path="/about-us" element={<AboutUs />} />
+
+                    {/* Find A Campsite: the directory, a province's campsites, one campsite. */}
+                    <Route path="/campsites" element={<Campsites />} />
+                    <Route path="/campsites/province/:province" element={<Campsites />} />
+                    <Route path="/campsites/:slug" element={<CampsiteDetail />} />
 
                     <Route path="/login" element={<Login />} />
                     <Route

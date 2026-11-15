@@ -315,6 +315,10 @@ const REVIEWS: Review[] = [
       'Highly recommended and Gearbnb Rental! First time ko mag camping pero yung guidance nila at shared instructional videos sa akin nakatulong para magawa ko ng maayos yung setup. Aside from that yung owner/s napaka considerate sa mga requests ko na add-ons. Yung mga gears nila? Solid! Quality! Inulan kami that night at ang dami naming mga kasamahan na nag moist yung tent nila pero yung sa amin kinaya kahit buhos talaga yung ulan! Lastly, ang linis ng mga gears nila, tent, tables, fan, as in lahat maayos, medyo OA pero maayos kasi talaga. Salamat Gearbnb for being part of the core memory ng daughter ko. Til next camp, kasama naman buong family ko, message ulit ako sa inyo.',
     author: 'Stanley Tan',
   },
+  {
+    quote: 'Madam!!! Thank you so much!!! Sobrang happy ko sa tent! 🥹🤍 more budol to come!',
+    author: 'Tiffany Navarro',
+  },
 ];
 
 /** "Raymond Chiong Jr." -> "RC": the first letters of the first two words, for the avatar. */
@@ -636,14 +640,21 @@ const FAQ_ITEMS: FaqItem[] = HOME_FAQ.map(({ question, answer, link }) => ({
   answer: link ? (
     <>
       <p>{answer}</p>
-      <a
-        href={link.href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="mt-2 inline-flex items-center gap-1 font-semibold text-accent transition-colors hover:text-brand-forest-dark"
-      >
-        {link.label} <span aria-hidden="true">&rarr;</span>
-      </a>
+      {/* Our own pages open in place; outside links (Maps, Messenger) in a new tab. */}
+      {link.href.startsWith('/') ? (
+        <Link to={link.href} className="mt-2 inline-flex items-center gap-1 font-semibold text-accent transition-colors hover:text-brand-forest-dark">
+          {link.label} <span aria-hidden="true">&rarr;</span>
+        </Link>
+      ) : (
+        <a
+          href={link.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-2 inline-flex items-center gap-1 font-semibold text-accent transition-colors hover:text-brand-forest-dark"
+        >
+          {link.label} <span aria-hidden="true">&rarr;</span>
+        </a>
+      )}
     </>
   ) : (
     answer

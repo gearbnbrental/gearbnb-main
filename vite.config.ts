@@ -122,6 +122,17 @@ interface BuiltPage {
   meta: PageMeta
   html: string
   markdown: string
+  /** YYYY-MM-DD the page's data (not its code) last changed: campsite pages, from the RMS. */
+  dataChanged?: string
+}
+
+/** What src/prerender.tsx's campsitePages returns. */
+interface CampsitePage {
+  path: string
+  meta: PageMeta
+  name: string
+  summary: string
+  dataChanged: string
 }
 
 /** What src/prerender.tsx's productPages returns (loaded through Vite, so untyped here). */
@@ -140,6 +151,7 @@ const PAGE_SOURCES: Record<string, string[]> = {
   '/catalog/build-your-own': ['src/pages/PathBCatalog.tsx'],
   '/plan-an-event': ['src/pages/EventPlan.tsx'],
   '/about-us': ['src/pages/AboutUs.tsx'],
+  '/campsites': ['src/pages/Campsites.tsx', 'src/components/campsites/CampsiteCard.tsx'],
   '/privacy-policy': ['src/pages/PrivacyPolicy.tsx'],
   '/terms': ['src/pages/Terms.tsx'],
   '/terms-of-service': ['src/pages/TermsOfService.tsx'],
@@ -147,6 +159,8 @@ const PAGE_SOURCES: Record<string, string[]> = {
 }
 const PACKAGE_PAGE_SOURCES = ['src/components/PackageDetailsDialog.tsx', 'src/config/productMeta.ts', 'src/utils/packageFaq.ts']
 const GEAR_PAGE_SOURCES = ['src/components/GearDetailsDialog.tsx', 'src/config/productMeta.ts', 'src/utils/gearFaq.ts']
+const CAMPSITE_PAGE_SOURCES = ['src/pages/CampsiteDetail.tsx', 'src/config/campsiteMeta.ts', 'src/utils/campsites.ts']
+const PROVINCE_PAGE_SOURCES = ['src/pages/Campsites.tsx', 'src/config/campsiteMeta.ts', 'src/utils/campsites.ts']
 
 /** YYYY-MM-DD the page's source last changed: today when it has uncommitted changes, otherwise
  *  its last commit. Today when git isn't available. */
@@ -186,11 +200,13 @@ async function renderSite(root: string) {
     const catalog = await prerender.fetchPrerenderCatalog()
     for (const warning of catalog.warnings as string[]) console.warn(`prerender-route-meta: ${warning}`)
     console.log(
-      `prerender-route-meta: catalog at build time: ${catalog.kits.length} packages, ${catalog.gearKinds.length} gear kinds`,
+      `prerender-route-meta: catalog at build time: ${catalog.kits.length} packages, ${catalog.gearKinds.length} gear kinds, ${catalog.campsites.length} campsites`,
     )
 
     const products: ProductPage[] = prerender.productPages(catalog)
-    const catalogJsonLd: Record<string, object> = prerender.catalogPagesJsonLd(products)
+    const campsitePages: CampsitePage[] = prerender.campsitePages(catalog)
+    const directory: { jsonLd: object; dataChanged: string } = prerender.campsiteDirectory(catalog)
+    const catalogJsonLd: Record<string, object> = { ...prerender.catalogPagesJsonLd(products), '/campsites': directory.jsonLd }
     const agentPage = (path: string, meta: PageMeta) => ({ path, meta, markdownPath: markdownPathFor(path) })
     const agentProducts = (base: string) =>
       products
@@ -214,7 +230,7 @@ async function renderSite(root: string) {
       const markdown: string = listed.length
         ? agent.catalogMarkdown(agentPage(path, meta), catalogHeadings[path], meta.description, listed)
         : agent.pageMarkdown(agentPage(path, meta), prerender.renderPage(path, catalog, { chrome: false }))
-      pages.push({ path, meta, html: fullPage(path), markdown })
+      pages.push({ path, meta, html: fullPage(path), markdown, ...(path === '/campsites' ? { dataChanged: directory.dataChanged } : {}) })
     }
     for (const product of products) {
       pages.push({
@@ -225,10 +241,26 @@ async function renderSite(root: string) {
       })
     }
 
+    for (const page of campsitePages) {
+      pages.push({
+        path: page.path,
+        meta: page.meta,
+        html: fullPage(page.path),
+        markdown: agent.pageMarkdown(agentPage(page.path, page.meta), prerender.renderPage(page.path, catalog, { chrome: false })),
+        dataChanged: page.dataChanged,
+      })
+    }
+
     const llmsTxt: string = agent.llmsTxt({
       pages: pages.map((page) => agentPage(page.path, page.meta)),
       packages: agentProducts('/catalog/camping-packages'),
       gear: agentProducts('/catalog/build-your-own'),
+      campsites: campsitePages
+        .filter((page) => !page.path.startsWith('/campsites/province/'))
+        .map((page) => ({ ...agentPage(page.path, page.meta), name: page.name, summary: page.summary })),
+      provinces: campsitePages
+        .filter((page) => page.path.startsWith('/campsites/province/'))
+        .map((page) => ({ ...agentPage(page.path, page.meta), name: page.name, summary: page.summary })),
     })
     return { pages, notFoundHtml: fullPage(prerender.NOT_FOUND_PATH) as string, llmsTxt }
   } finally {
@@ -240,14 +272,25 @@ async function renderSite(root: string) {
 function sitemapXml(root: string, pages: BuiltPage[]): string {
   const sources = (path: string) =>
     PAGE_SOURCES[path] ??
-    (path.startsWith('/catalog/camping-packages/') ? PACKAGE_PAGE_SOURCES : path.startsWith('/catalog/build-your-own/') ? GEAR_PAGE_SOURCES : null)
+    (path.startsWith('/catalog/camping-packages/')
+      ? PACKAGE_PAGE_SOURCES
+      : path.startsWith('/catalog/build-your-own/')
+        ? GEAR_PAGE_SOURCES
+        : path.startsWith('/campsites/province/')
+          ? PROVINCE_PAGE_SOURCES
+          : path.startsWith('/campsites/')
+            ? CAMPSITE_PAGE_SOURCES
+            : null)
   const urls = pages
     .filter((page) => !page.meta.robots?.includes('noindex'))
     .map((page) => {
       const files = sources(page.path)
       if (!files) throw new Error(`prerender-route-meta: no PAGE_SOURCES entry for ${page.path}`)
       const loc = SITE_URL + (page.path === '/' ? '/' : page.path)
-      return `  <url>\n    <loc>${escapeHtml(loc)}</loc>\n    <lastmod>${lastChanged(root, files)}</lastmod>\n  </url>`
+      // The later of the page's code and its data (a campsite's details or reviews).
+      const codeChanged = lastChanged(root, files)
+      const lastmod = page.dataChanged && page.dataChanged > codeChanged ? page.dataChanged : codeChanged
+      return `  <url>\n    <loc>${escapeHtml(loc)}</loc>\n    <lastmod>${lastmod}</lastmod>\n  </url>`
     })
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join('\n')}\n</urlset>\n`
 }
@@ -362,7 +405,10 @@ function prerenderRouteMeta(): Plugin {
         const appOnly = CLIENT_ONLY_PATHS.map((path) => `${path}    /index.html   200`)
         writeFileSync(redirects, `${[...netlifyRules, ...appOnly].join('\n')}\n${readFileSync(redirects, 'utf8')}`)
       }
-      console.log(`prerender-route-meta: ${pages.length} pages, ${pages.length - PRERENDERED_PAGES.length} of them products`)
+      const campsiteCount = pages.filter((page) => page.path.startsWith('/campsites/')).length
+      console.log(
+        `prerender-route-meta: ${pages.length} pages, ${pages.length - PRERENDERED_PAGES.length - campsiteCount} of them products, ${campsiteCount} campsite and province pages`,
+      )
     },
   }
 }

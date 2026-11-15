@@ -282,6 +282,14 @@ const SECTIONS: LegalSection[] = [
           <li>We might suspend access for anyone who breaks these rules.</li>
         </LegalList>
         <p>
+          <Strong>Campsite directory and reviews.</Strong> Our Find A Campsite directory is free information. We check
+          each campsite&rsquo;s details, but fees and rules can change, so confirm them with the campsite before you go.
+          We do not take campsite bookings or payments. When you review a campsite, write about your own visit, be
+          honest and respectful, and leave out phone numbers and other personal details. Only add photos you took,
+          and no photos where people can be recognised without their consent. We might hide or remove a
+          review that breaks these rules.
+        </p>
+        <p>
           The logos, text, images and design on the site belong to GearBnB or its licensors. Use them only to book and
           manage your rental.
         </p>

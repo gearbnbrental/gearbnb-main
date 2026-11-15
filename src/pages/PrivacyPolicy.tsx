@@ -116,6 +116,8 @@ const SECTIONS: LegalSection[] = [
           <li><Strong>Verification documents.</Strong> Two government-issued IDs, a short identification video of you holding one ID and a proof of billing. The video shows your face and voice. In the video you give a thumbs-up and state your full name.</li>
           <li><Strong>Payment records.</Strong> We do not use a payment provider or online checkout. We give you our bank and GCash details and you send your payment directly to us. We record each payment by hand. The record holds the amount, date, method and reference number.</li>
           <li><Strong>Event quote details.</Strong> Your event type, date, location, number of guests, gear needs and budget.</li>
+          <li><Strong>Campsite reviews.</Strong> If you review a campsite in our Find A Campsite directory, we keep your rating, review text, visit date, any photos you add and your account. Everyone can see your rating, review, photos, visit date and your first name with your last initial. Before a photo uploads, your browser removes the location and camera details stored inside it. We never show your email or full name. You can edit or delete your review on the campsite&rsquo;s page at any time. If you report a review, we keep your report and the reason.</li>
+          <li><Strong>Your location on Find A Campsite.</Strong> If you enter your town or use your current location to see campsites near you, it stays in your browser and is not sent to GearBnB. A town you type is sent to Photon, a place search service run by Komoot, to find it on the map. You can clear it at any time.</li>
           <li><Strong>Messages.</Strong> Emails and messages you send us. If you message us on Messenger, Facebook, Instagram or TikTok we receive your messages and the profile name the platform shows us.</li>
         </LegalList>
         <p><Strong>Data we create</Strong></p>
@@ -541,7 +543,7 @@ const SECTIONS: LegalSection[] = [
     body: (
       <p>
         Our site links to services from other companies. These include Google Sign-In, Facebook Login, Google Maps for our pickup
-        location and Messenger, Facebook, Instagram and TikTok for messages. GCash, your bank, Lalamove and Grab also handle data
+        location, OpenFreeMap for the campsite maps, Photon by Komoot to find the town you type, campsites&rsquo; own pages and Messenger, Facebook, Instagram and TikTok for messages. GCash, your bank, Lalamove and Grab also handle data
         when you use their services. If you accept cookies, Meta Pixel on our site sends visit data to Meta, and our booking system sends booking messages to Meta. See{' '}
         <SectionLink id="cookies">section&nbsp;12</SectionLink>. Each company controls its own data and follows its own
         privacy policy. Read those policies before you use the services.

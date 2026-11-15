@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import appSource from './App.tsx?raw';
 import { CLIENT_ONLY_PATHS, PRERENDERED_PAGES } from './config/pageMeta';
+import { CAMPSITES_PATH } from './utils/campsites';
 import { BUILD_YOUR_OWN_PATH, PACKAGES_PATH } from './utils/productSlug';
 
 /**
@@ -23,6 +24,13 @@ describe('every App.tsx route is answered by the server', () => {
       const base = path.replace('/:slug?', '');
       expect([PACKAGES_PATH, BUILD_YOUR_OWN_PATH]).toContain(base);
       expect(answered(base)).toBe(true);
+      return;
+    }
+    if (path.startsWith(`${CAMPSITES_PATH}/`)) {
+      // The directory is pre-built, and so is each campsite and province page that exists at
+      // build time; one published since then still opens in the app from the 404 page.
+      expect(['/campsites/:slug', '/campsites/province/:province']).toContain(path);
+      expect(answered(CAMPSITES_PATH)).toBe(true);
       return;
     }
     expect(answered(path)).toBe(true);

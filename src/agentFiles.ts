@@ -88,10 +88,15 @@ export function llmsTxt({
   pages,
   packages,
   gear,
+  campsites = [],
+  provinces = [],
 }: {
   pages: AgentPage[];
   packages: AgentProduct[];
   gear: AgentProduct[];
+  /** Find A Campsite: one line of facts per campsite, and the province pages. */
+  campsites?: AgentProduct[];
+  provinces?: AgentProduct[];
 }): string {
   const link = (title: string, page: AgentPage) => `- [${title}](${SITE_URL}${page.markdownPath}): ${page.meta.description}`;
   const byPath = new Map(pages.map((page) => [page.path, page]));
@@ -128,10 +133,22 @@ export function llmsTxt({
       ['/catalog/camping-packages', 'Camping packages'],
       ['/catalog/build-your-own', 'Build your own (gear by the piece)'],
       ['/plan-an-event', 'Plan an event'],
+      ['/campsites', 'Find A Campsite (campsite directory)'],
       ['/about-us', 'About GearBnB'],
     ]),
     ...(packages.length ? ['## Camping packages', '', ...productLines(packages), ''] : []),
     ...(gear.length ? ['## Gear by the piece', '', ...productLines(gear), ''] : []),
+    ...(campsites.length
+      ? [
+          '## Campsites',
+          '',
+          'Campsites in the Philippines from the GearBnB Find A Campsite directory. GearBnB checks each one\'s fees, cell signal, amenities and rules (each page shows when); campers review them. Book campsites directly with the campsite; rent the gear from GearBnB.',
+          '',
+          ...productLines(campsites),
+          ...productLines(provinces),
+          '',
+        ]
+      : []),
     ...section('Policies', [
       ['/terms', 'Rental terms and security deposit'],
       ['/terms-of-service', 'Terms of service'],

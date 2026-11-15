@@ -214,6 +214,11 @@ export const PAGE_META = {
       'Discover GearBnB, your camping gear rental in Las Piñas, Metro Manila. Learn about our mission and find reliable gear for your next outdoor adventure.',
     jsonLd: ABOUT_US_JSON_LD,
   },
+  campsites: {
+    title: 'Find a Campsite in the Philippines: Fees, Signal & Amenities | GearBnB',
+    description:
+      'Find campsites near Metro Manila and across the Philippines. Compare entrance fees, cell signal, restrooms and pet rules, read reviews, then rent your gear.',
+  },
   privacy: {
     title: 'Privacy Policy | GearBnB',
     description: 'How GearBnB collects, uses, stores, shares and protects your personal data.',
@@ -247,6 +252,7 @@ export const PRERENDERED_PAGES: { path: string; meta: PageMeta }[] = [
   { path: '/catalog/build-your-own', meta: PAGE_META.buildYourOwn },
   { path: '/plan-an-event', meta: PAGE_META.events },
   { path: '/about-us', meta: PAGE_META.about },
+  { path: '/campsites', meta: PAGE_META.campsites },
   { path: '/privacy-policy', meta: PAGE_META.privacy },
   { path: '/terms', meta: PAGE_META.rentalTerms },
   { path: '/terms-of-service', meta: PAGE_META.terms },

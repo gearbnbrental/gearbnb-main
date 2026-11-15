@@ -23,6 +23,8 @@ import { RentalProvider } from './context/RentalContext';
 import { fetchBookableGearCatalog } from './data/rmsGearCatalog';
 import { applyPackageSelectability, fetchCatalogItems, fetchCatalogPackages } from './data/supabaseCatalog';
 import AboutUs from './pages/AboutUs';
+import CampsiteDetail from './pages/CampsiteDetail';
+import Campsites from './pages/Campsites';
 import CatalogChooser from './pages/CatalogChooser';
 import DataDeletion from './pages/DataDeletion';
 import EventPlan from './pages/EventPlan';
@@ -41,6 +43,20 @@ import { sizeCapacityToShow, withDefaultVariant } from './utils/gearVariants';
 import type { BookableGearKind, IndividualItem, PackageKit } from './types/gearbnb';
 import { orderPackageKits } from './utils/gearOrder';
 import { fetchPackageCatalogFromRms } from './utils/rmsApi';
+import { CampsiteDataContext } from './context/CampsiteData';
+import { USING_CAMPSITE_SAMPLES, fetchCampsiteDetail, fetchCampsiteList } from './data/campsites';
+import { campsitePageMeta, campsitesListJsonLd, provincePageMeta } from './config/campsiteMeta';
+import type { Campsite } from './types/campsite';
+import {
+  CAMPSITES_PATH,
+  CAMPSITE_PROVINCE_PATH,
+  campsiteHighlights,
+  campsitePath,
+  campsiteSummarySentence,
+  provinceGroups,
+  provinceIntro,
+  provincePath,
+} from './utils/campsites';
 
 /** The pages that get full HTML. Must match PRERENDERED_PAGES in config/pageMeta.ts. */
 const PAGES: Record<string, ComponentType> = {
@@ -50,6 +66,7 @@ const PAGES: Record<string, ComponentType> = {
   '/catalog/build-your-own': PathBCatalog,
   '/plan-an-event': EventPlan,
   '/about-us': AboutUs,
+  '/campsites': Campsites,
   '/privacy-policy': PrivacyPolicy,
   '/terms': Terms,
   '/terms-of-service': TermsOfService,
@@ -64,6 +81,8 @@ function routeFor(path: string): { pattern: string; Page: ComponentType } {
   if (PAGES[path]) return { pattern: path, Page: PAGES[path] };
   if (path.startsWith(`${PACKAGES_PATH}/`)) return { pattern: `${PACKAGES_PATH}/:slug`, Page: PathACatalog };
   if (path.startsWith(`${BUILD_YOUR_OWN_PATH}/`)) return { pattern: `${BUILD_YOUR_OWN_PATH}/:slug`, Page: PathBCatalog };
+  if (path.startsWith(`${CAMPSITE_PROVINCE_PATH}/`)) return { pattern: `${CAMPSITE_PROVINCE_PATH}/:province`, Page: Campsites };
+  if (path.startsWith(`${CAMPSITES_PATH}/`)) return { pattern: `${CAMPSITES_PATH}/:slug`, Page: CampsiteDetail };
   if (path === NOT_FOUND_PATH) return { pattern: '*', Page: NotFound };
   throw new Error(`prerender: no page registered for ${path}`);
 }
@@ -72,6 +91,8 @@ export interface PrerenderCatalog {
   kits: PackageKit[];
   items: IndividualItem[];
   gearKinds: BookableGearKind[];
+  /** Every published Find A Campsite campsite, with its photos and reviews. */
+  campsites: Campsite[];
   /** Why a part of the catalog is missing, for the build log. */
   warnings: string[];
 }
@@ -116,7 +137,35 @@ export async function fetchPrerenderCatalog(): Promise<PrerenderCatalog> {
     warnings.push(`gear catalog unavailable, gear cards left out (${String(error)})`);
   }
 
-  return { kits, items, gearKinds, warnings };
+  const campsites = await fetchPrerenderCampsites(warnings);
+
+  return { kits, items, gearKinds, campsites, warnings };
+}
+
+/** Every published campsite with its full details, a few requests at a time. A campsite that
+ *  fails is left out (with a warning); if the list itself fails, the directory is built empty. */
+async function fetchPrerenderCampsites(warnings: string[]): Promise<Campsite[]> {
+  if (USING_CAMPSITE_SAMPLES) warnings.push('VITE_CAMPSITE_SAMPLES=1: built with SAMPLE campsites. Never upload this build.');
+  let list;
+  try {
+    list = await withTimeout(fetchCampsiteList(), 'campsite list');
+  } catch (error) {
+    warnings.push(`campsites unavailable, the directory is built without campsites (${String(error)})`);
+    return [];
+  }
+  const campsites: Campsite[] = [];
+  for (let start = 0; start < list.length; start += 4) {
+    const batch = await Promise.all(
+      list.slice(start, start + 4).map((summary) =>
+        withTimeout(fetchCampsiteDetail(summary.slug), `campsite ${summary.slug}`).catch((error: unknown) => {
+          warnings.push(`campsite ${summary.slug} left out (${String(error)})`);
+          return null;
+        }),
+      ),
+    );
+    campsites.push(...batch.filter((campsite): campsite is Campsite => campsite !== null));
+  }
+  return campsites;
 }
 
 function catalogValue(catalog: PrerenderCatalog): CatalogContextValue {
@@ -142,7 +191,11 @@ function Providers({ catalog, children }: { catalog: PrerenderCatalog; children:
   return (
     <AuthProvider>
       <CatalogContext.Provider value={catalogValue(catalog)}>
-        <RentalProvider>{children}</RentalProvider>
+        <CampsiteDataContext.Provider
+          value={{ list: catalog.campsites, details: Object.fromEntries(catalog.campsites.map((campsite) => [campsite.slug, campsite])) }}
+        >
+          <RentalProvider>{children}</RentalProvider>
+        </CampsiteDataContext.Provider>
       </CatalogContext.Provider>
     </AuthProvider>
   );
@@ -255,5 +308,53 @@ export function catalogPagesJsonLd(products: ProductPage[]): Record<string, obje
   return {
     [PACKAGES_PATH]: catalogJsonLd(PACKAGES_PATH, 'Camping Packages for Rent', list(PACKAGES_PATH)),
     [BUILD_YOUR_OWN_PATH]: catalogJsonLd(BUILD_YOUR_OWN_PATH, 'Camping Gear for Rent by the Piece', list(BUILD_YOUR_OWN_PATH)),
+  };
+}
+
+export interface CampsitePage {
+  path: string;
+  meta: PageMeta;
+  name: string;
+  /** One line for llms.txt. */
+  summary: string;
+  /** YYYY-MM-DD (Manila) the campsite or its reviews last changed, for the sitemap. */
+  dataChanged: string;
+}
+
+const manilaDate = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+const latest = (dates: string[]) => dates.reduce((max, date) => (date > max ? date : max), '');
+
+/** One page per campsite and one per province with enough campsites, in that order. */
+export function campsitePages(catalog: PrerenderCatalog): CampsitePage[] {
+  const provinces = provinceGroups(catalog.campsites, { withPagesOnly: true });
+  const withPage = new Set(provinces.map((group) => group.province));
+  const campsitePagesList = [...catalog.campsites]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((campsite) => {
+      const highlights = campsiteHighlights(campsite);
+      const rating = campsite.rating.count && campsite.rating.average !== null ? ` Rated ${campsite.rating.average}/5 by ${campsite.rating.count} campers.` : '';
+      return {
+        path: campsitePath(campsite),
+        meta: campsitePageMeta(campsite, withPage.has(campsite.province.trim())),
+        name: campsite.name,
+        summary: `${campsiteSummarySentence(campsite)}${highlights.length ? ` Has: ${highlights.join(', ')}.` : ''}${rating}`,
+        dataChanged: manilaDate(campsite.updatedAt),
+      };
+    });
+  const provincePagesList = provinces.map((group) => ({
+    path: provincePath(group.province),
+    meta: provincePageMeta(group),
+    name: `Camping sites in ${group.province}`,
+    summary: provinceIntro(group),
+    dataChanged: latest(group.campsites.map((campsite) => manilaDate(campsite.updatedAt))),
+  }));
+  return [...campsitePagesList, ...provincePagesList];
+}
+
+/** The directory's CollectionPage + ItemList schema, and the date its list last changed. */
+export function campsiteDirectory(catalog: PrerenderCatalog) {
+  return {
+    jsonLd: campsitesListJsonLd(catalog.campsites),
+    dataChanged: latest(catalog.campsites.map((campsite) => manilaDate(campsite.updatedAt))),
   };
 }
