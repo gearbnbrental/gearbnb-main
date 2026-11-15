@@ -36,7 +36,7 @@ export const HOME_FAQ: HomeFaqEntry[] = [
     question: 'Do you sell camping gear?',
     answer:
       'Yes, we have selected tents for sale. Send us a message to ask which tents are available, their prices and other details. We also offer camping gear for rent, including tents, sleeping gear, cooking equipment and complete camping packages for every type of trip.',
-    link: { href: MESSENGER_URL, label: 'Message Us About Tents for Sale' },
+    link: { href: '/catalog/camping-gear-sale', label: 'See Our Camping Gear for Sale' },
   },
   {
     question: 'Can you help me find a campsite?',

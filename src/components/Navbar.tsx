@@ -241,7 +241,7 @@ export default function Navbar() {
                   Build Your Own
                 </Link>
                 <Link
-                  to="/shop"
+                  to="/catalog/camping-gear-sale"
                   role="menuitem"
                   onClick={() => setCatalogMenuOpen(false)}
                   className="block px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface-strong"
@@ -415,7 +415,7 @@ export default function Navbar() {
                     Build Your Own
                   </Link>
                   <Link
-                    to="/shop"
+                    to="/catalog/camping-gear-sale"
                     className="rounded-lg px-3 py-2 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-strong hover:text-ink"
                   >
                     Camping Gear for Sale

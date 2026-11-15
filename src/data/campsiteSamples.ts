@@ -51,6 +51,7 @@ function sample(overrides: Partial<Campsite> & Pick<Campsite, 'slug' | 'name'>):
     details: NO_DETAILS,
     rating: { average: null, count: 0 },
     detailsCheckedAt: '2026-11-01',
+    gearbnbOffer: null,
     updatedAt: '2026-11-01T08:00:00.000Z',
     description: LOREM,
     barangay: null,
@@ -63,6 +64,7 @@ function sample(overrides: Partial<Campsite> & Pick<Campsite, 'slug' | 'name'>):
     bookingNotes: null,
     feeNotes: null,
     operatingHours: null,
+    gearbnbOfferTerms: null,
     photos: [],
     ratingBreakdown: { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 },
     reviews: [],
@@ -73,6 +75,8 @@ function sample(overrides: Partial<Campsite> & Pick<Campsite, 'slug' | 'name'>):
 export const SAMPLE_CAMPSITES: Campsite[] = [
   sample({
     slug: 'sample-riverside-campsite-tanay-rizal',
+    gearbnbOffer: '10% off the entrance fee',
+    gearbnbOfferTerms: 'Weekdays only. One code per group.',
     name: 'Sample Riverside Campsite',
     lat: 14.53,
     lng: 121.36,

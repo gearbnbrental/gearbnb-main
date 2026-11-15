@@ -43,7 +43,11 @@ import { cleanGearName } from './utils/gearName';
 import { sizeCapacityToShow, withDefaultVariant } from './utils/gearVariants';
 import type { BookableGearKind, IndividualItem, PackageKit } from './types/gearbnb';
 import { orderPackageKits } from './utils/gearOrder';
-import { fetchPackageCatalogFromRms } from './utils/rmsApi';
+import { fetchPackageCatalogFromRms, fetchShopFromRms } from './utils/rmsApi';
+import { ShopDataContext } from './context/ShopData';
+import ShopItemDialog from './components/shop/ShopItemDialog';
+import { shopItemPageMeta, shopItemSummary, shopListJsonLd } from './config/shopMeta';
+import { SHOP_PATH, normalizeShopItems, shopItemPath, type ShopItem } from './utils/shop';
 import { CampsiteDataContext } from './context/CampsiteData';
 import { USING_CAMPSITE_SAMPLES, fetchCampsiteDetail, fetchCampsiteList } from './data/campsites';
 import { CAMPSITES_COMING_SOON } from './config/features';
@@ -67,7 +71,7 @@ const PAGES: Record<string, ComponentType> = {
   '/catalog': CatalogChooser,
   '/catalog/camping-packages': PathACatalog,
   '/catalog/build-your-own': PathBCatalog,
-  '/shop': Shop,
+  '/catalog/camping-gear-sale': Shop,
   '/plan-an-event': EventPlan,
   '/about-us': AboutUs,
   '/campsites': CAMPSITES_COMING_SOON ? CampsitesComingSoon : Campsites,
@@ -85,6 +89,7 @@ function routeFor(path: string): { pattern: string; Page: ComponentType } {
   if (PAGES[path]) return { pattern: path, Page: PAGES[path] };
   if (path.startsWith(`${PACKAGES_PATH}/`)) return { pattern: `${PACKAGES_PATH}/:slug`, Page: PathACatalog };
   if (path.startsWith(`${BUILD_YOUR_OWN_PATH}/`)) return { pattern: `${BUILD_YOUR_OWN_PATH}/:slug`, Page: PathBCatalog };
+  if (path.startsWith(`${SHOP_PATH}/`)) return { pattern: `${SHOP_PATH}/:slug`, Page: Shop };
   if (path.startsWith(`${CAMPSITE_PROVINCE_PATH}/`)) return { pattern: `${CAMPSITE_PROVINCE_PATH}/:province`, Page: Campsites };
   if (path.startsWith(`${CAMPSITES_PATH}/`)) return { pattern: `${CAMPSITES_PATH}/:slug`, Page: CampsiteDetail };
   if (path === NOT_FOUND_PATH) return { pattern: '*', Page: NotFound };
@@ -97,6 +102,8 @@ export interface PrerenderCatalog {
   gearKinds: BookableGearKind[];
   /** Every published Find A Campsite campsite, with its photos and reviews. */
   campsites: Campsite[];
+  /** Every item for sale in the shop, exactly as GET /api/customer/shop lists it. */
+  shopItems: ShopItem[];
   /** Why a part of the catalog is missing, for the build log. */
   warnings: string[];
 }
@@ -143,7 +150,14 @@ export async function fetchPrerenderCatalog(): Promise<PrerenderCatalog> {
 
   const campsites = await fetchPrerenderCampsites(warnings);
 
-  return { kits, items, gearKinds, campsites, warnings };
+  let shopItems: ShopItem[] = [];
+  try {
+    shopItems = normalizeShopItems(await withTimeout(fetchShopFromRms(), 'shop'));
+  } catch (error) {
+    warnings.push(`shop unavailable, item pages left out (${String(error)})`);
+  }
+
+  return { kits, items, gearKinds, campsites, shopItems, warnings };
 }
 
 /** Every published campsite with its full details, a few requests at a time. A campsite that
@@ -200,7 +214,9 @@ function Providers({ catalog, children }: { catalog: PrerenderCatalog; children:
         <CampsiteDataContext.Provider
           value={{ list: catalog.campsites, details: Object.fromEntries(catalog.campsites.map((campsite) => [campsite.slug, campsite])) }}
         >
-          <RentalProvider>{children}</RentalProvider>
+          <ShopDataContext.Provider value={catalog.shopItems}>
+            <RentalProvider>{children}</RentalProvider>
+          </ShopDataContext.Provider>
         </CampsiteDataContext.Provider>
       </CatalogContext.Provider>
     </AuthProvider>
@@ -305,15 +321,27 @@ export function productPages(catalog: PrerenderCatalog): ProductPage[] {
       ),
     });
   }
+  // One page per item for sale, each with Product + Offer schema (see config/shopMeta.ts).
+  for (const item of catalog.shopItems) {
+    add({
+      path: shopItemPath(item),
+      meta: shopItemPageMeta(item),
+      name: item.name,
+      image: item.images[0] ?? null,
+      summary: [shopItemSummary(item), item.category && `${item.category}.`].filter(Boolean).join(' '),
+      render: details(<ShopItemDialog item={item} onClose={noop} headingLevel="h1" />),
+    });
+  }
   return pages;
 }
 
-/** The two catalog pages' CollectionPage + ItemList schema, linking each product page. */
-export function catalogPagesJsonLd(products: ProductPage[]): Record<string, object> {
+/** The catalog pages' and the shop's CollectionPage + ItemList schema, linking each product or item page. */
+export function catalogPagesJsonLd(products: ProductPage[], catalog: PrerenderCatalog): Record<string, object> {
   const list = (base: string) => products.filter((product) => product.path.startsWith(`${base}/`));
   return {
     [PACKAGES_PATH]: catalogJsonLd(PACKAGES_PATH, 'Camping Packages for Rent', list(PACKAGES_PATH)),
     [BUILD_YOUR_OWN_PATH]: catalogJsonLd(BUILD_YOUR_OWN_PATH, 'Camping Gear for Rent by the Piece', list(BUILD_YOUR_OWN_PATH)),
+    [SHOP_PATH]: shopListJsonLd(catalog.shopItems),
   };
 }
 

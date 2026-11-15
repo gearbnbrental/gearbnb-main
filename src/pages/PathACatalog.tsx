@@ -1240,7 +1240,7 @@ export default function PathACatalog() {
         <BackLink to="/catalog" label="Back to Browse Gear" />
         <div className="flex flex-col gap-1">
           {/* With a package's details open, its name is the page's one h1. */}
-          <PageHeading className="font-serif text-lg font-semibold text-ink sm:text-xl">Choose a Camping Package</PageHeading>
+          <PageHeading className="font-serif text-2xl font-bold text-ink sm:text-3xl">Choose a Camping Package</PageHeading>
           <p className="text-sm text-ink-muted">
             Ready-made camping kits with tent, sleeping gear and seating, bundled and priced as one unit. Want to pick
             each piece?{' '}

@@ -6,6 +6,8 @@ import CampsiteCard from '../components/campsites/CampsiteCard';
 import CampsiteGallery from '../components/campsites/CampsiteGallery';
 import CampsiteMapSlot from '../components/campsites/CampsiteMapSlot';
 import CampsiteReviews from '../components/campsites/CampsiteReviews';
+import CampsiteSignInNudge from '../components/campsites/CampsiteSignInNudge';
+import ContactCampsiteDialog from '../components/campsites/ContactCampsiteDialog';
 import FaqAccordion from '../components/FaqAccordion';
 import { ArrowRightIcon, MapPinIcon, PhoneIcon } from '../components/icons';
 import { campsitePageMeta } from '../config/campsiteMeta';
@@ -15,6 +17,7 @@ import { useCampsite, useCampsiteList } from '../context/CampsiteData';
 import { useRental } from '../context/RentalContext';
 import { usePageMeta } from '../hooks/usePageMeta';
 import type { Campsite } from '../types/campsite';
+import { contactChannels, type ContactChannel } from '../utils/campsiteContact';
 import {
   CAMPSITES_PATH,
   DETAIL_LABELS,
@@ -159,6 +162,9 @@ export default function CampsiteDetail() {
   const [amenitiesOpen, setAmenitiesOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const closeAmenities = useCallback(() => setAmenitiesOpen(false), []);
+  // The contact button the camper tapped: opens the sign-in / lead code pop-up.
+  const [contact, setContact] = useState<ContactChannel | null>(null);
+  const closeContact = useCallback(() => setContact(null), []);
 
   const provinceHasPage = useMemo(
     () => !!campsite && provinceGroups(campsites, { withPagesOnly: true }).some((group) => group.province === campsite.province.trim()),
@@ -249,6 +255,8 @@ export default function CampsiteDetail() {
 
   return (
     <div className="flex min-h-screen flex-col pb-24 lg:pb-0">
+      {contact && <ContactCampsiteDialog campsite={campsite} contact={contact} onClose={closeContact} />}
+      <CampsiteSignInNudge slug={campsite.slug} />
       <article className="mx-auto flex w-full max-w-6xl flex-col px-5 sm:px-6 sm:pt-6">
         {/* Phones: the photos first (full width), then the title. Wider: the title above the photo grid. */}
         <div className="order-2 flex flex-col gap-2 pt-5 sm:order-1 sm:pt-0">
@@ -411,22 +419,28 @@ export default function CampsiteDetail() {
                 <h2 className="font-semibold text-ink">How to book this campsite</h2>
                 <p className="text-sm text-ink">{campsite.bookingMethod ? BOOKING_LABEL[campsite.bookingMethod] : 'Contact the campsite to book.'}</p>
                 {campsite.bookingNotes && <p className="text-sm text-ink-muted">{campsite.bookingNotes}</p>}
+                {/* The campsite's own offer for campers who come from GearBnB: subtle, under the
+                    booking details, and only when the campsite has agreed to one. */}
+                {campsite.gearbnbOffer && (
+                  <p className="flex items-start gap-2 rounded-lg bg-brand-forest/5 px-3 py-2 text-sm text-ink">
+                    <span aria-hidden="true">🎟️</span>
+                    <span>
+                      <span className="font-semibold">GearBnB offer:</span> {campsite.gearbnbOffer}. Mention your GearBnB code when you book.
+                    </span>
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-2">
-                  {campsite.facebookUrl && (
-                    <a href={campsite.facebookUrl} target="_blank" rel="nofollow noopener noreferrer" className="rounded-lg border border-line px-3 py-2 text-sm font-semibold text-ink hover:bg-surface-strong">
-                      Facebook page
-                    </a>
-                  )}
-                  {campsite.phone && (
-                    <a href={`tel:${campsite.phone.replace(/[^\d+]/g, '')}`} className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm font-semibold text-ink hover:bg-surface-strong">
-                      <PhoneIcon className="h-4 w-4" /> Call
-                    </a>
-                  )}
-                  {campsite.websiteUrl && (
-                    <a href={campsite.websiteUrl} target="_blank" rel="nofollow noopener noreferrer" className="rounded-lg border border-line px-3 py-2 text-sm font-semibold text-ink hover:bg-surface-strong">
-                      Website
-                    </a>
-                  )}
+                  {contactChannels(campsite).map((channel) => (
+                    <button
+                      key={channel.channel}
+                      type="button"
+                      onClick={() => setContact(channel)}
+                      className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm font-semibold text-ink hover:bg-surface-strong"
+                    >
+                      {channel.channel === 'PHONE' && <PhoneIcon className="h-4 w-4" />}
+                      {channel.label}
+                    </button>
+                  ))}
                 </div>
                 <p className="text-xs text-ink-muted">GearBnB doesn&rsquo;t take campsite bookings or payments. Book and pay the campsite directly.</p>
               </div>

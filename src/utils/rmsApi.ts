@@ -5,6 +5,8 @@ import type {
   Campsite,
   CampsiteReview,
   CampsiteReviewInput,
+  CampsiteLeadInput,
+  CampsiteLeadResult,
   CampsiteSummary,
   MyCampsiteReview,
   ReviewReportReason,
@@ -939,6 +941,16 @@ export function fetchPackageCatalogFromRms() {
 /** Every published campsite in the Find A Campsite directory (public, no login). */
 export function fetchCampsitesFromRms() {
   return withReadRetry(() => rmsFetch<{ campsites: CampsiteSummary[] }>('/api/customer/campsites', { requireAuth: false }));
+}
+
+/** Records one tap on a campsite's contact button and returns its lead code. Public, nothing about
+ *  the camper is sent. Never retried: a retry could send the campsite a second lead email. */
+export function recordCampsiteLeadOnRms(slug: string, input: CampsiteLeadInput) {
+  return rmsFetch<CampsiteLeadResult>(`/api/customer/campsites/${encodeURIComponent(slug)}/leads`, {
+    method: 'POST',
+    body: input,
+    requireAuth: false,
+  });
 }
 
 /** One published campsite with its photos and reviews. A 404 (unknown or unpublished) is final. */

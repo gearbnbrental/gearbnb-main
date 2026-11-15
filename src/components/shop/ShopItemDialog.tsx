@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CONTACT_PHONE_DISPLAY, CONTACT_PHONE_E164, MESSENGER_URL } from '../../config/social';
 import { useProductViewOpen } from '../../utils/productView';
-import { brandAndModelLine, type ShopItem } from '../../utils/shop';
+import { availableText, brandAndModelLine, type ShopItem } from '../../utils/shop';
 import GalleryNav, { useSwipe } from '../GalleryNav';
 import { GearPlaceholderIcon } from '../icons';
 import ImageLightbox, { type LightboxImage } from '../ImageLightbox';
@@ -20,7 +20,16 @@ function XMarkIcon({ className }: { className?: string }) {
  * price. Buying happens over Messenger for now ("Interested? Message us"); a later stage swaps that
  * for a real checkout. Same popup layout as the rental gear details (GearDetailsDialog).
  */
-export default function ShopItemDialog({ item, onClose }: { item: ShopItem; onClose: () => void }) {
+export default function ShopItemDialog({
+  item,
+  onClose,
+  headingLevel: Heading = 'h2',
+}: {
+  item: ShopItem;
+  onClose: () => void;
+  /** h1 when this item is the page's main subject (its own address is open). */
+  headingLevel?: 'h1' | 'h2';
+}) {
   useProductViewOpen();
   const gallery: LightboxImage[] = item.images.map((src, index) => ({ src, alt: `${item.name}, photo ${index + 1}` }));
   const [activeIndex, setActiveIndex] = useState(0);
@@ -32,6 +41,13 @@ export default function ShopItemDialog({ item, onClose }: { item: ShopItem; onCl
   );
   const active = gallery[activeIndex];
   const showPhoto = active && !failed.has(active.src);
+  const thumbsRef = useRef<HTMLDivElement>(null);
+
+  // Keeps the current photo's thumbnail in view when the arrows or a swipe move past the edge.
+  useEffect(() => {
+    const thumb = thumbsRef.current?.children[activeIndex] as HTMLElement | undefined;
+    thumb?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+  }, [activeIndex]);
 
   useEffect(() => {
     function handleKey(event: KeyboardEvent) {
@@ -62,15 +78,19 @@ export default function ShopItemDialog({ item, onClose }: { item: ShopItem; onCl
         aria-modal="true"
         aria-labelledby="shop-item-title"
       >
-        <div className="relative">
-          <div {...swipe} className="relative flex max-h-[65vh] w-full items-center justify-center overflow-hidden bg-surface-strong">
+        {/* shrink-0 here and on the thumbnail strip: in this scrolling column they would otherwise be
+            squeezed, and the strip (overflow-x-auto) squeezed to nothing. */}
+        <div className="relative shrink-0">
+          {/* White, like most product photos' own backgrounds, so a photo of any shape sits cleanly.
+              55vh leaves room for the thumbnail strip below it on a phone. */}
+          <div {...swipe} className={`relative flex max-h-[55vh] w-full items-center justify-center overflow-hidden ${showPhoto ? 'bg-white' : 'bg-surface-strong'}`}>
             {showPhoto ? (
               <button type="button" onClick={() => setLightboxOpen(true)} aria-label={`View larger photo of ${item.name}`} className="w-full">
                 <img
                   src={active.src}
                   alt={active.alt}
                   onError={() => setFailed((prev) => new Set(prev).add(active.src))}
-                  className="mx-auto max-h-[65vh] w-full object-contain"
+                  className="mx-auto max-h-[55vh] w-full object-contain"
                 />
               </button>
             ) : (
@@ -91,20 +111,21 @@ export default function ShopItemDialog({ item, onClose }: { item: ShopItem; onCl
           </button>
         </div>
 
+        {/* Every photo as a thumbnail: tap one to jump straight to it. */}
         {gallery.length > 1 && (
-          <div className="flex gap-2 overflow-x-auto px-4 pt-3">
+          <div ref={thumbsRef} role="group" aria-label="Photos" className="flex shrink-0 gap-2 overflow-x-auto px-4 pb-1 pt-3 sm:px-6">
             {gallery.map((photo, index) => (
               <button
                 key={photo.src}
                 type="button"
                 onClick={() => setActiveIndex(index)}
-                aria-label={`Photo ${index + 1} of ${gallery.length}`}
+                aria-label={`Show photo ${index + 1} of ${gallery.length}`}
                 aria-current={activeIndex === index}
-                className={`h-14 w-14 shrink-0 overflow-hidden rounded-lg border-2 bg-surface-strong transition-colors ${
-                  activeIndex === index ? 'border-brand-forest' : 'border-transparent opacity-70 hover:opacity-100'
+                className={`h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 bg-white transition sm:h-20 sm:w-20 ${
+                  activeIndex === index ? 'border-brand-forest shadow-sm' : 'border-line opacity-60 hover:opacity-100'
                 }`}
               >
-                {!failed.has(photo.src) && <img src={photo.src} alt="" className="h-full w-full object-cover" />}
+                {!failed.has(photo.src) && <img src={photo.src} alt="" className="h-full w-full object-contain" />}
               </button>
             ))}
           </div>
@@ -113,19 +134,27 @@ export default function ShopItemDialog({ item, onClose }: { item: ShopItem; onCl
         <div className="flex flex-col gap-4 p-5 sm:p-6">
           <div className="flex flex-col gap-1.5">
             <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">{item.category}</p>
-            <h2 id="shop-item-title" className="font-serif text-xl font-bold text-ink sm:text-2xl">
+            <Heading id="shop-item-title" className="font-serif text-xl font-bold text-ink sm:text-2xl">
               {item.name}
-            </h2>
+            </Heading>
             {brandAndModelLine(item) && <p className="-mt-1 text-sm text-ink-muted">{brandAndModelLine(item)}</p>}
             <ConditionBadge condition={item.condition} className="mt-1" />
           </div>
 
           <div className="rounded-xl bg-surface-muted p-3">
             <ShopPrice item={item} size="large" />
-            <p className="text-xs text-ink-muted">The price is for this one piece.</p>
+            <p className="text-xs text-ink-muted">
+              {item.quantity > 1 ? `Price per piece. ${availableText(item)}.` : `${availableText(item)}.`}
+            </p>
           </div>
 
-          {item.description && <p className="whitespace-pre-line text-sm leading-relaxed text-ink">{item.description}</p>}
+          {/* The description staff wrote when listing it for sale, line breaks kept. */}
+          {item.description && (
+            <div className="flex flex-col gap-1.5">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">About this item</h3>
+              <p className="whitespace-pre-line text-sm leading-relaxed text-ink">{item.description}</p>
+            </div>
+          )}
 
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
             {facts

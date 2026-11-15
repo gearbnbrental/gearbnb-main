@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { GearPlaceholderIcon } from '../icons';
-import { brandAndModelLine, conditionTone, formatShopPrice, type ShopItem } from '../../utils/shop';
+import { availableText, brandAndModelLine, conditionTone, formatShopPrice, shopItemPath, type ShopItem } from '../../utils/shop';
 
 const TONE_CLASS: Record<ReturnType<typeof conditionTone>, string> = {
   new: 'bg-brand-forest text-white',
@@ -39,26 +39,33 @@ export function ShopPrice({ item, size = 'card' }: { item: ShopItem; size?: 'car
   );
 }
 
-/** One item in the shop grid. The whole card opens the item's details (`?item=<id>`). */
+/** One item in the shop grid. The whole card links to the item's own page (/catalog/camping-gear-sale/<slug>). */
 export default function ShopItemCard({ item }: { item: ShopItem }) {
   const [imageFailed, setImageFailed] = useState(false);
+  // A square main photo (the recommended 1080 x 1080) fills the square frame; any other shape is
+  // shown whole on white instead of being cropped.
+  const [square, setSquare] = useState(true);
   const photo = item.images[0];
   const subtitle = brandAndModelLine(item);
 
   return (
     <Link
-      to={{ search: `?item=${encodeURIComponent(item.id)}` }}
+      to={shopItemPath(item)}
       state={{ fromShop: true }}
       className="group flex flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-sm transition-all hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-forest/40"
     >
-      <div className="relative aspect-square w-full overflow-hidden bg-surface-strong">
+      <div className={`relative aspect-square w-full overflow-hidden ${photo && !imageFailed ? 'bg-white' : 'bg-surface-strong'}`}>
         {photo && !imageFailed ? (
           <img
             src={photo}
             alt=""
             loading="lazy"
             onError={() => setImageFailed(true)}
-            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            onLoad={(event) => {
+              const { naturalWidth, naturalHeight } = event.currentTarget;
+              setSquare(naturalHeight > 0 && Math.abs(naturalWidth / naturalHeight - 1) <= 0.1);
+            }}
+            className={`h-full w-full transition-transform duration-300 group-hover:scale-105 ${square ? 'object-cover' : 'object-contain'}`}
           />
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-ink-faint">
@@ -77,7 +84,10 @@ export default function ShopItemCard({ item }: { item: ShopItem }) {
         <p className="text-[10px] font-medium uppercase tracking-wide text-ink-faint sm:text-[11px]">{item.category}</p>
         <h2 className="line-clamp-2 text-xs font-semibold leading-snug text-ink sm:text-sm">{item.name}</h2>
         {subtitle && <p className="-mt-1 line-clamp-1 text-[11px] text-ink-muted sm:text-xs">{subtitle}</p>}
-        <ConditionBadge condition={item.condition} />
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <ConditionBadge condition={item.condition} />
+          <span className="text-[11px] font-medium text-ink-muted sm:text-xs">{availableText(item)}</span>
+        </div>
         <div className="mt-auto pt-1">
           <ShopPrice item={item} />
         </div>

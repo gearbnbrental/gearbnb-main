@@ -13,16 +13,17 @@ export default function CatalogChooser() {
           Two ways to rent, both fully covered by our verification and split-payment protections.
         </p>
       </div>
-      <PathSelectionCards roomyOnMobile showPromoRibbons />
+      <PathSelectionCards roomyOnMobile showPromoRibbons headingLevel="h2" />
       {/* Buying, not renting: the shop, in the same box style as the homepage's "Ready to build your setup?". */}
       <div className="flex flex-col items-center gap-3 rounded-3xl border border-brand-forest/10 bg-brand-forest/5 p-8 text-center">
-        <h2 className="font-serif text-lg font-semibold text-ink sm:text-xl">Buy Camping Gear</h2>
+        {/* Same size and weight as the two cards' h2 titles above. */}
+        <h2 className="font-serif text-2xl font-bold leading-snug text-ink">Buy Camping Gear</h2>
         <p className="max-w-md text-sm text-ink-muted">
           Looking to own your camping essentials? Explore our selection of quality camping gear and find the right equipment
           for your next outdoor adventure.
         </p>
         <Link
-          to="/shop"
+          to="/catalog/camping-gear-sale"
           className="mt-1 rounded-lg bg-brand-forest px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-forest-dark"
         >
           Buy Now

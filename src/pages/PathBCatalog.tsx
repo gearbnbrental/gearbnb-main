@@ -910,7 +910,7 @@ export default function PathBCatalog() {
         {detailsKind && <GearCardDetails {...gearCardProps(detailsKind)} onClose={closeDetails} />}
         <div className="flex flex-col gap-1">
           {/* With a gear's details open, its name is the page's one h1. */}
-          <PageHeading className="font-serif text-lg font-semibold text-ink sm:text-xl">Build Your Own Camping Setup</PageHeading>
+          <PageHeading className="font-serif text-2xl font-bold text-ink sm:text-3xl">Build Your Own Camping Setup</PageHeading>
           <p className="text-sm text-ink-muted">
             Rent tents, beds, chairs, coolers and more by the piece. Pick your rental duration first, then mix and match
             individual gear. Prefer a ready-made kit?{' '}

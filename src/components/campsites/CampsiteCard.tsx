@@ -81,6 +81,12 @@ export default function CampsiteCard({
             ))}
           </ul>
         )}
+        {/* Subtle: the campsite's own offer for campers who come from GearBnB. */}
+        {campsite.gearbnbOffer && (
+          <p className="mt-1 truncate text-xs font-semibold text-accent" title={`GearBnB offer: ${campsite.gearbnbOffer}`}>
+            <span aria-hidden="true">🎟️ </span>GearBnB offer: {campsite.gearbnbOffer}
+          </p>
+        )}
       </div>
     </Link>
   );

@@ -15,6 +15,8 @@ import {
 
 const item = (overrides: Partial<ShopItem>): ShopItem => ({
   id: 'id',
+  quantity: 1,
+  slug: 'item',
   name: 'Item',
   category: 'Tent',
   brand: '',
@@ -72,7 +74,7 @@ describe('normalizeShopItems', () => {
 
   it('keeps every field the shop shows', () => {
     expect(normalizeShopItems({ items: [raw] })).toEqual([
-      { ...raw, originalPriceCentavos: null },
+      { ...raw, originalPriceCentavos: null, quantity: 1, slug: 'dome-tent' },
     ]);
   });
 
@@ -96,6 +98,86 @@ describe('normalizeShopItems', () => {
     const [bare] = normalizeShopItems({ items: [{ id: 'x4', name: 'Cooler', priceCentavos: 50000, images: ['', 'javascript:alert(1)', 42, 'https://ok.example.com/a.jpg'] }] });
     expect(bare).toMatchObject({ category: 'Other', brand: '', model: null, color: null, condition: '', description: null });
     expect(bare.images).toEqual(['https://ok.example.com/a.jpg']);
+  });
+
+  it('puts the RMS main photo first, then the gallery, each photo once', () => {
+    const [withMain] = normalizeShopItems({
+      items: [{ ...raw, imageUrl: 'https://cdn.example.com/main.webp', images: ['https://cdn.example.com/2.webp', 'https://cdn.example.com/main.webp'] }],
+    });
+    expect(withMain.images).toEqual(['https://cdn.example.com/main.webp', 'https://cdn.example.com/2.webp']);
+    expect(normalizeShopItems({ items: [{ ...raw, imageUrl: null }] })[0].images).toEqual(['https://cdn.example.com/1.webp']);
+  });
+
+  it('uses the RMS listing: its listingKey as the id, and its quantity', () => {
+    const [listing] = normalizeShopItems({ items: [{ ...raw, listingKey: 'a1b2c3d4e5f60718', quantity: 3 }] });
+    expect(listing).toMatchObject({ id: 'a1b2c3d4e5f60718', quantity: 3, slug: 'dome-tent' });
+  });
+
+  it('never lists a quantity of 0, or one that is not a whole number', () => {
+    const items = [0, -1, 1.5, '2', null].map((quantity, index) => ({ ...raw, listingKey: `k${index}`, quantity }));
+    expect(normalizeShopItems({ items })).toEqual([]);
+  });
+
+  it('keeps RMS listings apart even when they look the same, since the RMS decided they differ', () => {
+    const items = [{ ...raw, listingKey: 'k1', quantity: 1 }, { ...raw, listingKey: 'k2', quantity: 2 }];
+    expect(normalizeShopItems({ items }).map((listing) => [listing.id, listing.quantity, listing.slug])).toEqual([
+      ['k1', 1, 'dome-tent-excellent-2500-k1'],
+      ['k2', 2, 'dome-tent-excellent-2500-k2'],
+    ]);
+  });
+
+  it('makes identical units one listing, with the count and every unit\'s photos (an RMS without listings)', () => {
+    const second = { ...raw, id: 'x2', images: ['https://cdn.example.com/2.webp', 'https://cdn.example.com/1.webp'] };
+    const [listing, ...rest] = normalizeShopItems({ items: [raw, second] });
+    expect(rest).toEqual([]);
+    expect(listing).toMatchObject({ id: 'x1', quantity: 2, slug: 'dome-tent' });
+    expect(listing.images).toEqual(['https://cdn.example.com/1.webp', 'https://cdn.example.com/2.webp']);
+  });
+
+  it('shares a photo from only one unit with the whole listing', () => {
+    const [listing] = normalizeShopItems({ items: [{ ...raw, images: [] }, { ...raw, id: 'x2', images: ['https://cdn.example.com/only.webp'] }] });
+    expect(listing.images).toEqual(['https://cdn.example.com/only.webp']);
+  });
+
+  it('keeps units apart when a camper would see a difference, ignoring letter case', () => {
+    const units = [
+      raw,
+      { ...raw, id: 'x2', brand: 'COLEMAN' },
+      { ...raw, id: 'x3', condition: 'Good' },
+      { ...raw, id: 'x4', priceCentavos: 200000 },
+      { ...raw, id: 'x5', color: 'Blue' },
+      { ...raw, id: 'x6', description: 'Small tear on the fly.' },
+    ];
+    expect(normalizeShopItems({ items: units }).map((listing) => [listing.id, listing.quantity])).toEqual([['x1', 2], ['x3', 1], ['x4', 1], ['x5', 1], ['x6', 1]]);
+  });
+
+  it('gives same-named listings their own addresses, adding only what tells them apart', () => {
+    const slugs = normalizeShopItems({
+      items: [
+        raw,
+        { ...raw, id: 'x2', condition: 'Good' },
+        { ...raw, id: 'x3', condition: 'Good', priceCentavos: 95050 },
+        { ...raw, id: 'y-1', name: 'Moon Chair (Khaki)' },
+        { ...raw, id: 'ab', color: 'Blue' },
+        { ...raw, id: 'cd', color: 'Red' },
+      ],
+    }).map((listing) => listing.slug);
+    expect(slugs).toEqual([
+      'dome-tent-excellent-2500-x1',
+      'dome-tent-good-2500',
+      'dome-tent-good-950-5',
+      'moon-chair-khaki',
+      'dome-tent-excellent-2500-ab',
+      'dome-tent-excellent-2500-cd',
+    ]);
+    expect(new Set(slugs).size).toBe(slugs.length);
+  });
+
+  it('keeps a listing\'s address and id when one of its units sells', () => {
+    const before = normalizeShopItems({ items: [{ ...raw, listingKey: 'k1', quantity: 2 }] })[0];
+    const after = normalizeShopItems({ items: [{ ...raw, id: 'x2', listingKey: 'k1', quantity: 1 }] })[0];
+    expect([after.slug, after.id]).toEqual([before.slug, before.id]);
+    expect(normalizeShopItems({ items: [{ ...raw, id: 'x2' }] })[0].slug).toBe(normalizeShopItems({ items: [raw, { ...raw, id: 'x2' }] })[0].slug);
   });
 
   it('treats a body without an items list as an empty shop', () => {

@@ -109,9 +109,10 @@ function VerificationGate() {
   return null;
 }
 
-/** "/catalog/camping-packages/stargazer-kit" -> "/catalog/camping-packages": a product's details
- *  open over its catalog page, so moving between the two keeps the catalog's scroll position. */
-const catalogOf = (pathname: string) => pathname.match(/^\/catalog\/(camping-packages|build-your-own)(?=\/|$)/)?.[0] ?? null;
+/** "/catalog/camping-packages/stargazer-kit" -> "/catalog/camping-packages" (and the same for a
+ *  shop item at /catalog/camping-gear-sale): a product's details open over its list, so moving between the two keeps the list's
+ *  scroll position. */
+const catalogOf = (pathname: string) => pathname.match(/^\/catalog\/(camping-packages|build-your-own|camping-gear-sale)(?=\/|$)/)?.[0] ?? null;
 
 /**
  * Resets the window scroll position whenever the route changes.
@@ -229,8 +230,8 @@ function App() {
                       element={<PathBCatalog />}
                     />
 
-                    {/* An item's details open over the list at /shop?item=<id>. */}
-                    <Route path="/shop" element={<Shop />} />
+                    {/* With a slug, one item's own page: its details open over the list. */}
+                    <Route path="/catalog/camping-gear-sale/:slug?" element={<Shop />} />
 
                     <Route path="/cart" element={<Cart />} />
                     <Route path="/checkout" element={<Checkout />} />

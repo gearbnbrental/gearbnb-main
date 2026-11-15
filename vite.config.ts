@@ -149,7 +149,7 @@ const PAGE_SOURCES: Record<string, string[]> = {
   '/': ['src/pages/LandingPage.tsx', 'src/config/homeFaq.ts'],
   '/catalog/camping-packages': ['src/pages/PathACatalog.tsx'],
   '/catalog/build-your-own': ['src/pages/PathBCatalog.tsx'],
-  '/shop': ['src/pages/Shop.tsx', 'src/components/shop/ShopItemCard.tsx'],
+  '/catalog/camping-gear-sale': ['src/pages/Shop.tsx', 'src/components/shop/ShopItemCard.tsx'],
   '/plan-an-event': ['src/pages/EventPlan.tsx'],
   '/about-us': ['src/pages/AboutUs.tsx'],
   '/campsites': ['src/pages/Campsites.tsx', 'src/components/campsites/CampsiteCard.tsx'],
@@ -160,6 +160,7 @@ const PAGE_SOURCES: Record<string, string[]> = {
 }
 const PACKAGE_PAGE_SOURCES = ['src/components/PackageDetailsDialog.tsx', 'src/config/productMeta.ts', 'src/utils/packageFaq.ts']
 const GEAR_PAGE_SOURCES = ['src/components/GearDetailsDialog.tsx', 'src/config/productMeta.ts', 'src/utils/gearFaq.ts']
+const SHOP_ITEM_PAGE_SOURCES = ['src/components/shop/ShopItemDialog.tsx', 'src/config/shopMeta.ts']
 const CAMPSITE_PAGE_SOURCES = ['src/pages/CampsiteDetail.tsx', 'src/config/campsiteMeta.ts', 'src/utils/campsites.ts']
 const PROVINCE_PAGE_SOURCES = ['src/pages/Campsites.tsx', 'src/config/campsiteMeta.ts', 'src/utils/campsites.ts']
 
@@ -207,7 +208,7 @@ async function renderSite(root: string) {
     const products: ProductPage[] = prerender.productPages(catalog)
     const campsitePages: CampsitePage[] = prerender.campsitePages(catalog)
     const directory: { jsonLd: object; dataChanged: string } = prerender.campsiteDirectory(catalog)
-    const catalogJsonLd: Record<string, object> = { ...prerender.catalogPagesJsonLd(products), '/campsites': directory.jsonLd }
+    const catalogJsonLd: Record<string, object> = { ...prerender.catalogPagesJsonLd(products, catalog), '/campsites': directory.jsonLd }
     const agentPage = (path: string, meta: PageMeta) => ({ path, meta, markdownPath: markdownPathFor(path) })
     const agentProducts = (base: string) =>
       products
@@ -217,6 +218,7 @@ async function renderSite(root: string) {
     const catalogHeadings: Record<string, string> = {
       '/catalog/camping-packages': 'Choose a Camping Package',
       '/catalog/build-your-own': 'Build Your Own Camping Setup',
+      '/catalog/camping-gear-sale': 'Camping Gear for Sale',
     }
 
     const pages: BuiltPage[] = []
@@ -256,6 +258,7 @@ async function renderSite(root: string) {
       pages: pages.map((page) => agentPage(page.path, page.meta)),
       packages: agentProducts('/catalog/camping-packages'),
       gear: agentProducts('/catalog/build-your-own'),
+      shop: agentProducts('/catalog/camping-gear-sale'),
       campsites: campsitePages
         .filter((page) => !page.path.startsWith('/campsites/province/'))
         .map((page) => ({ ...agentPage(page.path, page.meta), name: page.name, summary: page.summary })),
@@ -277,7 +280,9 @@ function sitemapXml(root: string, pages: BuiltPage[]): string {
       ? PACKAGE_PAGE_SOURCES
       : path.startsWith('/catalog/build-your-own/')
         ? GEAR_PAGE_SOURCES
-        : path.startsWith('/campsites/province/')
+        : path.startsWith('/catalog/camping-gear-sale/')
+          ? SHOP_ITEM_PAGE_SOURCES
+          : path.startsWith('/campsites/province/')
           ? PROVINCE_PAGE_SOURCES
           : path.startsWith('/campsites/')
             ? CAMPSITE_PAGE_SOURCES

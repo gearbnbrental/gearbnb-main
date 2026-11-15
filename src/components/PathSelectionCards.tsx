@@ -21,6 +21,8 @@ interface PathCardProps {
   /** "🎁 15% OFF FIRST RENTAL" pill on the photo while the live promo covers this path (the note,
    *  e.g. "first rental", only for a first-time-renters promo); null = none. */
   ribbon?: { offer: string; note: string | null } | null;
+  /** h2 where the cards sit right under the page's h1 (/catalog); h3 under a section's h2 (homepage). */
+  headingLevel?: 'h2' | 'h3';
 }
 
 /**
@@ -30,7 +32,7 @@ interface PathCardProps {
  * on the CTA pins it to the bottom of both cards so the two buttons always align with each other
  * even when the text above them doesn't take up equal space.
  */
-function PathCard({ to, title, subtitle, description, cta, image, imageAlt, roomyOnMobile = false, ribbon = null }: PathCardProps) {
+function PathCard({ to, title, subtitle, description, cta, image, imageAlt, roomyOnMobile = false, ribbon = null, headingLevel: Heading = 'h3' }: PathCardProps) {
   return (
     <Link
       to={to}
@@ -69,7 +71,7 @@ function PathCard({ to, title, subtitle, description, cta, image, imageAlt, room
         )}
       </div>
       <div className={`flex flex-1 flex-col sm:gap-2 sm:p-7 ${roomyOnMobile ? 'gap-1.5 p-3' : 'gap-1 p-2.5'}`}>
-        <h3 className={`font-serif font-bold leading-snug text-ink sm:text-2xl ${roomyOnMobile ? 'text-base' : 'text-sm'}`}>{title}</h3>
+        <Heading className={`font-serif font-bold leading-snug text-ink sm:text-2xl ${roomyOnMobile ? 'text-base' : 'text-sm'}`}>{title}</Heading>
         <p
           className={`font-semibold uppercase tracking-wide text-accent sm:text-sm ${roomyOnMobile ? 'text-[11px]' : 'text-[10px]'}`}
         >
@@ -123,10 +125,13 @@ function PathCard({ to, title, subtitle, description, cta, image, imageAlt, room
 export default function PathSelectionCards({
   roomyOnMobile = false,
   showPromoRibbons = false,
+  headingLevel = 'h3',
 }: {
   roomyOnMobile?: boolean;
   /** Puts a "15% OFF" promo pill on each card the live promo covers (packages, and/or Build Your Own gear). */
   showPromoRibbons?: boolean;
+  /** The card titles' heading level: h2 on /catalog, where they sit right under the h1. */
+  headingLevel?: 'h2' | 'h3';
 }) {
   // Built from the live RMS promo, never hardcoded: no promo, an ended one, or a returning renter
   // on a first-time-only promo (audience null) shows no ribbon at all.
@@ -154,6 +159,7 @@ export default function PathSelectionCards({
         image="/images/camp-setups/choose-package-camp-setup.webp"
         imageAlt="GearBnB camping package setup with a cabin-style tent, canopy awning, folding chairs, cooler and cooking gear"
         roomyOnMobile={roomyOnMobile}
+        headingLevel={headingLevel}
         ribbon={packagesRibbon}
       />
       <PathCard
@@ -167,6 +173,7 @@ export default function PathSelectionCards({
         image="/images/camp-setups/byo-camp-setup.webp"
         imageAlt="Build-your-own camping gear setup with a tent awning, folding chairs, cooler, fans and cooking gear"
         roomyOnMobile={roomyOnMobile}
+        headingLevel={headingLevel}
         ribbon={byoRibbon}
       />
     </div>

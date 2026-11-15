@@ -92,6 +92,9 @@ export interface CampsiteSummary {
   rating: CampsiteRating;
   /** ISO date (yyyy-mm-dd) GearBnB last confirmed the details. */
   detailsCheckedAt: string | null;
+  /** What the campsite gives campers who come from GearBnB and mention their code, in the
+   *  campsite's own words ("10% off the entrance fee"); null when it has no offer. */
+  gearbnbOffer: string | null;
   /** ISO timestamp of the last change to the campsite or its reviews. */
   updatedAt: string;
 }
@@ -126,6 +129,8 @@ export interface Campsite extends CampsiteSummary {
   bookingNotes: string | null;
   feeNotes: string | null;
   operatingHours: string | null;
+  /** The offer's conditions ("Weekdays only. Not with other promos."); null when none. */
+  gearbnbOfferTerms: string | null;
   photos: CampsitePhoto[];
   ratingBreakdown: RatingBreakdown;
   /** Published reviews, newest first (at most 50). */
@@ -151,3 +156,18 @@ export interface CampsiteReviewInput {
 }
 
 export type ReviewReportReason = 'SPAM' | 'OFFENSIVE' | 'FAKE' | 'PRIVATE_INFO' | 'OTHER';
+
+/** Which contact button the camper tapped on a campsite's page. */
+export type CampsiteLeadChannel = 'FACEBOOK' | 'PHONE' | 'SMS' | 'WEBSITE';
+
+/** POST /api/customer/campsites/[slug]/leads: one tap on a contact button. Nothing about the
+ *  camper is sent or stored. */
+export interface CampsiteLeadInput {
+  channel: CampsiteLeadChannel;
+}
+
+/** The lead's code ("GB-7K3QXM"): the camper is asked to mention it, and the campsite's lead email
+ *  gets the same code, so the campsite knows the camper came from GearBnB. */
+export interface CampsiteLeadResult {
+  code: string;
+}

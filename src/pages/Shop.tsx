@@ -1,13 +1,15 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import FilterPill from '../components/FilterPill';
+import { ChevronDownIcon } from '../components/icons';
 import ShopItemCard from '../components/shop/ShopItemCard';
 import ShopItemDialog from '../components/shop/ShopItemDialog';
 import { ShopEmpty, ShopError, ShopLoading, ShopNoMatches } from '../components/shop/ShopStates';
 import { PAGE_META } from '../config/pageMeta';
+import { shopItemPageMeta } from '../config/shopMeta';
 import { usePageMeta } from '../hooks/usePageMeta';
 import { useShopItems } from '../hooks/useShopItems';
-import { SHOP_SORTS, filterShopItems, shopCategories, sortShopItems, type ShopSort } from '../utils/shop';
+import { SHOP_PATH, SHOP_SORTS, filterShopItems, findShopItemBySlug, shopCategories, sortShopItems, type ShopSort } from '../utils/shop';
 
 function SearchIcon({ className }: { className?: string }) {
   return (
@@ -19,13 +21,13 @@ function SearchIcon({ className }: { className?: string }) {
 
 /**
  * The shop: camping gear GearBnB sells, one listing per physical piece, all from the RMS
- * (GET /api/customer/shop). Browse only for now: an item's details open over the list at
- * `/shop?item=<id>` (so the server only ever needs to answer `/shop`), and buying happens over
- * Messenger until online checkout is added.
+ * (GET /api/customer/shop). Each item has its own address, /catalog/camping-gear-sale/<slug>: its details open over
+ * the list, and the build gives it its own page with Product schema (see src/prerender.tsx).
+ * Buying happens over Messenger until online checkout is added.
  */
 export default function Shop() {
   const { state, retry } = useShopItems();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const { slug } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
   const [category, setCategory] = useState('');
@@ -38,22 +40,21 @@ export default function Shop() {
   const activeCategory = categories.some((option) => option.label === category) ? category : '';
   const shown = useMemo(() => sortShopItems(filterShopItems(items, { category: activeCategory, query }), sort), [items, activeCategory, query, sort]);
 
-  const openId = searchParams.get('item');
-  const openItem = openId ? items.find((item) => item.id === openId) : undefined;
-  // A shared link to a piece that has since sold: say so instead of silently showing the list.
-  const soldOut = !!openId && state.status === 'ready' && !openItem;
+  const openItem = findShopItemBySlug(items, slug);
+  // The page of a piece that has since sold: say so instead of silently showing the list.
+  const soldOut = !!slug && state.status === 'ready' && !openItem;
 
   const closeItem = useCallback(() => {
     // Opened from the grid: going back returns to the list exactly as it was. Opened from a link:
-    // drop the item from the address instead.
+    // go to the list instead.
     if ((location.state as { fromShop?: boolean } | null)?.fromShop) navigate(-1);
-    else setSearchParams({}, { replace: true });
-  }, [location.state, navigate, setSearchParams]);
+    else navigate(SHOP_PATH, { replace: true });
+  }, [location.state, navigate]);
 
-  const meta = openItem
-    ? { title: `${openItem.name} for Sale | GearBnB`, description: PAGE_META.shop.description }
-    : PAGE_META.shop;
+  const meta = openItem ? shopItemPageMeta(openItem) : PAGE_META.shop;
   usePageMeta(meta.title, meta.description);
+  // With an item open, its name is the page's one h1.
+  const PageHeading = openItem ? 'h2' : 'h1';
 
   const clearFilters = () => {
     setCategory('');
@@ -64,7 +65,7 @@ export default function Shop() {
     <div className="flex min-h-screen flex-col pb-28">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-4 sm:gap-6 sm:p-6">
         <div className="flex flex-col gap-1">
-          <h1 className="font-serif text-lg font-semibold text-ink sm:text-xl">Camping Gear for Sale</h1>
+          <PageHeading className="font-serif text-2xl font-bold text-ink sm:text-3xl">Camping Gear for Sale</PageHeading>
           <p className="text-sm text-ink-muted">
             Buy camping gear from GearBnB, new and used, one piece at a time. Each listing shows its own photos, condition and
             price. Want to rent instead?{' '}
@@ -80,7 +81,7 @@ export default function Shop() {
             <p className="text-amber-800">That item has been sold or is no longer for sale. Here&rsquo;s everything still available.</p>
             <button
               type="button"
-              onClick={() => setSearchParams({}, { replace: true })}
+              onClick={() => navigate(SHOP_PATH, { replace: true })}
               className="shrink-0 font-semibold text-amber-900 underline underline-offset-2"
             >
               Dismiss
@@ -108,17 +109,21 @@ export default function Shop() {
               </label>
               <label className="flex items-center gap-2 text-sm text-ink-muted">
                 <span className="shrink-0">Sort by</span>
-                <select
-                  value={sort}
-                  onChange={(event) => setSort(event.target.value as ShopSort)}
-                  className="w-full rounded-xl border border-line bg-surface py-2.5 pl-3 pr-8 text-sm font-medium text-ink shadow-sm outline-none focus:border-brand-forest focus:ring-2 focus:ring-brand-forest/20 sm:w-auto"
-                >
-                  {SHOP_SORTS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                {/* The browser's own arrow sits differently in every browser: ours is centred instead. */}
+                <span className="relative w-full sm:w-auto">
+                  <select
+                    value={sort}
+                    onChange={(event) => setSort(event.target.value as ShopSort)}
+                    className="w-full appearance-none rounded-xl border border-line bg-surface py-2.5 pl-3 pr-10 text-sm font-medium text-ink shadow-sm outline-none focus:border-brand-forest focus:ring-2 focus:ring-brand-forest/20"
+                  >
+                    {SHOP_SORTS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDownIcon className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" />
+                </span>
               </label>
             </div>
 
@@ -157,7 +162,7 @@ export default function Shop() {
         )}
       </div>
 
-      {openItem && <ShopItemDialog key={openItem.id} item={openItem} onClose={closeItem} />}
+      {openItem && <ShopItemDialog key={openItem.id} item={openItem} onClose={closeItem} headingLevel="h1" />}
     </div>
   );
 }

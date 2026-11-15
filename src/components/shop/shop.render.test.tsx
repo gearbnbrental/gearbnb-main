@@ -21,6 +21,8 @@ function text(element: ReactElement): string {
 
 const tent: ShopItem = {
   id: 'item-1',
+  quantity: 1,
+  slug: 'dome-tent-4p',
   name: 'Dome Tent 4P',
   category: 'Tent',
   brand: 'Coleman',
@@ -66,14 +68,19 @@ describe('shop card', () => {
     const markup = html(<ShopItemCard item={tent} />);
     expect(markup).toContain('src="https://cdn.example.com/tent-1.webp"');
     expect(markup).not.toContain('tent-2.webp');
-    expect(markup).toContain('href="/?item=item-1"');
-    expect(text(<ShopItemCard item={tent} />)).toBe('2 photos Tent Dome Tent 4P Coleman Sundome Excellent ₱2,500.00');
+    expect(markup).toContain('href="/catalog/camping-gear-sale/dome-tent-4p"');
+    expect(text(<ShopItemCard item={tent} />)).toBe('2 photos Tent Dome Tent 4P Coleman Sundome Excellent Only 1 left ₱2,500.00');
   });
 
   it('shows a placeholder when there are no photos, and no brand for generic gear', () => {
     const generic = { ...tent, brand: '', model: null, images: [] };
     expect(html(<ShopItemCard item={generic} />)).not.toContain('<img');
-    expect(text(<ShopItemCard item={generic} />)).toBe('Photo coming soon Tent Dome Tent 4P Excellent ₱2,500.00');
+    expect(text(<ShopItemCard item={generic} />)).toBe('Photo coming soon Tent Dome Tent 4P Excellent Only 1 left ₱2,500.00');
+  });
+
+  it('shows how many are available, or that only 1 is left', () => {
+    expect(text(<ShopItemCard item={{ ...tent, quantity: 2 }} />)).toContain('Excellent 2 available ₱2,500.00');
+    expect(text(<ShopItemCard item={tent} />)).toContain('Excellent Only 1 left ₱2,500.00');
   });
 
   it('crosses out the price before a sale', () => {

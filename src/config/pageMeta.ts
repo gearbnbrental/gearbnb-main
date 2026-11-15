@@ -265,7 +265,7 @@ export const PRERENDERED_PAGES: { path: string; meta: PageMeta }[] = [
   { path: '/catalog', meta: PAGE_META.catalog },
   { path: '/catalog/camping-packages', meta: PAGE_META.packages },
   { path: '/catalog/build-your-own', meta: PAGE_META.buildYourOwn },
-  { path: '/shop', meta: PAGE_META.shop },
+  { path: '/catalog/camping-gear-sale', meta: PAGE_META.shop },
   { path: '/plan-an-event', meta: PAGE_META.events },
   { path: '/about-us', meta: PAGE_META.about },
   { path: '/campsites', meta: PAGE_META.campsites },

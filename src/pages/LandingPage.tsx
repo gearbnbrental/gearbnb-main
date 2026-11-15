@@ -1063,8 +1063,9 @@ export default function LandingPage() {
           <div className="flex max-w-5xl flex-col items-center gap-3">
             <span className="text-xs font-bold uppercase tracking-[0.18em] text-brand-cream">Testimonials</span>
             <h2 className="text-balance font-serif text-2xl font-bold text-white sm:text-4xl">What Our Renters Say</h2>
-            <p className="max-w-xl text-sm text-white/80 sm:text-base">
-              Real reviews from families, couples and first-time campers who rented their camping gear from GearBnB.
+            <p className="max-w-2xl text-sm text-white/80 sm:text-base">
+              Hear from campers and customers who trust GearBnB for quality camping gear rental and camping gear for sale. See
+              how we help make every outdoor adventure easier, more convenient, and memorable.
             </p>
           </div>
           <ReviewSlider />

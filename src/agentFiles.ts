@@ -91,10 +91,13 @@ export function llmsTxt({
   gear,
   campsites = [],
   provinces = [],
+  shop = [],
 }: {
   pages: AgentPage[];
   packages: AgentProduct[];
   gear: AgentProduct[];
+  /** Every item for sale, one line each (condition and price). */
+  shop?: AgentProduct[];
   /** Find A Campsite: one line of facts per campsite, and the province pages. */
   campsites?: AgentProduct[];
   provinces?: AgentProduct[];
@@ -133,13 +136,16 @@ export function llmsTxt({
       ['/', 'Home'],
       ['/catalog/camping-packages', 'Camping packages'],
       ['/catalog/build-your-own', 'Build your own (gear by the piece)'],
-      ['/shop', 'Shop (camping gear for sale)'],
+      ['/catalog/camping-gear-sale', 'Camping gear for sale'],
       ['/plan-an-event', 'Plan an event'],
       ...(CAMPSITES_COMING_SOON ? [] : ([['/campsites', 'Find A Campsite (campsite directory)']] as [string, string][])),
       ['/about-us', 'About GearBnB'],
     ]),
     ...(packages.length ? ['## Camping packages', '', ...productLines(packages), ''] : []),
     ...(gear.length ? ['## Gear by the piece', '', ...productLines(gear), ''] : []),
+    ...(shop.length
+      ? ['## Camping gear for sale', '', 'Pieces GearBnB sells, one listing per piece. Message GearBnB to buy one.', '', ...productLines(shop), '']
+      : []),
     ...(campsites.length
       ? [
           '## Campsites',
