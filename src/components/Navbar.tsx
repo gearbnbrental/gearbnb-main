@@ -47,7 +47,6 @@ function mobileNavLinks(user: unknown) {
   return [
     { to: '/', label: 'Home' },
     { to: '/about-us', label: 'About Us' },
-    { to: '/shop', label: 'Shop' },
     ...(user ? [{ to: '/my-bookings', label: 'My Bookings' }] : []),
     { to: '/plan-an-event', label: 'Plan An Event' },
   ];
@@ -217,7 +216,7 @@ export default function Navbar() {
                 <ChevronDownIcon className={`h-3.5 w-3.5 transition-transform ${catalogMenuOpen ? 'rotate-180' : ''}`} />
               </button>
               {/* Always in the HTML, hidden while closed, so crawlers and the prerendered pages
-                  see Packages and Build Your Own as real links. */}
+                  see Packages, Build Your Own and the shop as real links. */}
               <div
                 role="menu"
                 aria-label="Catalog"
@@ -240,15 +239,16 @@ export default function Navbar() {
                 >
                   Build Your Own
                 </Link>
+                <Link
+                  to="/shop"
+                  role="menuitem"
+                  onClick={() => setCatalogMenuOpen(false)}
+                  className="block px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface-strong"
+                >
+                  Camping Gear for Sale
+                </Link>
               </div>
             </div>
-
-            <Link
-              to="/shop"
-              className="hidden rounded-md px-2 py-1.5 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-strong hover:text-ink lg:inline-block"
-            >
-              Shop
-            </Link>
 
             <Link
               to="/plan-an-event"
@@ -405,6 +405,12 @@ export default function Navbar() {
                     className="rounded-lg px-3 py-2 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-strong hover:text-ink"
                   >
                     Build Your Own
+                  </Link>
+                  <Link
+                    to="/shop"
+                    className="rounded-lg px-3 py-2 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-strong hover:text-ink"
+                  >
+                    Camping Gear for Sale
                   </Link>
                 </div>
               )}

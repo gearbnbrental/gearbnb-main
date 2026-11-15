@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { GearPlaceholderIcon } from '../icons';
-import { brandAndModel, conditionTone, formatShopPrice, type ShopItem } from '../../utils/shop';
+import { brandAndModelLine, conditionTone, formatShopPrice, type ShopItem } from '../../utils/shop';
 
 const TONE_CLASS: Record<ReturnType<typeof conditionTone>, string> = {
   new: 'bg-brand-forest text-white',
@@ -43,7 +43,7 @@ export function ShopPrice({ item, size = 'card' }: { item: ShopItem; size?: 'car
 export default function ShopItemCard({ item }: { item: ShopItem }) {
   const [imageFailed, setImageFailed] = useState(false);
   const photo = item.images[0];
-  const subtitle = brandAndModel(item);
+  const subtitle = brandAndModelLine(item);
 
   return (
     <Link

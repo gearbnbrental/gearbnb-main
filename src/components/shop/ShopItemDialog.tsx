@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CONTACT_PHONE_DISPLAY, CONTACT_PHONE_E164, MESSENGER_URL } from '../../config/social';
 import { useProductViewOpen } from '../../utils/productView';
-import { brandAndModel, type ShopItem } from '../../utils/shop';
+import { brandAndModelLine, type ShopItem } from '../../utils/shop';
 import GalleryNav, { useSwipe } from '../GalleryNav';
 import { GearPlaceholderIcon } from '../icons';
 import ImageLightbox, { type LightboxImage } from '../ImageLightbox';
@@ -116,7 +116,7 @@ export default function ShopItemDialog({ item, onClose }: { item: ShopItem; onCl
             <h2 id="shop-item-title" className="font-serif text-xl font-bold text-ink sm:text-2xl">
               {item.name}
             </h2>
-            {brandAndModel(item) && <p className="-mt-1 text-sm text-ink-muted">{brandAndModel(item)}</p>}
+            {brandAndModelLine(item) && <p className="-mt-1 text-sm text-ink-muted">{brandAndModelLine(item)}</p>}
             <ConditionBadge condition={item.condition} className="mt-1" />
           </div>
 

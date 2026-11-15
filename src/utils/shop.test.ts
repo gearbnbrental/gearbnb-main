@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { RmsApiError } from './rmsApi';
 import {
   brandAndModel,
+  brandAndModelLine,
   createShopCache,
   describeShopError,
   filterShopItems,
@@ -47,6 +48,11 @@ describe('brandAndModel', () => {
     expect(brandAndModel({ brand: 'Coleman', model: 'Sundome' })).toBe('Coleman Sundome');
     expect(brandAndModel({ brand: '', model: 'X1' })).toBe('X1');
     expect(brandAndModel({ brand: '', model: null })).toBe('');
+  });
+
+  it('is left out under a name that already says it', () => {
+    expect(brandAndModelLine({ name: 'Blackdog Starchase 13x', brand: 'Blackdog', model: 'Starchase 13x' })).toBe('');
+    expect(brandAndModelLine({ name: 'Dome Tent 4P', brand: 'Coleman', model: 'Sundome' })).toBe('Coleman Sundome');
   });
 });
 

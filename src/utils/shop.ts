@@ -77,6 +77,13 @@ export function brandAndModel(item: Pick<ShopItem, 'brand' | 'model'>): string {
   return [item.brand, item.model].filter(Boolean).join(' ');
 }
 
+/** The brand and model line under the name, or "" when the name already says it
+ *  ("Blackdog Starchase 13x" by Blackdog, model Starchase 13x). */
+export function brandAndModelLine(item: Pick<ShopItem, 'name' | 'brand' | 'model'>): string {
+  const line = brandAndModel(item);
+  return line && item.name.toLowerCase().includes(line.toLowerCase()) ? '' : line;
+}
+
 export type ShopSort = 'featured' | 'price-asc' | 'price-desc';
 
 export const SHOP_SORTS: { value: ShopSort; label: string }[] = [
