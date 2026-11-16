@@ -121,8 +121,8 @@ describe('normalizeShopItems', () => {
   it('keeps RMS listings apart even when they look the same, since the RMS decided they differ', () => {
     const items = [{ ...raw, listingKey: 'k1', quantity: 1 }, { ...raw, listingKey: 'k2', quantity: 2 }];
     expect(normalizeShopItems({ items }).map((listing) => [listing.id, listing.quantity, listing.slug])).toEqual([
-      ['k1', 1, 'dome-tent-excellent-2500-k1'],
-      ['k2', 2, 'dome-tent-excellent-2500-k2'],
+      ['k1', 1, 'dome-tent-k1'],
+      ['k2', 2, 'dome-tent-k2'],
     ]);
   });
 
@@ -151,7 +151,7 @@ describe('normalizeShopItems', () => {
     expect(normalizeShopItems({ items: units }).map((listing) => [listing.id, listing.quantity])).toEqual([['x1', 2], ['x3', 1], ['x4', 1], ['x5', 1], ['x6', 1]]);
   });
 
-  it('gives same-named listings their own addresses, adding only what tells them apart', () => {
+  it('gives same-named listings their own addresses with the start of their key', () => {
     const slugs = normalizeShopItems({
       items: [
         raw,
@@ -162,14 +162,7 @@ describe('normalizeShopItems', () => {
         { ...raw, id: 'cd', color: 'Red' },
       ],
     }).map((listing) => listing.slug);
-    expect(slugs).toEqual([
-      'dome-tent-excellent-2500-x1',
-      'dome-tent-good-2500',
-      'dome-tent-good-950-5',
-      'moon-chair-khaki',
-      'dome-tent-excellent-2500-ab',
-      'dome-tent-excellent-2500-cd',
-    ]);
+    expect(slugs).toEqual(['dome-tent-x1', 'dome-tent-x2', 'dome-tent-x3', 'moon-chair-khaki', 'dome-tent-ab', 'dome-tent-cd']);
     expect(new Set(slugs).size).toBe(slugs.length);
   });
 

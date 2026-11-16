@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import FilterPill from '../components/FilterPill';
 import { ChevronDownIcon } from '../components/icons';
@@ -9,7 +9,7 @@ import { PAGE_META } from '../config/pageMeta';
 import { shopItemPageMeta } from '../config/shopMeta';
 import { usePageMeta } from '../hooks/usePageMeta';
 import { useShopItems } from '../hooks/useShopItems';
-import { SHOP_PATH, SHOP_SORTS, filterShopItems, findShopItemBySlug, shopCategories, sortShopItems, type ShopSort } from '../utils/shop';
+import { SHOP_PATH, SHOP_SORTS, filterShopItems, findShopItemBySlug, resolveShopSlug, shopCategories, sortShopItems, type ShopSort } from '../utils/shop';
 
 function SearchIcon({ className }: { className?: string }) {
   return (
@@ -41,8 +41,14 @@ export default function Shop() {
   const shown = useMemo(() => sortShopItems(filterShopItems(items, { category: activeCategory, query }), sort), [items, activeCategory, query, sort]);
 
   const openItem = findShopItemBySlug(items, slug);
-  // The page of a piece that has since sold: say so instead of silently showing the list.
-  const soldOut = !!slug && state.status === 'ready' && !openItem;
+  // An out-of-date address (a changed listingKey, an older address form) moves to the listing's
+  // current one, the same way the server's 301 does; one for a listing that's gone entirely says so.
+  const resolved = slug && state.status === 'ready' && !openItem ? resolveShopSlug(items, slug) : null;
+  const soldOut = resolved?.type === 'not-found';
+  const redirectTo = resolved?.type === 'redirect' ? resolved.to : null;
+  useEffect(() => {
+    if (redirectTo) navigate(redirectTo, { replace: true });
+  }, [redirectTo, navigate]);
 
   const closeItem = useCallback(() => {
     // Opened from the grid: going back returns to the list exactly as it was. Opened from a link:

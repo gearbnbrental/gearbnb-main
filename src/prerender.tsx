@@ -47,7 +47,7 @@ import { fetchPackageCatalogFromRms, fetchShopFromRms } from './utils/rmsApi';
 import { ShopDataContext } from './context/ShopData';
 import ShopItemDialog from './components/shop/ShopItemDialog';
 import { shopItemPageMeta, shopItemSummary, shopListJsonLd } from './config/shopMeta';
-import { SHOP_PATH, normalizeShopItems, shopItemPath, type ShopItem } from './utils/shop';
+import { SHOP_PATH, normalizeShopItems, shopItemPath, shopRedirectRules, type ShopItem } from './utils/shop';
 import { CampsiteDataContext } from './context/CampsiteData';
 import { USING_CAMPSITE_SAMPLES, fetchCampsiteDetail, fetchCampsiteList } from './data/campsites';
 import { CAMPSITES_COMING_SOON } from './config/features';
@@ -337,6 +337,12 @@ export function productPages(catalog: PrerenderCatalog): ProductPage[] {
 }
 
 /** The catalog pages' and the shop's CollectionPage + ItemList schema, linking each product or item page. */
+/** 301s for out-of-date shop addresses (see shopRedirectRules), as full paths. None when the shop
+ *  couldn't be loaded at build time. */
+export function shopRedirects(catalog: PrerenderCatalog): { from: string; key?: string; to: string }[] {
+  return shopRedirectRules(catalog.shopItems ?? []).map((rule) => ({ from: `${SHOP_PATH}/${rule.slug}`, key: rule.key, to: rule.to }));
+}
+
 export function catalogPagesJsonLd(products: ProductPage[], catalog: PrerenderCatalog): Record<string, object> {
   const list = (base: string) => products.filter((product) => product.path.startsWith(`${base}/`));
   return {

@@ -277,7 +277,8 @@ async function renderSite(root: string) {
         .filter((page) => page.path.startsWith('/campsites/province/'))
         .map((page) => ({ ...agentPage(page.path, page.meta), name: page.name, summary: page.summary })),
     })
-    return { pages, notFoundHtml: fullPage(prerender.NOT_FOUND_PATH) as string, llmsTxt }
+    const shopRedirects: { from: string; key?: string; to: string }[] = prerender.shopRedirects(catalog)
+    return { pages, notFoundHtml: fullPage(prerender.NOT_FOUND_PATH) as string, llmsTxt, shopRedirects }
   } finally {
     await server.close()
   }
@@ -341,7 +342,7 @@ function prerenderRouteMeta(): Plugin {
     async closeBundle() {
       const indexFile = resolve(outDir, 'index.html')
       const baseHtml = readFileSync(indexFile, 'utf8')
-      const { pages, notFoundHtml, llmsTxt } = await renderSite(root)
+      const { pages, notFoundHtml, llmsTxt, shopRedirects } = await renderSite(root)
       const fill = (shell: string, markup: string) => {
         if (!shell.includes('<div id="root"></div>')) throw new Error('prerender-route-meta: empty #root not found')
         return shell.replace('<div id="root"></div>', `<div id="root">${markup}</div>`)
@@ -397,6 +398,11 @@ function prerenderRouteMeta(): Plugin {
           '',
           '  # Each pre-built page (its own title, description, preview tags and content).',
           ...pageRules,
+          '',
+          '  # Out-of-date shop addresses (a changed listingKey, an older address form): 301 to the',
+          '  # listing\'s current page, or the shop list. After every page above, so a current address',
+          '  # is never redirected; most specific first (see shopRedirectRules).',
+          ...shopRedirects.map(({ from, key, to }) => `  RewriteRule ^${from.slice(1)}${key ? `(-.*)?-${key}` : '(-.*)?'}/?$ ${to} [R=301,L]`),
           '',
           '  # App-only pages: the app shell.',
           `  RewriteRule ^(${clientOnly})/?$ /index.html [L]`,

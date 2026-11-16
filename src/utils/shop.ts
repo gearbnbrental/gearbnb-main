@@ -106,36 +106,26 @@ export function slugify(value: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
+const nameSlug = (name: string) => slugify(name) || 'item';
+const keyFragment = (id: string, length: number) => id.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, length);
+
 /**
- * Gives every listing an address: just its name when that's unique ("blackdog-starchase-13x"),
- * else the name plus its condition, then its price, then the start of its first unit's id, only as
- * far as needed to tell same-named listings apart. No id unless it's needed, so a listing keeps its
- * address when one of its units sells.
+ * Gives every listing an address: just its name when no other listing has that name
+ * ("blackdog-starchase-13x"), else its name plus the start of its listingKey
+ * ("blackdog-starchase-13x-3f9a1c0d"). The key only appears when it's needed, so a listing with a
+ * unique name keeps the same clean address whatever happens to its units or key.
  */
 function withSlugs(listings: Omit<ShopItem, 'slug'>[]): ShopItem[] {
-  const candidates = (listing: Omit<ShopItem, 'slug'>) => {
-    const price = String(listing.priceCentavos / 100);
-    const firstId = listing.id.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8);
-    return [
-      [listing.name],
-      [listing.name, listing.condition],
-      [listing.name, listing.condition, price],
-      [listing.name, listing.condition, price, firstId],
-    ].map((parts) => slugify(parts.join(' ')) || 'item');
-  };
-  const all = listings.map(candidates);
-  const slugs: (string | null)[] = listings.map(() => null);
-  for (let level = 0; level < 4; level++) {
-    const taken = new Map<string, number>();
-    listings.forEach((_, index) => {
-      const slug = slugs[index] ?? all[index][level];
-      taken.set(slug, (taken.get(slug) ?? 0) + 1);
-    });
-    listings.forEach((_, index) => {
-      if (slugs[index] === null && (taken.get(all[index][level]) === 1 || level === 3)) slugs[index] = all[index][level];
-    });
-  }
-  return listings.map((listing, index) => ({ ...listing, slug: slugs[index]! }));
+  const perName = new Map<string, number>();
+  for (const listing of listings) perName.set(nameSlug(listing.name), (perName.get(nameSlug(listing.name)) ?? 0) + 1);
+  const slugs = listings.map((listing) =>
+    perName.get(nameSlug(listing.name)) === 1 ? nameSlug(listing.name) : `${nameSlug(listing.name)}-${keyFragment(listing.id, 8)}`,
+  );
+  // Two shared-name listings whose keys start the same: the whole key tells them apart.
+  return listings.map((listing, index) => ({
+    ...listing,
+    slug: slugs.indexOf(slugs[index]) === slugs.lastIndexOf(slugs[index]) ? slugs[index] : `${nameSlug(listing.name)}-${keyFragment(listing.id, 64)}`,
+  }));
 }
 
 /** The `{ items }` body of GET /api/customer/shop as the shop's listings, in the RMS's order (a
@@ -312,3 +302,94 @@ export function conditionTone(condition: string): 'new' | 'good' | 'fair' | 'rep
       return 'neutral';
   }
 }
+
+/** True when `slug` is `form` itself, or `form` followed by more words ("tent" matches "tent-x1"). */
+const startsWithForm = (slug: string, form: string) => slug === form || slug.startsWith(`${form}-`);
+
+/** The more specific address forms used before 2026-11-16 (name + condition + price, then name +
+ *  condition), most specific first: still recognised, so old links reach the right listing. */
+const olderForms = (item: ShopItem) => [
+  slugify(`${item.name} ${item.condition} ${item.priceCentavos / 100}`),
+  slugify(`${item.name} ${item.condition}`),
+];
+
+export type ShopAddress = { type: 'page'; item: ShopItem } | { type: 'redirect'; to: string } | { type: 'not-found' };
+
+/**
+ * Where a shop address should go, for addresses that may be out of date (a listingKey that
+ * changed, an older address form). A current address is its page. Otherwise the longest listing
+ * name the address starts with decides: one listing with that name gets a 301 to its current
+ * address; several get the one whose key fragment, then condition and price, still match, or else the shop list. An
+ * address that starts with no current listing's name is a real 404.
+ */
+export function resolveShopSlug(items: ShopItem[], slug: string): ShopAddress {
+  const exact = items.find((item) => item.slug === slug);
+  if (exact) return { type: 'page', item: exact };
+  const name = [...new Set(items.map((item) => nameSlug(item.name)))]
+    .filter((candidate) => startsWithForm(slug, candidate))
+    .sort((a, b) => b.length - a.length)[0];
+  if (!name) return { type: 'not-found' };
+  const sameName = items.filter((item) => nameSlug(item.name) === name);
+  if (sameName.length === 1) return { type: 'redirect', to: shopItemPath(sameName[0]) };
+  // An older address that still ends with a listing's own key fragment means that listing.
+  const byKey = sameName.filter((item) => slug.endsWith(`-${keyFragment(item.id, 8)}`));
+  if (byKey.length === 1) return { type: 'redirect', to: shopItemPath(byKey[0]) };
+  for (const level of [0, 1]) {
+    const hits = sameName.filter((item) => startsWithForm(slug, olderForms(item)[level]));
+    if (hits.length === 1) return { type: 'redirect', to: shopItemPath(hits[0]) };
+  }
+  return { type: 'redirect', to: SHOP_PATH };
+}
+
+/** One server redirect: an address that is `slug` itself or `slug` followed by more words (and,
+ *  with `key`, ending in "-{key}") goes to `to` with a 301. */
+export interface ShopRedirectRule {
+  slug: string;
+  key?: string;
+  to: string;
+}
+
+/** Whether an address matches a redirect rule, the way the server's rule does. */
+export const matchesShopRedirect = (slug: string, rule: ShopRedirectRule) =>
+  startsWithForm(slug, rule.slug) && (!rule.key || slug.endsWith(`-${rule.key}`));
+
+/**
+ * The server's 301 rules for out-of-date shop addresses, matching resolveShopSlug exactly. They
+ * are checked after every current page's own rule (a current address is never redirected), in
+ * this order: longest listing name first; within a name, key fragment, then the older forms, then
+ * the name itself.
+ */
+export function shopRedirectRules(items: ShopItem[]): ShopRedirectRule[] {
+  const groups: { name: string; rules: ShopRedirectRule[] }[] = [];
+  const names = new Set(items.map((item) => nameSlug(item.name)));
+  for (const name of names) {
+    const rules: ShopRedirectRule[] = [];
+    groups.push({ name, rules });
+    const sameName = items.filter((item) => nameSlug(item.name) === name);
+    if (sameName.length === 1) {
+      rules.push({ slug: name, to: shopItemPath(sameName[0]) });
+      continue;
+    }
+    for (const item of sameName) {
+      const key = keyFragment(item.id, 8);
+      if (sameName.filter((other) => keyFragment(other.id, 8) === key).length === 1) rules.push({ slug: name, key, to: shopItemPath(item) });
+    }
+    for (const level of [0, 1]) {
+      for (const item of sameName) {
+        const form = olderForms(item)[level];
+        // Only a form that points at exactly one listing (and that a more specific form hasn't
+        // already settled) becomes a rule; the rest fall through to the shop list.
+        // A form that starts with a longer listing name belongs to that name instead (as in
+        // resolveShopSlug, the longest name wins).
+        const ownedByLongerName = [...names].some((other) => other.length > name.length && startsWithForm(form, other));
+        const unique = sameName.filter((other) => olderForms(other)[level] === form).length === 1;
+        if (unique && !ownedByLongerName && !rules.some((rule) => rule.slug === form)) {
+          rules.push({ slug: form, to: shopItemPath(item) });
+        }
+      }
+    }
+    rules.push({ slug: name, to: SHOP_PATH });
+  }
+  return groups.sort((a, b) => b.name.length - a.name.length).flatMap((group) => group.rules);
+}
+
