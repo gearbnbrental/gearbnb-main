@@ -14,7 +14,7 @@ export default function CampsitesComingSoon() {
 
   return (
     <>
-      <section className="relative isolate flex min-h-[calc(100dvh-4.5rem)] items-center overflow-hidden bg-brand-forest-dark pb-10 text-white">
+      <section className="relative isolate flex min-h-[calc(100dvh-4.5rem)] flex-col overflow-hidden bg-brand-forest-dark text-white">
         <img
           src="/images/landing-hero.webp"
           alt=""
@@ -23,7 +23,7 @@ export default function CampsitesComingSoon() {
           className="absolute inset-0 -z-10 h-full w-full object-cover object-[center_60%]"
         />
         <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-b from-black/60 via-black/35 to-brand-forest-dark/95" />
-        <div className="mx-auto flex w-full max-w-2xl flex-col items-center gap-5 px-5 py-20 text-center sm:gap-6 sm:px-6">
+        <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col items-center justify-center gap-5 px-5 py-16 text-center sm:gap-6 sm:px-6">
           <span className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3.5 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-white backdrop-blur-sm">
             <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-[#f6c445] motion-safe:animate-pulse" />
             Coming Soon
@@ -54,30 +54,30 @@ export default function CampsitesComingSoon() {
             </a>
           </div>
         </div>
-      </section>
-
-      {/* For campsite owners: the same floating card as the homepage's "Not sure what to rent?",
-          overlapping the bottom of the photo. */}
-      <section aria-labelledby="campsite-owners" className="relative z-20 -mt-12 px-5 pb-14 sm:-mt-14 sm:px-6 sm:pb-20">
-        <div className="mx-auto w-full max-w-3xl rounded-2xl border border-line bg-surface p-4 text-left shadow-lg sm:p-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
-            <div className="flex items-center gap-3">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-forest text-white sm:h-10 sm:w-10">
-                <ChatBubbleIcon className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
-              </span>
-              <div className="flex flex-col gap-0.5">
-                <h2 id="campsite-owners" className="text-sm font-bold text-ink sm:text-base">
-                  Own a campsite? Get listed for free
-                </h2>
-                <p className="text-xs text-ink-muted sm:text-sm">
-                  Send us a message to list your campsite for free and explore partnerships with GearBnB.
-                </p>
+        {/* For campsite owners: the homepage's "Not sure what to rent?" layout, in this page's own
+            look (see-through glass on the photo, like the Request Campsite List button), so the
+            page runs straight from the photo into the footer. */}
+        <div role="region" aria-labelledby="campsite-owners" className="px-5 pb-8 sm:px-6 sm:pb-10">
+          <div className="mx-auto w-full max-w-3xl rounded-2xl border border-white/20 bg-white/10 p-4 text-left shadow-lg shadow-black/20 backdrop-blur-md sm:p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/15 text-white ring-1 ring-white/20 sm:h-10 sm:w-10">
+                  <ChatBubbleIcon className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
+                </span>
+                <div className="flex flex-col gap-0.5">
+                  <h2 id="campsite-owners" className="text-sm font-bold text-white sm:text-base">
+                    Own a campsite? Get listed for free
+                  </h2>
+                  <p className="text-xs text-white/75 sm:text-sm">
+                    Send us a message to list your campsite for free and explore partnerships with GearBnB.
+                  </p>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center justify-center gap-3 sm:justify-end sm:gap-4 sm:border-l sm:border-line-soft sm:pl-5">
-              <SocialIconLink platform="messenger" showLabel size="sm" />
-              <SocialIconLink platform="facebook" showLabel size="sm" />
-              <SocialIconLink platform="tiktok" showLabel size="sm" />
+              <div className="flex items-center justify-center gap-3 sm:justify-end sm:gap-4 sm:border-l sm:border-white/15 sm:pl-5">
+                <SocialIconLink platform="messenger" showLabel size="sm" tone="dark" />
+                <SocialIconLink platform="facebook" showLabel size="sm" tone="dark" />
+                <SocialIconLink platform="tiktok" showLabel size="sm" tone="dark" />
+              </div>
             </div>
           </div>
         </div>
