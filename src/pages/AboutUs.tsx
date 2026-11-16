@@ -1,16 +1,10 @@
 ﻿import type { ComponentType, ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import BirSealBadge from '../components/BirSealBadge';
+import StepArrow, { STEP_GRID_GAP } from '../components/StepArrow';
 import FaqAccordion, { type FaqItem } from '../components/FaqAccordion';
-import {
-  CheckCircleIcon,
-  ClockIcon,
-  CompassIcon,
-  GearPlaceholderIcon,
-  LeafIcon,
-  ShieldCheckIcon,
-  TruckIcon,
-} from '../components/icons';
+import { IconSpot, PromiseMemorableIcon, PromisePreparedIcon, PromiseSimpleIcon } from '../components/GearbnbIcons';
+import { CheckCircleIcon } from '../components/icons';
 import { MESSENGER_URL, TIKTOK_URL } from '../config/social';
 import { usePageMeta } from '../hooks/usePageMeta';
 import { PAGE_META } from '../config/pageMeta';
@@ -86,30 +80,34 @@ interface ProcessStep {
   number: number;
   title: string;
   description: string;
-  icon: ComponentType<{ className?: string }>;
 }
 
+// The same four steps as the homepage's "How To Rent" section, worded for this page so the two
+// don't repeat each other.
 const PROCESS_STEPS: ProcessStep[] = [
   {
     number: 1,
     title: 'Choose your setup',
     description:
-      'Pick a ready-made package or build your own camping essentials rental. New to camping? Start with a beginner camping setup and add pieces as you gain confidence.',
-    icon: GearPlaceholderIcon,
+      'Pick one of our ready-made camping packages, or build your own setup piece by piece. New to camping? Start with a package and add extras as you go.',
   },
   {
     number: 2,
-    title: 'Reserve your dates',
+    title: 'Book your dates and verify',
     description:
-      'GearBnB offers 48-hour, 72-hour, and extended-day rental periods. This gives you enough time to set up, enjoy your trip, and pack down without rushing.',
-    icon: ClockIcon,
+      'Choose a 48-hour, 72-hour or longer rental, pick self pickup or Lalamove or Grab delivery, and upload your IDs so we can confirm it is really you.',
   },
   {
     number: 3,
-    title: 'Get your gear delivered or picked up',
+    title: 'Secure your gear with a deposit',
     description:
-      'Choose Grab delivery or in-person pickup. Our chat support operates 24/7, so let us know your preferred time at least 24 hours before your rental date.',
-    icon: TruckIcon,
+      'Pay the refundable security deposit within 24 hours of booking. Our team reviews your documents in the meantime, and your gear is set aside for you once you are approved.',
+  },
+  {
+    number: 4,
+    title: 'Pick it up or get it delivered',
+    description:
+      'Collect your gear in Las Piñas City or have it brought to you by Lalamove or Grab on your start date. Our chat support operates 24/7, so let us know your preferred time at least 24 hours before your rental date.',
   },
 ];
 
@@ -123,17 +121,17 @@ const VALUES: ValueCard[] = [
   {
     title: 'Simple',
     description: 'Camping should feel simple, not stressful. We take the second-guessing out of your trip.',
-    icon: LeafIcon,
+    icon: PromiseSimpleIcon,
   },
   {
     title: 'Prepared',
     description: "We'll make sure you have the right equipment and information to feel confident outdoors.",
-    icon: ShieldCheckIcon,
+    icon: PromisePreparedIcon,
   },
   {
     title: 'Memorable',
     description: 'Your trip should be about the experience. We take care of the gear, so you can enjoy the moment.',
-    icon: CompassIcon,
+    icon: PromiseMemorableIcon,
   },
 ];
 
@@ -141,7 +139,7 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: 'How do I rent camping gear from GearBnB?',
     answer:
-      'If you need help, you can send us a message on Messenger or TikTok. You can also directly browse available gear or packages and select your rental period. Choose Grab delivery or pick up and confirm your time at least 24 hours before your rental date.',
+      'If you need help, you can send us a message on Messenger or TikTok. You can also directly browse available gear or packages and select your rental period. Choose pickup or Lalamove or Grab delivery, and confirm your time at least 24 hours before your rental date.',
   },
   {
     question: 'How much does camping gear cost to rent?',
@@ -398,25 +396,23 @@ export default function AboutUs() {
             <h2 className="font-serif text-2xl font-bold text-ink sm:text-3xl">
               How Does Camping Equipment Rental Work with GearBnB?
             </h2>
-            <p className="max-w-xl text-sm text-ink-muted sm:text-base">Renting your gear takes three simple steps.</p>
+            <p className="max-w-xl text-sm text-ink-muted sm:text-base">
+              From choosing your gear to pickup day, renting camping equipment with GearBnB takes four simple steps.
+            </p>
           </div>
 
-          <div className="grid gap-6 rounded-2xl bg-surface-muted p-6 sm:grid-cols-3 sm:p-8">
-            {PROCESS_STEPS.map((step) => (
-              <div key={step.number} className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-5 shadow-sm">
-                <div className="flex items-center gap-2.5">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-forest text-sm font-bold text-white">
-                    {step.number}
-                  </span>
-                  {/* Solid circle + white icon, not a bare colored glyph — per the client's
-                      "section icons should be white" request; the badge is what keeps a white
-                      icon visible against this card's own light background. */}
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-forest text-white">
-                    <step.icon className="h-4 w-4" />
-                  </span>
+          {/* The gap leaves room for the arrow between cards (see StepArrow). */}
+          <div className={`grid rounded-2xl bg-surface-muted p-6 sm:grid-cols-2 sm:p-8 lg:grid-cols-4 ${STEP_GRID_GAP}`}>
+            {PROCESS_STEPS.map((step, index) => (
+              <div key={step.number} className="relative flex flex-col gap-3 rounded-xl border border-line bg-surface p-5 shadow-sm">
+                {/* "Step 1" sits close above the title. Bold heading-style text, but not a heading
+                    itself, so each card keeps its title as its one heading. */}
+                <div className="flex flex-col gap-1">
+                  <span className="text-xl font-bold leading-tight text-accent sm:text-2xl">Step {step.number}</span>
+                  <h3 className="text-base font-semibold text-ink">{step.title}</h3>
                 </div>
-                <h3 className="text-base font-semibold text-ink">{step.title}</h3>
                 <p className="text-sm text-ink-muted">{step.description}</p>
+                {index < PROCESS_STEPS.length - 1 && <StepArrow skipOnTwoColumns={index === 1} />}
               </div>
             ))}
           </div>
@@ -441,9 +437,7 @@ export default function AboutUs() {
           <div className="grid gap-6 sm:grid-cols-3">
             {VALUES.map((value) => (
               <div key={value.title} className="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-6 shadow-sm">
-                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-brand-forest text-white">
-                  <value.icon className="h-6 w-6" />
-                </span>
+                <IconSpot icon={value.icon} size="lg" />
                 <h3 className="font-serif text-xl font-bold text-ink">{value.title}</h3>
                 <p className="text-sm text-ink-muted">{value.description}</p>
               </div>

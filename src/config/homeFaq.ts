@@ -3,6 +3,9 @@
  * answers into the homepage's FAQPage schema (see HOME_JSON_LD in pageMeta.ts), so the two can
  * never disagree. Plain text only; `link` is shown under the answer.
  */
+import { CAMPSITES_COMING_SOON } from './features.ts';
+import { MESSENGER_URL } from './social.ts';
+
 export interface HomeFaqEntry {
   question: string;
   answer: string;
@@ -32,11 +35,22 @@ export const HOME_FAQ: HomeFaqEntry[] = [
   {
     question: 'Do you sell camping gear?',
     answer:
-      'No. We offer camping gear for rent, including tents, sleeping gear, cooking equipment and complete camping packages for every type of trip.',
+      'Yes, we have selected tents for sale. Send us a message to ask which tents are available, their prices and other details. We also offer camping gear for rent, including tents, sleeping gear, cooking equipment and complete camping packages for every type of trip.',
+    link: { href: '/catalog/camping-gear-sale', label: 'See Our Camping Gear for Sale' },
   },
   {
     question: 'Can you help me find a campsite?',
-    answer: 'We can point you toward popular spots based on your trip, but booking the campsite itself is up to you.',
+    ...(CAMPSITES_COMING_SOON
+      ? {
+          answer:
+            'Yes. Message us about your trip and we can point you toward popular spots. Booking the campsite itself is up to you. Our Find A Campsite directory, with entrance fees, cell signal, restrooms, pet rules and camper reviews, is coming soon.',
+          link: { href: MESSENGER_URL, label: 'Ask Us for a Campsite' },
+        }
+      : {
+          answer:
+            'Yes. Our Find A Campsite directory lists campsites near Metro Manila and beyond, with entrance fees, cell signal, restrooms, pet rules and camper reviews. You book the campsite directly with them, and rent your gear from us.',
+          link: { href: '/campsites', label: 'Find A Campsite' },
+        }),
   },
   {
     question: 'How do I get started?',

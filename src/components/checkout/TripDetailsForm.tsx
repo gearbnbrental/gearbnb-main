@@ -16,8 +16,8 @@ interface FulfillmentOptionConfig {
 const FULFILLMENT_OPTIONS: FulfillmentOptionConfig[] = [
   {
     value: 'delivery',
-    title: 'Grab Delivery',
-    description: 'You book and pay for your own Grab to your address, GearBnB does not charge a delivery fee.',
+    title: 'Lalamove / Grab Delivery',
+    description: 'You book and pay for your own Lalamove or Grab to your address, GearBnB does not charge a delivery fee.',
     icon: TruckIcon,
   },
   {

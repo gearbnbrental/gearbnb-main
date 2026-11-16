@@ -60,7 +60,9 @@ interface AuthContextValue {
    *  link if an account with that email exists. Never reveals whether one does: this is Supabase's
    *  own built-in anti-enumeration behavior for this method (it resolves the same way either way),
    *  not something this app has to fake. Never throws. */
-  requestPasswordReset: (email: string) => Promise<void>;
+  /** Sends the reset email. `error` only for a real failure (rate limit, email service down); an
+   *  email with no account succeeds the same as one with (Supabase never says which). */
+  requestPasswordReset: (email: string) => Promise<PasswordResetResult>;
   /** True once the customer has actually completed a genuine Supabase password-recovery step —
    *  set from the `PASSWORD_RECOVERY` auth event Supabase's client fires when it detects recovery
    *  tokens in the URL (the emailed-link flow) — never from just "a session happens to exist"
@@ -200,6 +202,43 @@ function getDisplayName(user: User | null): string {
  *  redirect (Supabase returns the failure as `error`/`error_description` hash params on that
  *  redirect, rather than as a thrown error from a function call) instead of duplicating this
  *  pattern-matching a second time. */
+export interface PasswordResetResult {
+  error: string | null;
+  /** Set when Supabase asked us to wait before sending another reset email. */
+  retryAfterSeconds?: number;
+}
+
+/**
+ * A failed reset-email request in plain words. resetPasswordForEmail answers the same whether or
+ * not the email has an account, so an error here is always a real failure (never a hint about
+ * the account): usually Supabase's own wait between emails ("For security purposes, you can only
+ * request this after 37 seconds."), or the email service refusing to send.
+ */
+export function passwordResetError(message: string): PasswordResetResult {
+  const wait = message.match(/after (\d+) seconds?/i);
+  if (wait) {
+    const seconds = Number(wait[1]);
+    return { error: `Please wait ${seconds} second${seconds === 1 ? '' : 's'} before asking for another link.`, retryAfterSeconds: seconds };
+  }
+  const normalized = message.toLowerCase();
+  // supabase-js reports a dropped connection as an error result ("Failed to fetch" in Chrome,
+  // "Load failed" in Safari, "NetworkError…" in Firefox), not as a thrown exception.
+  if (normalized.includes('failed to fetch') || normalized.includes('load failed') || normalized.includes('networkerror')) {
+    return { error: "We couldn't send the email right now. Check your connection and try again." };
+  }
+  // Supabase's own check of the address ("Unable to validate email address: invalid format").
+  if (normalized.includes('invalid format') || normalized.includes('validate email') || normalized.includes('invalid email')) {
+    return { error: 'Enter a valid email address.' };
+  }
+  if (normalized.includes('rate limit') || normalized.includes('too many requests')) {
+    return { error: 'Too many reset emails were requested. Please wait a few minutes and try again.', retryAfterSeconds: 300 };
+  }
+  if (normalized.includes('sending') || normalized.includes('smtp') || normalized.includes('email')) {
+    return { error: "We couldn't send the email right now. Please try again in a moment, or message us for help." };
+  }
+  return { error: friendlyAuthError(message) };
+}
+
 export function friendlyAuthError(message: string): string {
   const normalized = message.toLowerCase();
   if (normalized.includes('invalid login credentials')) {
@@ -530,9 +569,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   }
 
-  async function requestPasswordReset(email: string): Promise<void> {
+  async function requestPasswordReset(email: string): Promise<PasswordResetResult> {
     try {
-      await supabase.auth.resetPasswordForEmail(email, {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
         // Same customer-origin rule as the Google flow above — a recovery link must never land a
         // customer on the RMS/Admin app. /reset-password (not /forgot-password) — a dedicated
         // page whose only job is "a recovery session exists, set a new password," so it can never
@@ -544,10 +583,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // email link previously landed somewhere else entirely with no reset form in sight.
         redirectTo: `${resolveCustomerOrigin()}/reset-password`,
       });
+      return error ? passwordResetError(error.message) : { error: null };
     } catch {
-      // Ignored — resetPasswordForEmail already resolves the same way regardless of whether the
-      // email has an account (Supabase's own anti-enumeration behavior for this method); this
-      // catch is only a defensive backstop against a network-level failure.
+      // A network-level failure: the request never reached Supabase.
+      return { error: "We couldn't send the email right now. Check your connection and try again." };
     }
   }
 

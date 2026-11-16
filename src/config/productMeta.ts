@@ -34,7 +34,7 @@ export function fitDescription(sentences: string[], max = 160): string {
       continue;
     }
     const room = max - result.length - 2; // the space before it and the "…"
-    if (room >= 40) result = `${result} ${sentence.slice(0, room).replace(/[\s,;:]+\S*$/, '')}…`;
+    if (room >= 40) result = `${result ? `${result} ` : ''}${sentence.slice(0, room).replace(/[\s,;:]+\S*$/, '')}…`;
     break;
   }
   return result;
@@ -59,16 +59,18 @@ function offer(url: string, pricing: { '48h': number; '72h': number }, inStock: 
   };
 }
 
-function breadcrumb(url: string, listName: string, listPath: string, name: string) {
+/** BreadcrumbList from Home through `trail` (each step's name and path) to the page at `url`. */
+export function breadcrumbJsonLd(url: string, trail: { name: string; path: string }[], name: string) {
+  const steps = [{ name: 'Home', item: `${SITE_URL}/` }, ...trail.map((step) => ({ name: step.name, item: SITE_URL + step.path })), { name, item: url }];
   return {
     '@type': 'BreadcrumbList',
     '@id': `${url}#breadcrumb`,
-    itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Home', item: `${SITE_URL}/` },
-      { '@type': 'ListItem', position: 2, name: listName, item: SITE_URL + listPath },
-      { '@type': 'ListItem', position: 3, name, item: url },
-    ],
+    itemListElement: steps.map((step, index) => ({ '@type': 'ListItem', position: index + 1, ...step })),
   };
+}
+
+function breadcrumb(url: string, listName: string, listPath: string, name: string) {
+  return breadcrumbJsonLd(url, [{ name: listName, path: listPath }], name);
 }
 
 export function packagePageMeta(kit: PackageKit): PageMeta {
@@ -76,7 +78,7 @@ export function packagePageMeta(kit: PackageKit): PageMeta {
   const description = fitDescription([
     `Rent ${kit.name} for ${priceSentence(kit.pricing)}.`,
     bestForSentence(kit.description),
-    'Pick up in Las Piñas City or book Grab delivery.',
+    'Pick up in Las Piñas City or book Lalamove or Grab delivery.',
   ]);
   const images = [kit.imageUrl, ...(kit.images ?? [])].filter((src, i, all) => src && all.indexOf(src) === i);
   return {
@@ -108,7 +110,7 @@ export function gearPageMeta(kind: BookableGearKind): PageMeta {
   const description = fitDescription([
     `Rent the ${name} for ${priceSentence(kind.pricing)}.`,
     bestForSentence(kind.description),
-    'Pick up in Las Piñas City or book Grab delivery.',
+    'Pick up in Las Piñas City or book Lalamove or Grab delivery.',
   ]);
   const images = (kind.images?.length ? kind.images : kind.imageUrl ? [kind.imageUrl] : []).filter(Boolean);
   return {

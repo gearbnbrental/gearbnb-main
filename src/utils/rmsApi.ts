@@ -1,6 +1,16 @@
 import { supabase } from '../supabase';
 import type { MetaBookingTracking } from './metaTracking';
 import type { VerificationDocumentKey } from '../types/gearbnb';
+import type {
+  Campsite,
+  CampsiteReview,
+  CampsiteReviewInput,
+  CampsiteLeadInput,
+  CampsiteLeadResult,
+  CampsiteSummary,
+  MyCampsiteReview,
+  ReviewReportReason,
+} from '../types/campsite';
 
 /**
  * In `vite dev` (import.meta.env.DEV), always talk to a local/LAN RMS dev server — never the
@@ -928,6 +938,52 @@ export function fetchPackageCatalogFromRms() {
   return withReadRetry(() => rmsFetch<{ packages: RmsCatalogPackage[] }>('/api/customer/catalog/packages', { requireAuth: false }));
 }
 
+/** Every published campsite in the Find A Campsite directory (public, no login). */
+export function fetchCampsitesFromRms() {
+  return withReadRetry(() => rmsFetch<{ campsites: CampsiteSummary[] }>('/api/customer/campsites', { requireAuth: false }));
+}
+
+/** Records one tap on a campsite's contact button and returns its lead code. Public, nothing about
+ *  the camper is sent. Never retried: a retry could send the campsite a second lead email. */
+export function recordCampsiteLeadOnRms(slug: string, input: CampsiteLeadInput) {
+  return rmsFetch<CampsiteLeadResult>(`/api/customer/campsites/${encodeURIComponent(slug)}/leads`, {
+    method: 'POST',
+    body: input,
+    requireAuth: false,
+  });
+}
+
+/** One published campsite with its photos and reviews. A 404 (unknown or unpublished) is final. */
+export function fetchCampsiteFromRms(slug: string) {
+  return withReadRetry(() =>
+    rmsFetch<{ campsite: Campsite }>(`/api/customer/campsites/${encodeURIComponent(slug)}`, { requireAuth: false }),
+  );
+}
+
+/** The signed-in camper's own review of a campsite, and whether they can post one. */
+export function fetchMyCampsiteReview(slug: string) {
+  return withReadRetry(() => rmsFetch<MyCampsiteReview>(`/api/customer/campsites/${encodeURIComponent(slug)}/my-review`));
+}
+
+/** Creates the camper's review of a campsite, or edits the one they already wrote. */
+export function saveMyCampsiteReview(slug: string, input: CampsiteReviewInput) {
+  return rmsFetch<{ review: CampsiteReview }>(`/api/customer/campsites/${encodeURIComponent(slug)}/my-review`, {
+    method: 'POST',
+    body: input,
+  });
+}
+
+export function deleteMyCampsiteReview(slug: string) {
+  return rmsFetch<{ ok: true }>(`/api/customer/campsites/${encodeURIComponent(slug)}/my-review/delete`, { method: 'POST' });
+}
+
+export function reportCampsiteReview(reviewId: string, reason: ReviewReportReason, details: string) {
+  return rmsFetch<{ ok: true }>(`/api/customer/campsite-reviews/${encodeURIComponent(reviewId)}/report`, {
+    method: 'POST',
+    body: { reason, details: details.trim() || undefined },
+  });
+}
+
 /**
  * One request answering "which packages are free for these dates?" for every package at once, from
  * the RMS's date-aware catalog (same per-kind, per-date stock the availability check uses). Only a
@@ -957,6 +1013,17 @@ export function fetchGearStockForDates(window: { pickupAt: string; returnAt: str
     requireAuth: false,
     signal,
   });
+}
+
+/**
+ * The gear staff listed "For Sale" — GET /api/customer/shop, public/unauthenticated like the gear
+ * catalog. Typed `unknown` on purpose: the body is checked item by item in normalizeShopItems
+ * (utils/shop.ts), which keeps only the fields the shop shows and ignores any it doesn't know yet.
+ * Read-only, so safe to retry a transient failure (see withReadRetry). Errors: 503 with
+ * code SHOP_UNAVAILABLE when the RMS can't load it, 429 with Retry-After when rate limited.
+ */
+export function fetchShopFromRms() {
+  return withReadRetry(() => rmsFetch<unknown>('/api/customer/shop', { requireAuth: false }));
 }
 
 /** The currently RMS-configured customer-facing payment QR codes, exactly as staff last set them

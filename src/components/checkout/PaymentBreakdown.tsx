@@ -112,7 +112,7 @@ interface BreakdownRowProps {
   label: string;
   sublabel: string;
   /** Null renders "—" — for a cost that isn't ₱0, just not charged by GearBnB (e.g. a customer's
-   *  own Grab booking), so it's never shown as if GearBnB confirmed a ₱0.00 price for it. */
+   *  own Lalamove or Grab booking), so it's never shown as if GearBnB confirmed a ₱0.00 price for it. */
   feeAmount: number | null;
   depositAmount: number | null;
 }
@@ -818,10 +818,10 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
               )}
 
               <BreakdownRow
-                label={isDelivery ? 'Grab' : 'Pickup'}
+                label={isDelivery ? 'Lalamove / Grab' : 'Pickup'}
                 sublabel={
                   isDelivery
-                    ? 'GearBnB does not charge or arrange this, you book and pay for your own Grab.'
+                    ? 'GearBnB does not charge or arrange this, you book and pay for your own Lalamove or Grab.'
                     : 'No fee for in-store pickup'
                 }
                 feeAmount={isDelivery ? null : 0}
@@ -868,7 +868,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
             </dd>
 
             <dt className="text-ink-muted">Fulfillment</dt>
-            <dd className="text-right font-medium text-ink">{isDelivery ? 'Grab Delivery' : 'Self Pickup'}</dd>
+            <dd className="text-right font-medium text-ink">{isDelivery ? 'Lalamove / Grab Delivery' : 'Self Pickup'}</dd>
 
             {isDelivery && (
               <>

@@ -41,9 +41,11 @@ interface SocialIconLinkProps {
    * denser row of icons alone (the "Still deciding?" banner, the footer). */
   showLabel?: boolean;
   size?: 'sm' | 'md';
+  /** 'dark' for a photo or dark background: white label and focus ring. */
+  tone?: 'light' | 'dark';
 }
 
-export default function SocialIconLink({ platform, showLabel = false, size = 'md' }: SocialIconLinkProps) {
+export default function SocialIconLink({ platform, showLabel = false, size = 'md', tone = 'light' }: SocialIconLinkProps) {
   const { label, href, icon: Icon, badgeClassName } = PLATFORM_CONFIG[platform];
   const badgeSize = size === 'sm' ? 'h-9 w-9' : 'h-11 w-11';
   const iconSize = size === 'sm' ? 'h-4 w-4' : 'h-5 w-5';
@@ -57,11 +59,13 @@ export default function SocialIconLink({ platform, showLabel = false, size = 'md
       className="group flex flex-col items-center gap-1.5"
     >
       <span
-        className={`flex shrink-0 items-center justify-center rounded-full shadow-sm transition-transform group-hover:-translate-y-0.5 group-focus-visible:-translate-y-0.5 group-focus-visible:outline group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-brand-forest ${badgeSize} ${badgeClassName}`}
+        className={`flex shrink-0 items-center justify-center rounded-full shadow-sm transition-transform group-hover:-translate-y-0.5 group-focus-visible:-translate-y-0.5 group-focus-visible:outline group-focus-visible:outline-2 group-focus-visible:outline-offset-2 ${
+          tone === 'dark' ? 'ring-1 ring-white/20 group-focus-visible:outline-white' : 'group-focus-visible:outline-brand-forest'
+        } ${badgeSize} ${badgeClassName}`}
       >
         <Icon className={iconSize} />
       </span>
-      {showLabel && <span className="text-xs font-medium text-ink-muted">{label}</span>}
+      {showLabel && <span className={`text-xs font-medium ${tone === 'dark' ? 'text-white/80' : 'text-ink-muted'}`}>{label}</span>}
     </a>
   );
 }

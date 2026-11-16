@@ -7,6 +7,7 @@
  * Change a title or description here and both stay in sync.
  */
 
+import { CAMPSITES_COMING_SOON } from './features.ts';
 import { HOME_FAQ } from './homeFaq.ts';
 
 export const SITE_URL = 'https://gearbnbrental.com';
@@ -107,7 +108,7 @@ export const ABOUT_US_JSON_LD = {
           name: 'How do I rent camping gear from GearBnB?',
           acceptedAnswer: {
             '@type': 'Answer',
-            text: 'If you need help, you can send us a message on Messenger or TikTok. You can also directly browse available gear or packages and select your rental period. Choose Grab delivery or pick up and confirm your time at least 24 hours before your rental date.',
+            text: 'If you need help, you can send us a message on Messenger or TikTok. You can also directly browse available gear or packages and select your rental period. Choose pickup or Lalamove or Grab delivery, and confirm your time at least 24 hours before your rental date.',
           },
         },
         {
@@ -202,6 +203,11 @@ export const PAGE_META = {
       'Rent tents, air beds, camping chairs, coolers, fans and lights by the piece. Pick your dates, mix and match your setup and pick up in Las Piñas.',
     image: '/images/og-build-your-own.jpg',
   },
+  shop: {
+    title: 'Camping Gear for Sale | GearBnB',
+    description:
+      "Buy new and used camping gear from GearBnB, priced per piece. See each item's photos, condition and price, then message us to buy it.",
+  },
   events: {
     title: 'Camping Gear Rental for Events & Team Building | GearBnB',
     description:
@@ -214,6 +220,20 @@ export const PAGE_META = {
       'Discover GearBnB, your camping gear rental in Las Piñas, Metro Manila. Learn about our mission and find reliable gear for your next outdoor adventure.',
     jsonLd: ABOUT_US_JSON_LD,
   },
+  // Until launch the page only says "Coming Soon", so it's kept out of search results and the
+  // sitemap (see config/features.ts).
+  campsites: CAMPSITES_COMING_SOON
+    ? {
+        title: 'Find A Campsite: Coming Soon | GearBnB',
+        description:
+          "GearBnB's guide to campsites near Metro Manila and beyond is coming soon: entrance fees, cell signal, restrooms, pet rules and camper reviews.",
+        robots: 'noindex, follow',
+      }
+    : {
+        title: 'Find a Campsite in the Philippines: Fees, Signal & Amenities | GearBnB',
+        description:
+          'Find campsites near Metro Manila and across the Philippines. Compare entrance fees, cell signal, restrooms and pet rules, read reviews, then rent your gear.',
+      },
   privacy: {
     title: 'Privacy Policy | GearBnB',
     description: 'How GearBnB collects, uses, stores, shares and protects your personal data.',
@@ -245,8 +265,10 @@ export const PRERENDERED_PAGES: { path: string; meta: PageMeta }[] = [
   { path: '/catalog', meta: PAGE_META.catalog },
   { path: '/catalog/camping-packages', meta: PAGE_META.packages },
   { path: '/catalog/build-your-own', meta: PAGE_META.buildYourOwn },
+  { path: '/catalog/camping-gear-sale', meta: PAGE_META.shop },
   { path: '/plan-an-event', meta: PAGE_META.events },
   { path: '/about-us', meta: PAGE_META.about },
+  { path: '/campsites', meta: PAGE_META.campsites },
   { path: '/privacy-policy', meta: PAGE_META.privacy },
   { path: '/terms', meta: PAGE_META.rentalTerms },
   { path: '/terms-of-service', meta: PAGE_META.terms },

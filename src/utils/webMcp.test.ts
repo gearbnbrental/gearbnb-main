@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { BookableGearKind, PackageKit } from '../types/gearbnb';
-import { registerRentalTools, rentalTools, type CatalogSnapshot } from './webMcp';
+import { SAMPLE_CAMPSITES } from '../data/campsiteSamples';
+import { campsiteTools, registerRentalTools, rentalTools, type CampsiteSource, type CatalogSnapshot } from './webMcp';
 
 const kit = {
   id: 'k1',
@@ -63,10 +64,38 @@ describe('WebMCP rental tools', () => {
   it('registers with registerTool and unregisters on cleanup, and does nothing without WebMCP', () => {
     const registerTool = vi.fn();
     const unregisterTool = vi.fn();
-    const cleanup = registerRentalTools({ registerTool, unregisterTool }, snapshot);
-    expect(registerTool).toHaveBeenCalledTimes(3);
+    const cleanup = registerRentalTools({ registerTool, unregisterTool }, snapshot, campsites);
+    expect(registerTool).toHaveBeenCalledTimes(5);
     cleanup();
     expect(unregisterTool).toHaveBeenCalledWith('search_rental_catalog');
     expect(() => registerRentalTools(undefined, snapshot)()).not.toThrow();
+  });
+});
+
+const campsites: CampsiteSource = {
+  list: async () => SAMPLE_CAMPSITES,
+  detail: async (slug) => SAMPLE_CAMPSITES.find((campsite) => campsite.slug === slug) ?? null,
+};
+const campsiteResult = async (name: string, input: Record<string, unknown>, source = campsites) =>
+  (await campsiteTools(source).find((candidate) => candidate.name === name)!.execute(input)).content[0].text;
+
+describe('WebMCP campsite tools', () => {
+  it('searches the directory with filters', async () => {
+    const found = JSON.parse(await campsiteResult('search_campsites', { province: 'Rizal', petFriendly: true }));
+    expect(found.map((campsite: { name: string }) => campsite.name)).toEqual(['Sample Riverside Campsite']);
+    expect(found[0].url).toBe('https://gearbnbrental.com/campsites/sample-riverside-campsite-tanay-rizal');
+    expect(await campsiteResult('search_campsites', { query: 'nowhere' })).toContain('No campsites match');
+  });
+
+  it('returns one campsite with its facts and FAQ, or says it does not exist', async () => {
+    const campsite = JSON.parse(await campsiteResult('get_campsite', { slug: 'sample-riverside-campsite-tanay-rizal' }));
+    expect(campsite.details.Restroom).toBe('Yes');
+    expect(campsite.faq.length).toBeGreaterThan(5);
+    expect(await campsiteResult('get_campsite', { slug: 'missing' })).toContain('No campsite with slug');
+  });
+
+  it('says when the directory cannot be loaded', async () => {
+    const down: CampsiteSource = { list: () => Promise.reject(new Error('offline')), detail: () => Promise.reject(new Error('offline')) };
+    expect(await campsiteResult('search_campsites', {}, down)).toContain('could not be loaded');
   });
 });

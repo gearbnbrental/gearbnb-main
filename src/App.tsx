@@ -4,6 +4,7 @@ import BackToTop from './components/BackToTop';
 import CookieConsent from './components/CookieConsent';
 import AccessibilityWidget from './components/AccessibilityWidget';
 import { readCookieConsent } from './utils/cookieConsent';
+import { CAMPSITES_COMING_SOON } from './config/features';
 import ErrorBoundary from './components/ErrorBoundary';
 import FloatingHelp from './components/FloatingHelp';
 import Footer from './components/Footer';
@@ -49,6 +50,9 @@ function lazyWithRetry<T extends ComponentType<any>>(
 
 const AboutUs = lazyWithRetry(() => import('./pages/AboutUs'));
 const Cart = lazyWithRetry(() => import('./pages/Cart'));
+// Until launch, every campsite address shows Coming Soon (see config/features.ts).
+const CampsiteDetail = lazyWithRetry(() => (CAMPSITES_COMING_SOON ? import('./pages/CampsitesComingSoon') : import('./pages/CampsiteDetail')));
+const Campsites = lazyWithRetry(() => (CAMPSITES_COMING_SOON ? import('./pages/CampsitesComingSoon') : import('./pages/Campsites')));
 const CatalogChooser = lazyWithRetry(() => import('./pages/CatalogChooser'));
 const Checkout = lazyWithRetry(() => import('./pages/Checkout'));
 const EventPlan = lazyWithRetry(() => import('./pages/EventPlan'));
@@ -62,6 +66,7 @@ const PrivacyPolicy = lazyWithRetry(() => import('./pages/PrivacyPolicy'));
 const DataDeletion = lazyWithRetry(() => import('./pages/DataDeletion'));
 const Profile = lazyWithRetry(() => import('./pages/Profile'));
 const ResetPassword = lazyWithRetry(() => import('./pages/ResetPassword'));
+const Shop = lazyWithRetry(() => import('./pages/Shop'));
 const Terms = lazyWithRetry(() => import('./pages/Terms'));
 const TermsOfService = lazyWithRetry(() => import('./pages/TermsOfService'));
 
@@ -104,9 +109,10 @@ function VerificationGate() {
   return null;
 }
 
-/** "/catalog/camping-packages/stargazer-kit" -> "/catalog/camping-packages": a product's details
- *  open over its catalog page, so moving between the two keeps the catalog's scroll position. */
-const catalogOf = (pathname: string) => pathname.match(/^\/catalog\/(camping-packages|build-your-own)(?=\/|$)/)?.[0] ?? null;
+/** "/catalog/camping-packages/stargazer-kit" -> "/catalog/camping-packages" (and the same for a
+ *  shop item at /catalog/camping-gear-sale): a product's details open over its list, so moving between the two keeps the list's
+ *  scroll position. */
+const catalogOf = (pathname: string) => pathname.match(/^\/catalog\/(camping-packages|build-your-own|camping-gear-sale)(?=\/|$)/)?.[0] ?? null;
 
 /**
  * Resets the window scroll position whenever the route changes.
@@ -224,6 +230,9 @@ function App() {
                       element={<PathBCatalog />}
                     />
 
+                    {/* With a slug, one item's own page: its details open over the list. */}
+                    <Route path="/catalog/camping-gear-sale/:slug?" element={<Shop />} />
+
                     <Route path="/cart" element={<Cart />} />
                     <Route path="/checkout" element={<Checkout />} />
 
@@ -233,6 +242,11 @@ function App() {
                     />
 
                     <Route path="/about-us" element={<AboutUs />} />
+
+                    {/* Find A Campsite: the directory, a province's campsites, one campsite. */}
+                    <Route path="/campsites" element={<Campsites />} />
+                    <Route path="/campsites/province/:province" element={<Campsites />} />
+                    <Route path="/campsites/:slug" element={<CampsiteDetail />} />
 
                     <Route path="/login" element={<Login />} />
                     <Route
