@@ -1,3 +1,4 @@
+import { useLayoutEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import SocialIconLink from '../components/SocialIconLink';
 import { ArrowRightIcon, ChatBubbleIcon } from '../components/icons';
@@ -6,17 +7,41 @@ import { MESSENGER_URL } from '../config/social';
 import { usePageMeta } from '../hooks/usePageMeta';
 
 /**
+ * Height of the site's sticky header (menu bar, plus the icon strip on laptops), kept up to date
+ * when it changes size (screen width, the phone menu opening). Null until measured: the page then
+ * falls back to fixed sizes in its classes, which is also what the pre-built HTML uses.
+ */
+function useHeaderHeight(): number | null {
+  const [height, setHeight] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const header = document.querySelector('header');
+    if (!header) return;
+    const update = () => setHeight(Math.round(header.getBoundingClientRect().height));
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, []);
+  return height;
+}
+
+/**
  * What /campsites and every campsite address show until Find A Campsite launches (see
  * CAMPSITES_COMING_SOON in config/features.ts). Same hero photo and green fade as the directory.
  */
 export default function CampsitesComingSoon() {
   usePageMeta(PAGE_META.campsites.title, PAGE_META.campsites.description);
+  const headerHeight = useHeaderHeight();
 
   return (
     <>
-      {/* Phones: compact, so the heading, buttons and owners card all fit the first screen (the
-          visible height inside the browser, 100dvh). Desktop keeps the roomier layout. */}
-      <section className="relative isolate flex min-h-[calc(100dvh-3.5rem)] flex-col overflow-hidden bg-brand-forest-dark text-white sm:min-h-[calc(100dvh-4.5rem)]">
+      {/* Exactly fills the screen under the sticky header, so the page opens with the content
+          centred and the photo ending at the bottom of the screen. Phones are compact so the
+          heading, buttons and owners card all fit (100dvh is the visible height in the browser). */}
+      <section
+        style={headerHeight ? { minHeight: `calc(100dvh - ${headerHeight}px)` } : undefined}
+        className="relative isolate flex min-h-[calc(100dvh-3.5rem)] flex-col overflow-hidden bg-brand-forest-dark text-white sm:min-h-[calc(100dvh-4.5rem)] lg:min-h-[calc(100dvh-6.875rem)]"
+      >
         <img
           src="/images/landing-hero.webp"
           alt=""
@@ -28,7 +53,7 @@ export default function CampsitesComingSoon() {
         {/* The text, buttons and owners card stay together as one group, centred on the photo, with
             about 1cm extra between the buttons and the card (less on very short screens, so the
             card still fits the first screen). */}
-        <div className="flex flex-1 flex-col justify-center gap-16 py-6 sm:gap-20 sm:py-16 [@media(max-height:600px)]:gap-6 sm:[@media(max-height:780px)]:py-8">
+        <div className="flex flex-1 flex-col justify-center gap-16 py-6 sm:gap-20 sm:py-16 [@media(max-height:600px)]:gap-6 [@media(max-height:600px)]:py-4 sm:[@media(max-height:780px)]:py-6">
           <div className="mx-auto flex w-full max-w-2xl flex-col items-center gap-3.5 px-5 text-center sm:gap-6 sm:px-6">
             <span className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3.5 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-white backdrop-blur-sm">
               <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-[#f6c445] motion-safe:animate-pulse" />
