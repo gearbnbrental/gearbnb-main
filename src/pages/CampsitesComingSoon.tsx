@@ -25,8 +25,10 @@ export default function CampsitesComingSoon() {
           className="absolute inset-0 -z-10 h-full w-full object-cover object-[center_60%]"
         />
         <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-b from-black/60 via-black/35 to-brand-forest-dark/95" />
-        {/* The text, buttons and owners card stay together as one group, centred on the photo. */}
-        <div className="flex flex-1 flex-col justify-center gap-6 py-6 sm:gap-10 sm:py-16">
+        {/* The text, buttons and owners card stay together as one group, centred on the photo, with
+            about 1cm extra between the buttons and the card (less on very short screens, so the
+            card still fits the first screen). */}
+        <div className="flex flex-1 flex-col justify-center gap-16 py-6 sm:gap-20 sm:py-16 [@media(max-height:600px)]:gap-6 sm:[@media(max-height:780px)]:py-8">
           <div className="mx-auto flex w-full max-w-2xl flex-col items-center gap-3.5 px-5 text-center sm:gap-6 sm:px-6">
             <span className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3.5 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-white backdrop-blur-sm">
               <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-[#f6c445] motion-safe:animate-pulse" />
