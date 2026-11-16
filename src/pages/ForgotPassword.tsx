@@ -88,6 +88,8 @@ export default function ForgotPassword() {
     setSent(false);
     setError(null);
     setResent(false);
+    // Supabase's wait between reset emails is per address, so a corrected one can go right away.
+    setResendAvailableAt(0);
   }
 
   // Same reasoning as Login.tsx's identical wrapper — vertical centering only from `sm` up.

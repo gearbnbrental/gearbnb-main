@@ -26,6 +26,10 @@ describe('passwordResetError', () => {
     });
   });
 
+  it('asks for a valid address when Supabase rejects its format', () => {
+    expect(passwordResetError('Unable to validate email address: invalid format')).toEqual({ error: 'Enter a valid email address.' });
+  });
+
   it('explains a dropped connection instead of showing raw browser text', () => {
     for (const raw of ['Failed to fetch', 'Load failed', 'NetworkError when attempting to fetch resource.']) {
       expect(passwordResetError(raw).error).toBe("We couldn't send the email right now. Check your connection and try again.");

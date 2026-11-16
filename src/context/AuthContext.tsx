@@ -226,6 +226,10 @@ export function passwordResetError(message: string): PasswordResetResult {
   if (normalized.includes('failed to fetch') || normalized.includes('load failed') || normalized.includes('networkerror')) {
     return { error: "We couldn't send the email right now. Check your connection and try again." };
   }
+  // Supabase's own check of the address ("Unable to validate email address: invalid format").
+  if (normalized.includes('invalid format') || normalized.includes('validate email') || normalized.includes('invalid email')) {
+    return { error: 'Enter a valid email address.' };
+  }
   if (normalized.includes('rate limit') || normalized.includes('too many requests')) {
     return { error: 'Too many reset emails were requested. Please wait a few minutes and try again.', retryAfterSeconds: 300 };
   }
