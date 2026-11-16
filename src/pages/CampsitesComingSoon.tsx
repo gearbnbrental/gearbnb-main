@@ -24,15 +24,16 @@ export default function CampsitesComingSoon() {
         <span className="rounded-full bg-[#f6c445] px-4 py-1.5 text-xs font-extrabold uppercase tracking-wide text-ink shadow-md sm:text-sm">
           Coming Soon
         </span>
-        <h1 className="font-serif text-4xl font-bold leading-tight drop-shadow-sm sm:text-6xl">Find A Campsite</h1>
+        <h1 className="text-balance font-serif text-4xl font-bold leading-tight drop-shadow-sm sm:text-6xl">Find a Campsite in the Philippines</h1>
         <p className="text-base text-white/90 drop-shadow-sm sm:text-lg">
           We&rsquo;re putting together a guide to campsites near Metro Manila and beyond, with entrance fees, cell signal,
           restrooms, pet rules and real camper reviews. Check back soon!
         </p>
-        <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
+        {/* Side by side at every width, each half the row on phones. */}
+        <div className="mt-2 grid w-full max-w-md grid-cols-2 gap-3">
           <Link
             to="/catalog"
-            className="rounded-lg bg-white px-6 py-3 text-sm font-semibold text-brand-forest shadow-md transition-all hover:-translate-y-0.5 hover:bg-brand-cream"
+            className="flex items-center justify-center rounded-lg bg-white px-3 py-3 text-center text-sm font-semibold text-brand-forest shadow-md transition-all hover:-translate-y-0.5 hover:bg-brand-cream sm:px-6"
           >
             Rent Camping Gear
           </Link>
@@ -40,7 +41,7 @@ export default function CampsitesComingSoon() {
             href={MESSENGER_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="rounded-lg border border-white/60 px-6 py-3 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:border-white hover:bg-white/10"
+            className="flex items-center justify-center rounded-lg border border-white/60 px-3 py-3 text-center text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:border-white hover:bg-white/10 sm:px-6"
           >
             Ask Us for a Campsite
           </a>
