@@ -43,7 +43,8 @@ export function ShopPrice({ item, size = 'card' }: { item: ShopItem; size?: 'car
 export default function ShopItemCard({ item }: { item: ShopItem }) {
   const [imageFailed, setImageFailed] = useState(false);
   // A square main photo (the recommended 1080 x 1080) fills the square frame; any other shape is
-  // shown whole on white instead of being cropped.
+  // shown whole instead of being cropped. The frame is beige like the Build Your Own gear photos,
+  // and mix-blend-multiply turns a photo's own white background into that same beige.
   const [square, setSquare] = useState(true);
   const photo = item.images[0];
   const subtitle = brandAndModelLine(item);
@@ -54,7 +55,7 @@ export default function ShopItemCard({ item }: { item: ShopItem }) {
       state={{ fromShop: true }}
       className="group flex flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-sm transition-all hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-forest/40"
     >
-      <div className={`relative aspect-square w-full overflow-hidden ${photo && !imageFailed ? 'bg-white' : 'bg-surface-strong'}`}>
+      <div className="relative aspect-square w-full overflow-hidden bg-surface-strong">
         {photo && !imageFailed ? (
           <img
             src={photo}
@@ -65,7 +66,7 @@ export default function ShopItemCard({ item }: { item: ShopItem }) {
               const { naturalWidth, naturalHeight } = event.currentTarget;
               setSquare(naturalHeight > 0 && Math.abs(naturalWidth / naturalHeight - 1) <= 0.1);
             }}
-            className={`h-full w-full transition-transform duration-300 group-hover:scale-105 ${square ? 'object-cover' : 'object-contain'}`}
+            className={`h-full w-full mix-blend-multiply transition-transform duration-300 group-hover:scale-105 ${square ? 'object-cover' : 'object-contain'}`}
           />
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-ink-faint">

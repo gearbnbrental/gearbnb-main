@@ -81,16 +81,16 @@ export default function ShopItemDialog({
         {/* shrink-0 here and on the thumbnail strip: in this scrolling column they would otherwise be
             squeezed, and the strip (overflow-x-auto) squeezed to nothing. */}
         <div className="relative shrink-0">
-          {/* White, like most product photos' own backgrounds, so a photo of any shape sits cleanly.
-              55vh leaves room for the thumbnail strip below it on a phone. */}
-          <div {...swipe} className={`relative flex max-h-[55vh] w-full items-center justify-center overflow-hidden ${showPhoto ? 'bg-white' : 'bg-surface-strong'}`}>
+          {/* Beige like the Build Your Own gear photos; mix-blend-multiply turns a photo's own white
+              background into that beige too. 55vh leaves room for the thumbnail strip on a phone. */}
+          <div {...swipe} className="relative flex max-h-[55vh] w-full items-center justify-center overflow-hidden bg-surface-strong">
             {showPhoto ? (
               <button type="button" onClick={() => setLightboxOpen(true)} aria-label={`View larger photo of ${item.name}`} className="w-full">
                 <img
                   src={active.src}
                   alt={active.alt}
                   onError={() => setFailed((prev) => new Set(prev).add(active.src))}
-                  className="mx-auto max-h-[55vh] w-full object-contain"
+                  className="mx-auto max-h-[55vh] w-full object-contain mix-blend-multiply"
                 />
               </button>
             ) : (
@@ -121,11 +121,11 @@ export default function ShopItemDialog({
                 onClick={() => setActiveIndex(index)}
                 aria-label={`Show photo ${index + 1} of ${gallery.length}`}
                 aria-current={activeIndex === index}
-                className={`h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 bg-white transition sm:h-20 sm:w-20 ${
+                className={`h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 bg-surface-strong transition sm:h-20 sm:w-20 ${
                   activeIndex === index ? 'border-brand-forest shadow-sm' : 'border-line opacity-60 hover:opacity-100'
                 }`}
               >
-                {!failed.has(photo.src) && <img src={photo.src} alt="" className="h-full w-full object-contain" />}
+                {!failed.has(photo.src) && <img src={photo.src} alt="" className="h-full w-full object-contain mix-blend-multiply" />}
               </button>
             ))}
           </div>
