@@ -25,60 +25,63 @@ export default function CampsitesComingSoon() {
           className="absolute inset-0 -z-10 h-full w-full object-cover object-[center_60%]"
         />
         <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-b from-black/60 via-black/35 to-brand-forest-dark/95" />
-        <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col items-center justify-center gap-3.5 px-5 py-6 text-center sm:gap-6 sm:px-6 sm:py-16">
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3.5 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-white backdrop-blur-sm">
-            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-[#f6c445] motion-safe:animate-pulse" />
-            Coming Soon
-          </span>
-          <h1 className="text-balance font-serif text-[2.1rem] font-bold leading-[1.05] tracking-tight drop-shadow-sm sm:text-6xl">
-            Find a Campsite in the Philippines
-          </h1>
-          <p className="max-w-xl text-pretty text-sm leading-relaxed text-white/80 sm:text-lg">
-            We&rsquo;re putting together a guide to campsites near Metro Manila and beyond, with entrance fees, cell signal,
-            restrooms, pet rules and real camper reviews.
-          </p>
-          {/* Side by side at every width, each half the row on phones. */}
-          <div className="mt-1 grid w-full max-w-md grid-cols-2 gap-3 max-[359px]:gap-2">
-            <Link
-              to="/catalog"
-              className="group flex h-11 items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-white px-4 text-[13px] max-[359px]:px-2 max-[359px]:text-xs font-semibold text-brand-forest shadow-lg shadow-black/20 transition hover:bg-brand-cream sm:h-12 sm:text-sm"
-            >
-              Rent Camping Gear
-              <ArrowRightIcon className="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5 max-[359px]:hidden" />
-            </Link>
-            <a
-              href={MESSENGER_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex h-11 items-center justify-center whitespace-nowrap rounded-full border border-white/30 bg-white/10 px-4 text-[13px] max-[359px]:px-2 max-[359px]:text-xs font-semibold text-white backdrop-blur-sm transition hover:border-white/60 hover:bg-white/20 sm:h-12 sm:text-sm"
-            >
-              Request Campsite List
-            </a>
+        {/* The text, buttons and owners card stay together as one group, centred on the photo. */}
+        <div className="flex flex-1 flex-col justify-center gap-6 py-6 sm:gap-10 sm:py-16">
+          <div className="mx-auto flex w-full max-w-2xl flex-col items-center gap-3.5 px-5 text-center sm:gap-6 sm:px-6">
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3.5 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-white backdrop-blur-sm">
+              <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-[#f6c445] motion-safe:animate-pulse" />
+              Coming Soon
+            </span>
+            <h1 className="text-balance font-serif text-[2.1rem] font-bold leading-[1.05] tracking-tight drop-shadow-sm sm:text-6xl">
+              Find a Campsite in the Philippines
+            </h1>
+            <p className="max-w-xl text-pretty text-sm leading-relaxed text-white/80 sm:text-lg">
+              We&rsquo;re putting together a guide to campsites near Metro Manila and beyond, with entrance fees, cell signal,
+              restrooms, pet rules and real camper reviews.
+            </p>
+            {/* Side by side at every width, each half the row on phones. */}
+            <div className="mt-1 grid w-full max-w-md grid-cols-2 gap-3 max-[359px]:gap-2">
+              <Link
+                to="/catalog"
+                className="group flex h-11 items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-white px-4 text-[13px] max-[359px]:px-2 max-[359px]:text-xs font-semibold text-brand-forest shadow-lg shadow-black/20 transition hover:bg-brand-cream sm:h-12 sm:text-sm"
+              >
+                Rent Camping Gear
+                <ArrowRightIcon className="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5 max-[359px]:hidden" />
+              </Link>
+              <a
+                href={MESSENGER_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex h-11 items-center justify-center whitespace-nowrap rounded-full border border-white/30 bg-white/10 px-4 text-[13px] max-[359px]:px-2 max-[359px]:text-xs font-semibold text-white backdrop-blur-sm transition hover:border-white/60 hover:bg-white/20 sm:h-12 sm:text-sm"
+              >
+                Request Campsite List
+              </a>
+            </div>
           </div>
-        </div>
-        {/* For campsite owners: the homepage's "Not sure what to rent?" layout, in this page's own
-            look (see-through glass on the photo, like the Request Campsite List button), so the
-            page runs straight from the photo into the footer. */}
-        <div role="region" aria-labelledby="campsite-owners" className="px-5 pb-5 sm:px-6 sm:pb-28">
-          <div className="mx-auto w-full max-w-3xl rounded-2xl border border-white/20 bg-white/10 p-3.5 text-left shadow-lg shadow-black/20 backdrop-blur-md sm:p-5">
-            <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
-              <div className="flex items-center gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/15 text-white ring-1 ring-white/20 sm:h-10 sm:w-10">
-                  <ChatBubbleIcon className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
-                </span>
-                <div className="flex flex-col gap-0.5">
-                  <h2 id="campsite-owners" className="text-sm font-bold text-white sm:text-base">
-                    Own a campsite? Get listed for FREE
-                  </h2>
-                  <p className="text-xs text-white/75 sm:text-sm">
-                    Send us a message to list your campsite for free and explore partnerships with GearBnB.
-                  </p>
+          {/* For campsite owners: the homepage's "Not sure what to rent?" layout, in this page's own
+              look (see-through glass on the photo, like the Request Campsite List button), a short
+              step below the buttons. */}
+          <div role="region" aria-labelledby="campsite-owners" className="px-5 sm:px-6">
+            <div className="mx-auto w-full max-w-3xl rounded-2xl border border-white/20 bg-white/10 p-3.5 text-left shadow-lg shadow-black/20 backdrop-blur-md sm:p-5">
+              <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/15 text-white ring-1 ring-white/20 sm:h-10 sm:w-10">
+                    <ChatBubbleIcon className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
+                  </span>
+                  <div className="flex flex-col gap-0.5">
+                    <h2 id="campsite-owners" className="text-sm font-bold text-white sm:text-base">
+                      Own a campsite? Get listed for FREE
+                    </h2>
+                    <p className="text-xs text-white/75 sm:text-sm">
+                      Send us a message to list your campsite for free and explore partnerships with GearBnB.
+                    </p>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center justify-center gap-3 sm:justify-end sm:gap-4 sm:border-l sm:border-white/15 sm:pl-5">
-                <SocialIconLink platform="messenger" showLabel size="sm" tone="dark" />
-                <SocialIconLink platform="facebook" showLabel size="sm" tone="dark" />
-                <SocialIconLink platform="tiktok" showLabel size="sm" tone="dark" />
+                <div className="flex items-center justify-center gap-3 sm:justify-end sm:gap-4 sm:border-l sm:border-white/15 sm:pl-5">
+                  <SocialIconLink platform="messenger" showLabel size="sm" tone="dark" />
+                  <SocialIconLink platform="facebook" showLabel size="sm" tone="dark" />
+                  <SocialIconLink platform="tiktok" showLabel size="sm" tone="dark" />
+                </div>
               </div>
             </div>
           </div>
