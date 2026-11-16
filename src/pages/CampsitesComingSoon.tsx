@@ -57,7 +57,7 @@ export default function CampsitesComingSoon() {
         {/* For campsite owners: the homepage's "Not sure what to rent?" layout, in this page's own
             look (see-through glass on the photo, like the Request Campsite List button), so the
             page runs straight from the photo into the footer. */}
-        <div role="region" aria-labelledby="campsite-owners" className="px-5 pb-14 sm:px-6 sm:pb-20">
+        <div role="region" aria-labelledby="campsite-owners" className="px-5 pb-20 sm:px-6 sm:pb-28">
           <div className="mx-auto w-full max-w-3xl rounded-2xl border border-white/20 bg-white/10 p-4 text-left shadow-lg shadow-black/20 backdrop-blur-md sm:p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
               <div className="flex items-center gap-3">
