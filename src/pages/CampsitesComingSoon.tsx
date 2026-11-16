@@ -58,9 +58,9 @@ export default function CampsitesComingSoon() {
             look (see-through glass on the photo, like the Request Campsite List button), so the
             page runs straight from the photo into the footer. */}
         <div role="region" aria-labelledby="campsite-owners" className="px-5 pb-8 sm:px-6 sm:pb-10">
-          <div className="mx-auto w-full max-w-3xl rounded-2xl border border-white/20 bg-white/10 p-4 text-left shadow-lg shadow-black/20 backdrop-blur-md sm:p-5">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
-              <div className="flex items-center gap-3">
+          <div className="mx-auto w-full max-w-3xl rounded-2xl border border-white/20 bg-white/10 px-5 py-6 text-left shadow-lg shadow-black/20 backdrop-blur-md sm:px-7 sm:py-8">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+              <div className="flex items-center gap-3.5">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/15 text-white ring-1 ring-white/20 sm:h-10 sm:w-10">
                   <ChatBubbleIcon className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
                 </span>
