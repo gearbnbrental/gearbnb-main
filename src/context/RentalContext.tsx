@@ -187,10 +187,12 @@ export function cartForDates<T extends Pick<CartState, 'entryDates' | 'selectedK
   };
 }
 
-/** Guest (not-logged-in) cart storage key — unchanged from before this file supported per-account
- *  carts, so an in-progress guest cart already on a customer's browser keeps working exactly as
- *  it did. */
-const GUEST_CART_STORAGE_KEY = 'gearbnb.cart.v1';
+/** A signed-out visitor's cart. Guests can fill a cart; only checkout needs an account, and signing
+ *  in moves this cart into the account's own (see mergeGuestCart). A new key rather than the old
+ *  `gearbnb.cart.v1`: that one only ever legitimately held dates, and any older cart contents left in
+ *  it must not suddenly reappear, so it is simply removed. */
+const GUEST_CART_STORAGE_KEY = 'gearbnb.cart.v2.guest';
+const OLD_GUEST_CART_STORAGE_KEY = 'gearbnb.cart.v1';
 
 /** One authenticated customer's own cart, isolated from every other account (and from the guest
  *  cart) on the same browser — the actual fix for a cart "belonging" to the wrong signed-in user.
@@ -233,18 +235,6 @@ const EMPTY_VERIFICATION_CONTACT: Pick<VerificationDocs, 'fullName' | 'phone' | 
   email: '',
 };
 
-const EMPTY_PERSISTED_CART: Omit<PersistedCart, 'tripDetails'> = {
-  selectedKits: [],
-  kitExtras: {},
-  packageAddOns: {},
-  selectedItems: [],
-  itemExtras: {},
-  byoGears: [],
-  byoAddOns: {},
-  entryDates: {},
-  verificationContact: EMPTY_VERIFICATION_CONTACT,
-  checkoutSelection: initialCheckoutSelection,
-};
 
 /**
  * Restores a persisted `checkoutSelection` against what actually survived the rest of restoration
@@ -325,17 +315,6 @@ function loadPersistedCart(storageKey: string): CartState {
 
     const parsed = JSON.parse(raw) as Partial<PersistedCart>;
 
-    // The guest key never carries actual cart contents (see persistCart's own guest branch) —
-    // every add-to-cart mutation on this context already requires an authenticated user, so the
-    // ONLY thing ever legitimately written there is tripDetails (dates/fulfillment, which a guest
-    // is allowed to set while browsing before logging in). Any selectedKits/selectedItems/byoGears
-    // found here can only be leftover data from before that rule existed (or direct localStorage
-    // tampering) — never displayed or trusted, so a signed-out visitor can never see a stale or
-    // otherwise-impossible cart badge/count.
-    if (storageKey === GUEST_CART_STORAGE_KEY) {
-      return { ...initialCartState, tripDetails: dropStaleTripDates({ ...initialTripDetails, ...parsed.tripDetails }) };
-    }
-
     const selectedKits = Array.isArray(parsed.selectedKits) ? parsed.selectedKits : [];
     const selectedItems = Array.isArray(parsed.selectedItems) ? parsed.selectedItems : [];
     // Same sanitization reasoning as byoAddOns below: an entry whose parent kit is no longer in
@@ -413,8 +392,10 @@ function loadPersistedCart(storageKey: string): CartState {
       tripDetails: dropStaleTripDates({ ...initialTripDetails, ...parsed.tripDetails }),
       // Only the plain contact fields restore — documents/confirmed/the agreement checkboxes
       // stay at their initial (empty) values exactly as before, so a stale unconfirmed upload
-      // reference can never sit in the restored cart. See PersistedCart's own doc comment.
-      verificationDocs: { ...initialVerificationDocs, ...parsed.verificationContact },
+      // reference can never sit in the restored cart. See PersistedCart's own doc comment. The
+      // guest cart never holds contact details (checkout, where they're typed, needs an account).
+      verificationDocs:
+        storageKey === GUEST_CART_STORAGE_KEY ? initialVerificationDocs : { ...initialVerificationDocs, ...parsed.verificationContact },
       checkoutSelection: sanitizeCheckoutSelection(savedSelection, {
         selectedKits,
         selectedItems,
@@ -431,34 +412,100 @@ function loadPersistedCart(storageKey: string): CartState {
 
 function persistCart(storageKey: string, cart: CartState): void {
   try {
-    // Belt-and-suspenders alongside loadPersistedCart's own guest-key handling: even if
-    // cart.selectedKits/etc. were somehow non-empty in memory for a signed-out session, the guest
-    // key on disk never records them — only tripDetails, which is the one thing a guest is
-    // actually allowed to set before logging in.
-    const payload: PersistedCart =
-      storageKey === GUEST_CART_STORAGE_KEY
-        ? { ...EMPTY_PERSISTED_CART, tripDetails: cart.tripDetails }
-        : {
-            selectedKits: cart.selectedKits,
-            kitExtras: cart.kitExtras,
-            packageAddOns: cart.packageAddOns,
-            selectedItems: cart.selectedItems,
-            itemExtras: cart.itemExtras,
-            byoGears: cart.byoGears,
-            byoAddOns: cart.byoAddOns,
-            entryDates: cart.entryDates,
-            tripDetails: cart.tripDetails,
-            verificationContact: {
+    const payload: PersistedCart = {
+      selectedKits: cart.selectedKits,
+      kitExtras: cart.kitExtras,
+      packageAddOns: cart.packageAddOns,
+      selectedItems: cart.selectedItems,
+      itemExtras: cart.itemExtras,
+      byoGears: cart.byoGears,
+      byoAddOns: cart.byoAddOns,
+      entryDates: cart.entryDates,
+      tripDetails: cart.tripDetails,
+      // Contact details only ever go in an account's own cart, never the guest one.
+      verificationContact:
+        storageKey === GUEST_CART_STORAGE_KEY
+          ? EMPTY_VERIFICATION_CONTACT
+          : {
               fullName: cart.verificationDocs.fullName,
               phone: cart.verificationDocs.phone,
               email: cart.verificationDocs.email,
             },
-            checkoutSelection: cart.checkoutSelection,
-          };
+      checkoutSelection: cart.checkoutSelection,
+    };
     localStorage.setItem(storageKey, JSON.stringify(payload));
   } catch {
     // Storage unavailable or over quota — the cart still works for this session.
   }
+}
+
+function removeStoredCart(storageKey: string): void {
+  try {
+    localStorage.removeItem(storageKey);
+  } catch {
+    // Storage unavailable: nothing was saved there either.
+  }
+}
+
+/** Whether a cart holds anything to book (dates and delivery choices alone don't count). */
+export function hasCartEntries(cart: Pick<CartState, 'selectedKits' | 'selectedItems' | 'byoGears'>): boolean {
+  return cart.selectedKits.length > 0 || cart.selectedItems.length > 0 || cart.byoGears.length > 0;
+}
+
+/**
+ * What a customer's cart becomes when they sign in after filling a cart as a guest: everything
+ * from both, so nothing they just picked (or saved earlier on their account) is lost. When the same
+ * package, gear or Build Your Own line (same gear and dates) is in both, the guest's version wins,
+ * with its add-ons, extras and checkbox, because it's the most recent choice. Trip details the
+ * guest actually set (dates, delivery, destination) win too; contact details stay the account's.
+ */
+export function mergeGuestCart(own: CartState, guest: CartState): CartState {
+  const guestKitIds = new Set(guest.selectedKits.map((kit) => kit.id));
+  const guestItemIds = new Set(guest.selectedItems.map((item) => item.id));
+  const guestLineKeys = new Set(guest.byoGears.map(byoLineKeyOf));
+  const ownKits = own.selectedKits.filter((kit) => !guestKitIds.has(kit.id));
+  const ownItems = own.selectedItems.filter((item) => !guestItemIds.has(item.id));
+  const ownLines = own.byoGears.filter((gear) => !guestLineKeys.has(byoLineKeyOf(gear)));
+  const ownKitIds = new Set(ownKits.map((kit) => kit.id));
+  const ownItemIds = new Set(ownItems.map((item) => item.id));
+  const ownLineKeys = new Set(ownLines.map(byoLineKeyOf));
+  const pick = <T,>(record: Record<string, T>, keep: (key: string) => boolean) =>
+    Object.fromEntries(Object.entries(record).filter(([key]) => keep(key)));
+  const ownKitDateKeys = new Set([...ownKitIds].map(kitDatesKey));
+
+  const guestTrip = Object.fromEntries(
+    Object.entries(guest.tripDetails).filter(([field, value]) => value !== initialTripDetails[field as keyof TripDetails]),
+  ) as Partial<TripDetails>;
+
+  return {
+    ...own,
+    selectedKits: [...ownKits, ...guest.selectedKits],
+    kitExtras: { ...pick(own.kitExtras, (id) => ownKitIds.has(id)), ...guest.kitExtras },
+    packageAddOns: { ...pick(own.packageAddOns, (id) => ownKitIds.has(id)), ...guest.packageAddOns },
+    selectedItems: [...ownItems, ...guest.selectedItems],
+    itemExtras: { ...pick(own.itemExtras, (id) => ownItemIds.has(id)), ...guest.itemExtras },
+    byoGears: [...ownLines, ...guest.byoGears],
+    byoAddOns: { ...pick(own.byoAddOns, (key) => ownLineKeys.has(key)), ...guest.byoAddOns },
+    entryDates: { ...pick(own.entryDates, (key) => ownKitDateKeys.has(key)), ...guest.entryDates },
+    tripDetails: { ...own.tripDetails, ...guestTrip },
+    checkoutSelection: {
+      kitIds: [...own.checkoutSelection.kitIds.filter((id) => ownKitIds.has(id)), ...guest.checkoutSelection.kitIds],
+      itemIds: [...own.checkoutSelection.itemIds.filter((id) => ownItemIds.has(id)), ...guest.checkoutSelection.itemIds],
+      byoGearKeys: [
+        ...own.checkoutSelection.byoGearKeys.filter((key) => ownLineKeys.has(key)),
+        ...guest.checkoutSelection.byoGearKeys,
+      ],
+      packageAddOnKeys: {
+        ...pick(own.checkoutSelection.packageAddOnKeys, (id) => ownKitIds.has(id)),
+        ...guest.checkoutSelection.packageAddOnKeys,
+      },
+      byoAddOnKeys: {
+        ...pick(own.checkoutSelection.byoAddOnKeys, (key) => ownLineKeys.has(key)),
+        ...guest.checkoutSelection.byoAddOnKeys,
+      },
+    },
+    removedItemNames: [],
+  };
 }
 
 /**
@@ -1407,9 +1454,8 @@ interface RentalContextValue {
   cart: CartState;
   dispatch: Dispatch<CartAction>;
   totals: RentalTotals;
-  /** False (and no-op) when called while signed out — see the "must be logged in to add to cart"
-   *  gate below. Every add-style mutator on this context returns this same signal so a caller can
-   *  react (e.g. redirect to /login) instead of a click silently doing nothing. */
+  /** False (and no-op) when the package can't be added (out of stock). Guests can add to the cart;
+   *  only checkout needs an account. */
   addKit: (kit: PackageKit) => boolean;
   removeKit: (kitId: string) => void;
   addKitExtra: (kitId: string, extraId: string) => boolean;
@@ -1418,16 +1464,12 @@ interface RentalContextValue {
   removeItem: (itemId: string) => void;
   addItemExtra: (itemId: string, extraId: string) => boolean;
   removeItemExtra: (itemId: string, extraId: string) => void;
-  /** Sets the selected quantity of a Build Your Own gear kind; 0 removes it (and its add-ons).
-   *  Only an actual increase requires being signed in — lowering/zeroing an existing selection is
-   *  always allowed, same as every other removal path on this context. */
+  /** Sets the selected quantity of a Build Your Own gear kind; 0 removes it (and its add-ons). */
   setByoGearQuantity: (gear: BookableGearKind, quantity: number) => boolean;
-  /** Sets the selected quantity of an add-on for a given gear (keyed by byoGearKey); 0 removes it.
-   *  Same increase-only gate as setByoGearQuantity. */
+  /** Sets the selected quantity of an add-on for a given gear (keyed by byoGearKey); 0 removes it. */
   setByoAddOnQuantity: (gearKey: string, addOn: BookableAddOn, quantity: number) => boolean;
   /** Sets the quantity of one extra rentable item attached to a selected package (keyed by that
-   *  kit's cart id); 0 removes it. Same increase-only auth gate as setByoGearQuantity, and never
-   *  converts the package into a Build Your Own selection. */
+   *  kit's cart id); 0 removes it. Never converts the package into a Build Your Own selection. */
   setPackageAddOnQuantity: (kitId: string, gear: BookableGearKind, quantity: number) => boolean;
   updateTripDetails: (details: Partial<TripDetails>) => void;
   updateVerificationDocs: (docs: Partial<VerificationDocs>) => void;
@@ -1469,18 +1511,16 @@ export function RentalProvider({ children }: { children: ReactNode }) {
   // it. `undefined` means "auth hasn't resolved even once yet".
   const lastAuthUserIdRef = useRef<string | null | undefined>(undefined);
 
-  // The actual fix for a cart "belonging" to the wrong signed-in customer: each authenticated
-  // account gets its own storage key, isolated from every other account and from the guest cart,
-  // on the same browser. Runs only when the resolved user id changes (sign-in, sign-out, or
-  // switching accounts) — a first-time sign-in on this browser (this account has no cart of its
-  // own here yet) starts that account with a genuinely empty cart; a returning account's own cart
-  // is used as-is; signing out switches back to the guest key without touching either cart.
+  // The older guest key only ever held dates; clear it so leftovers from before never come back.
+  useEffect(() => removeStoredCart(OLD_GUEST_CART_STORAGE_KEY), []);
+
+  // Each account has its own cart on this browser, kept apart from every other account's. Runs only
+  // when the resolved user id changes (sign-in, sign-out, or switching accounts).
   //
-  // Deliberately NEVER migrates the guest cart into a newly authenticated account, even on a
-  // first-ever sign-in/signup on this browser: the guest cart belongs only to the anonymous
-  // browser session that built it, and must not be silently assigned to whichever account happens
-  // to sign in next on the same device. This is a full replacement, never a merge — one account's
-  // (or the guest's) in-progress cart must never bleed into another's.
+  // Signing in moves the guest cart into the account (merged with what the account already had, see
+  // mergeGuestCart) and empties the guest cart, so the guest can fill a cart first and only sign in
+  // to check out. Signing out switches to the (now empty) guest cart, so the account's cart is never
+  // shown to the next person on the same device.
   useEffect(() => {
     if (authLoading) return;
     const currentUserId = user?.id ?? null;
@@ -1490,7 +1530,14 @@ export function RentalProvider({ children }: { children: ReactNode }) {
     const nextKey = currentUserId ? userCartStorageKey(currentUserId) : GUEST_CART_STORAGE_KEY;
     if (nextKey === cartStorageKeyRef.current) return;
 
-    const nextCart = currentUserId ? loadPersistedCart(nextKey) : loadPersistedCart(GUEST_CART_STORAGE_KEY);
+    let nextCart = loadPersistedCart(nextKey);
+    if (currentUserId) {
+      const guestCart = loadPersistedCart(GUEST_CART_STORAGE_KEY);
+      if (hasCartEntries(guestCart)) {
+        nextCart = mergeGuestCart(nextCart, guestCart);
+        removeStoredCart(GUEST_CART_STORAGE_KEY);
+      }
+    }
 
     cartStorageKeyRef.current = nextKey;
     dispatch({ type: 'LOAD_CART', cart: nextCart });
@@ -1538,15 +1585,11 @@ export function RentalProvider({ children }: { children: ReactNode }) {
       dispatch,
       totals,
       addKit: (kit) => {
-        // The actual enforcement point for "must be logged in to add to cart" — every UI entry
-        // point (PathACatalog, PathBCatalog, GearDetailsModal) already checks `user` itself for a
-        // friendly redirect, but this is the backstop a button can't be bypassed around: calling
-        // this function directly (e.g. from devtools) while signed out is still refused here.
-        if (!user) return false;
-        // Same backstop reasoning as the auth check above, for RMS's own `canSelect` (surfaced here
-        // as kit.isOutOfStock — see PackageKit.isOutOfStock's own doc comment). PathACatalog already
-        // hides/disables the "Book Now" action for an out-of-stock kit or edition, but this is the
-        // real enforcement point a caller can't be bypassed around. This is still only the advisory
+        // Guests can add to the cart too; only checkout needs an account. RMS's own `canSelect`
+        // (surfaced here as kit.isOutOfStock — see PackageKit.isOutOfStock's own doc comment) is
+        // enforced here: PathACatalog already hides/disables the "Book Now" action for an
+        // out-of-stock kit or edition, but this is the real enforcement point a caller can't be
+        // bypassed around. This is still only the advisory
         // catalog-level signal, never a security boundary on its own — the authoritative, date-aware
         // check is the fresh availability re-check PaymentBreakdown's own submit gate performs right
         // before booking creation, which this can never substitute for.
@@ -1557,44 +1600,33 @@ export function RentalProvider({ children }: { children: ReactNode }) {
       },
       removeKit: (kitId) => dispatch({ type: 'REMOVE_KIT', kitId }),
       addKitExtra: (kitId, extraId) => {
-        if (!user) return false;
         dispatch({ type: 'ADD_KIT_EXTRA', kitId, extraId });
         return true;
       },
       removeKitExtra: (kitId, extraId) => dispatch({ type: 'REMOVE_KIT_EXTRA', kitId, extraId }),
       addItem: (item) => {
-        if (!user) return false;
         dispatch({ type: 'ADD_ITEM', item });
         trackAddToCart('gear');
         return true;
       },
       removeItem: (itemId) => dispatch({ type: 'REMOVE_ITEM', itemId }),
       addItemExtra: (itemId, extraId) => {
-        if (!user) return false;
         dispatch({ type: 'ADD_ITEM_EXTRA', itemId, extraId });
         return true;
       },
       removeItemExtra: (itemId, extraId) => dispatch({ type: 'REMOVE_ITEM_EXTRA', itemId, extraId }),
       setByoGearQuantity: (gear, quantity) => {
-        // Only an increase needs a signed-in customer — lowering an existing selection (including
-        // down to 0, i.e. removal) is never blocked, same as every other removal path here.
         const key = byoLineKey(gear, byoDatesForChange(gear, cart.tripDetails));
         const current = cart.byoGears.find((g) => byoLineKeyOf(g) === key)?.quantity ?? 0;
-        if (quantity > current && !user) return false;
         dispatch({ type: 'SET_BYO_GEAR_QUANTITY', gear, quantity });
         if (quantity > current) trackAddToCart('build_your_own');
         return true;
       },
       setByoAddOnQuantity: (gearKey, addOn, quantity) => {
-        const current = (cart.byoAddOns[gearKey] ?? []).find((a) => byoGearKey(a) === byoGearKey(addOn))?.quantity ?? 0;
-        if (quantity > current && !user) return false;
         dispatch({ type: 'SET_BYO_ADDON_QUANTITY', gearKey, addOn, quantity });
         return true;
       },
       setPackageAddOnQuantity: (kitId, gear, quantity) => {
-        const current =
-          (cart.packageAddOns[kitId] ?? []).find((g) => byoGearKey(g) === byoGearKey(gear))?.quantity ?? 0;
-        if (quantity > current && !user) return false;
         dispatch({ type: 'SET_PACKAGE_ADDON_QUANTITY', kitId, gear, quantity });
         return true;
       },
@@ -1610,7 +1642,7 @@ export function RentalProvider({ children }: { children: ReactNode }) {
       clearCart: () => dispatch({ type: 'CLEAR_CART' }),
       dismissRemovedNotice: () => dispatch({ type: 'DISMISS_REMOVED_NOTICE' }),
     }),
-    [cart, totals, user],
+    [cart, totals],
   );
 
   return <RentalContext.Provider value={value}>{children}</RentalContext.Provider>;

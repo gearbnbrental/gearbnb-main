@@ -11,7 +11,6 @@ import { ChevronIcon, GearPlaceholderIcon } from '../components/icons';
 import ImageLightbox from '../components/ImageLightbox';
 import GearDetailsDialog from '../components/GearDetailsDialog';
 import { addOnAsGearKind } from '../utils/addOnAsKind';
-import { useAuth } from '../context/AuthContext';
 import { useCatalog } from '../context/useCatalog';
 import {
   byoGearKey,
@@ -626,7 +625,6 @@ export default function PathBCatalog() {
   const location = useLocation();
   // /catalog/build-your-own/:slug opens that gear's details over this page.
   const { slug } = useParams<{ slug?: string }>();
-  const { user } = useAuth();
   const { gearCatalogState, retryGearCatalog } = useCatalog();
   const { cart, totals, updateTripDetails, setByoGearQuantity, setByoAddOnQuantity } = useRental();
   const basketPromo = useBasketPromo();
@@ -803,22 +801,6 @@ export default function PathBCatalog() {
     itemsPage * ITEMS_PAGE_SIZE,
   );
 
-  // A guest can browse and configure Build Your Own gear freely, but actually adding it to the
-  // cart requires an account — RentalContext's setByoGearQuantity/setByoAddOnQuantity already
-  // refuse the mutation itself while signed out (the real backstop), so this is only the friendly
-  // redirect layer: send them to Login with a reason, rather than a "+" button doing nothing.
-  function requireAuth(): boolean {
-    if (user) return true;
-    navigate('/login', {
-      state: {
-        from: location.pathname,
-        mode: 'login',
-        reason: 'Please log in or create an account to add gear to your cart.',
-      },
-    });
-    return false;
-  }
-
   // Mirrors PathACatalog's own handleDurationSelect exactly: extra days only ever stack on top of
   // 72h, so switching to 48h always clears them rather than letting a previously-chosen "+2 extra
   // days" silently reappear once 72h is picked again.
@@ -874,16 +856,9 @@ export default function PathBCatalog() {
       promoNote: gearCardPromoNote(basketPromo, kind.category),
       promoSaving: gearCardPromoSaving(basketPromo, kind.category, price),
       alsoInCartFor: gearAlsoInCartFor.get(key) ?? [],
-      onQuantityChange: (next) => {
-        const current = gearSelections.get(key) ?? 0;
-        if (next > current && !requireAuth()) return;
-        setByoGearQuantity(kind, next);
-      },
-      onAddOnQuantityChange: (addOn, next) => {
-        const current = (cart.byoAddOns[lineKey] ?? []).find((a) => byoGearKey(a) === byoGearKey(addOn))?.quantity ?? 0;
-        if (next > current && !requireAuth()) return;
-        setByoAddOnQuantity(lineKey, addOn, next);
-      },
+      // Guests can add to the cart; only checkout needs an account.
+      onQuantityChange: (next) => setByoGearQuantity(kind, next),
+      onAddOnQuantityChange: (addOn, next) => setByoAddOnQuantity(lineKey, addOn, next),
     };
   }
 

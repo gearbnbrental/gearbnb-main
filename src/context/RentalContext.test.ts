@@ -17,7 +17,9 @@ import {
   filterCartToSelection,
   getItemPrice,
   getKitPrice,
+  hasCartEntries,
   isVerificationComplete,
+  mergeGuestCart,
   sanitizeCheckoutSelection,
 } from './RentalContext';
 import type {
@@ -593,5 +595,108 @@ describe('per-entry rental dates', () => {
     const forB = cartForDates(cart, weekendB);
     expect(forB.selectedKits).toEqual([]);
     expect(forB.byoGears).toEqual([tentB]);
+  });
+});
+
+describe('mergeGuestCart (signing in after filling a cart as a guest)', () => {
+  const weekend = { startDate: '2099-10-22', returnDate: '2099-10-24' };
+  const tent: BookableGearSelection = {
+    category: 'Tent',
+    brand: 'Coleman',
+    model: 'Dome',
+    name: 'Coleman Dome Tent',
+    pricing: { '48h': 300, '72h': 400 },
+    extraPerDayPrice: 50,
+    quantity: 1,
+    availableCount: 3,
+    canSelect: true,
+    imageUrl: null,
+    freeAccessories: [],
+    compatibleAddOns: [],
+    ...weekend,
+  };
+  const chair: BookableGearSelection = { ...tent, category: 'Chair', brand: 'Naturehike', model: 'Moon', name: 'Moon Chair' };
+  const noSelection = { kitIds: [], itemIds: [], byoGearKeys: [], packageAddOnKeys: {}, byoAddOnKeys: {} };
+
+  it('gives an empty account everything from the guest cart, keeping the account contact details', () => {
+    const kit = makeKit({ id: 'kit-1' });
+    const guest = makeCart({
+      selectedKits: [kit],
+      entryDates: { [kitDatesKey('kit-1')]: weekend },
+      byoGears: [tent],
+      tripDetails: makeTripDetails({ ...weekend, destination: 'Tanay' }),
+      verificationDocs: makeVerificationDocs({ fullName: '', phone: '', email: '' }),
+      checkoutSelection: { ...noSelection, kitIds: ['kit-1'], byoGearKeys: [byoLineKeyOf(tent)] },
+    });
+    const own = makeCart({ checkoutSelection: noSelection });
+    const merged = mergeGuestCart(own, guest);
+    expect(merged.selectedKits).toEqual([kit]);
+    expect(merged.byoGears).toEqual([tent]);
+    expect(merged.entryDates).toEqual({ [kitDatesKey('kit-1')]: weekend });
+    expect(merged.checkoutSelection.kitIds).toEqual(['kit-1']);
+    expect(merged.checkoutSelection.byoGearKeys).toEqual([byoLineKeyOf(tent)]);
+    expect(merged.tripDetails.destination).toBe('Tanay');
+    expect(merged.verificationDocs.fullName).toBe('Juan Dela Cruz');
+  });
+
+  it('keeps what the account already had and adds the guest picks', () => {
+    const own = makeCart({
+      selectedItems: [makeItem({ id: 'item-1' })],
+      byoGears: [chair],
+      checkoutSelection: { ...noSelection, itemIds: ['item-1'], byoGearKeys: [byoLineKeyOf(chair)] },
+    });
+    const guest = makeCart({ byoGears: [tent], checkoutSelection: { ...noSelection, byoGearKeys: [byoLineKeyOf(tent)] } });
+    const merged = mergeGuestCart(own, guest);
+    expect(merged.selectedItems.map((item) => item.id)).toEqual(['item-1']);
+    expect(merged.byoGears.map((gear) => gear.name)).toEqual(['Moon Chair', 'Coleman Dome Tent']);
+    expect(merged.checkoutSelection.byoGearKeys).toEqual([byoLineKeyOf(chair), byoLineKeyOf(tent)]);
+    expect(merged.checkoutSelection.itemIds).toEqual(['item-1']);
+  });
+
+  it('uses the guest version when the same gear for the same dates is in both, never doubling it', () => {
+    const own = makeCart({ byoGears: [{ ...tent, quantity: 1 }], checkoutSelection: { ...noSelection, byoGearKeys: [byoLineKeyOf(tent)] } });
+    const guest = makeCart({ byoGears: [{ ...tent, quantity: 2 }], checkoutSelection: { ...noSelection, byoGearKeys: [byoLineKeyOf(tent)] } });
+    const merged = mergeGuestCart(own, guest);
+    expect(merged.byoGears).toHaveLength(1);
+    expect(merged.byoGears[0].quantity).toBe(2);
+    expect(merged.checkoutSelection.byoGearKeys).toEqual([byoLineKeyOf(tent)]);
+  });
+
+  it('uses the guest version of a package that is in both, with its add-ons and dates', () => {
+    const kit = makeKit({ id: 'kit-1' });
+    const own = makeCart({
+      selectedKits: [kit],
+      packageAddOns: { 'kit-1': [chair] },
+      entryDates: { [kitDatesKey('kit-1')]: { startDate: '2099-01-01', returnDate: '2099-01-03' } },
+      checkoutSelection: { ...noSelection, kitIds: ['kit-1'], packageAddOnKeys: { 'kit-1': [byoGearKey(chair)] } },
+    });
+    const guest = makeCart({
+      selectedKits: [kit],
+      packageAddOns: { 'kit-1': [tent] },
+      entryDates: { [kitDatesKey('kit-1')]: weekend },
+      checkoutSelection: { ...noSelection, kitIds: ['kit-1'], packageAddOnKeys: { 'kit-1': [byoGearKey(tent)] } },
+    });
+    const merged = mergeGuestCart(own, guest);
+    expect(merged.selectedKits).toHaveLength(1);
+    expect(merged.packageAddOns['kit-1']).toEqual([tent]);
+    expect(merged.entryDates[kitDatesKey('kit-1')]).toEqual(weekend);
+    expect(merged.checkoutSelection.kitIds).toEqual(['kit-1']);
+    expect(merged.checkoutSelection.packageAddOnKeys).toEqual({ 'kit-1': [byoGearKey(tent)] });
+  });
+
+  it('only lets trip details the guest actually set replace the account ones', () => {
+    const own = makeCart({ tripDetails: makeTripDetails({ fulfillmentType: 'delivery', deliveryAddress: 'Las Pinas', destination: 'Rizal' }) });
+    const guest = makeCart({ byoGears: [tent], tripDetails: makeTripDetails({ ...weekend }) });
+    const merged = mergeGuestCart(own, guest);
+    expect(merged.tripDetails).toEqual(
+      makeTripDetails({ ...weekend, fulfillmentType: 'delivery', deliveryAddress: 'Las Pinas', destination: 'Rizal' }),
+    );
+  });
+
+  it('hasCartEntries counts packages, gear and Build Your Own lines, not dates alone', () => {
+    expect(hasCartEntries(makeCart({ tripDetails: makeTripDetails(weekend) }))).toBe(false);
+    expect(hasCartEntries(makeCart({ selectedKits: [makeKit()] }))).toBe(true);
+    expect(hasCartEntries(makeCart({ selectedItems: [makeItem()] }))).toBe(true);
+    expect(hasCartEntries(makeCart({ byoGears: [tent] }))).toBe(true);
   });
 });

@@ -1,6 +1,4 @@
 ﻿import { useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
 import {
   calculateRentalDurationDays,
   checkItemAvailability,
@@ -19,9 +17,6 @@ interface GearDetailsModalProps {
 }
 
 export default function GearDetailsModal({ item, onClose }: GearDetailsModalProps) {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { user } = useAuth();
   const { cart, addItem, removeItem, addItemExtra, removeItemExtra, updateTripDetails } = useRental();
   const [imageFailed, setImageFailed] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -39,17 +34,6 @@ export default function GearDetailsModal({ item, onClose }: GearDetailsModalProp
   const isAvailable = checkItemAvailability(item, dateRange);
 
   function handleConfirm() {
-    if (!user) {
-      onClose();
-      navigate('/login', {
-        state: {
-          from: location.pathname,
-          mode: 'login',
-          reason: 'Please log in or create an account to add this item to your cart.',
-        },
-      });
-      return;
-    }
     if (isSelected) {
       removeItem(item.id);
     } else {
@@ -209,7 +193,7 @@ export default function GearDetailsModal({ item, onClose }: GearDetailsModalProp
                 : 'bg-brand-forest text-white shadow-sm hover:bg-brand-forest-dark'
             }`}
           >
-            {isSelected ? 'Remove from Cart' : user ? 'Confirm Rental' : 'Log In to Rent'}
+            {isSelected ? 'Remove from Cart' : 'Confirm Rental'}
           </button>
         )}
       </div>

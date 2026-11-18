@@ -19,7 +19,6 @@ import { splitBestForLine } from '../utils/bestForLine';
 import { sizeCapacityToShow, withDefaultVariant } from '../utils/gearVariants';
 import { QuantityStepper } from './PathBCatalog';
 import SocialIconLink from '../components/SocialIconLink';
-import { useAuth } from '../context/AuthContext';
 import { useCatalog } from '../context/useCatalog';
 import { byoGearKey, cartForDates, entryDatesFor, getGearKindPrice, kitDatesKey, sameDates, useRental } from '../context/RentalContext';
 import type { BookableGearKind, BookableGearSelection, DateRange, DurationPresetId, PackageKit } from '../types/gearbnb';
@@ -129,9 +128,6 @@ interface PackageCardProps {
 }
 
 function PackageCard({ kit, dateRange, selectedDuration, dateStock, color, detailsOpen, onOpenDetails, onCloseDetails }: PackageCardProps) {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { user } = useAuth();
   const { cart, addKit, removeKit, addKitExtra, removeKitExtra } = useRental();
   const [imageFailed, setImageFailed] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -280,16 +276,6 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color, detai
               : { status: 'error' };
 
   function handleAdd() {
-    if (!user) {
-      navigate('/login', {
-        state: {
-          from: location.pathname,
-          mode: 'login',
-          reason: 'Please log in or create an account to rent this package.',
-        },
-      });
-      return;
-    }
     if (selectedEdition) {
       // The edition's own price/deposit/extra-day rate/stock status — never the parent kit's own
       // (see effectivePricing's own comment above) — so what's added to the cart, priced, and
@@ -596,14 +582,8 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color, detai
             onClick={handleAdd}
             className="w-full rounded-lg bg-brand-forest px-3 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-brand-forest-dark sm:px-4 sm:py-2.5 sm:text-sm"
           >
-            {user ? (
-              <>
-                <span className="sm:hidden">Book Now</span>
-                <span className="hidden sm:inline">Available for your dates, Book This Package →</span>
-              </>
-            ) : (
-              'Log In to Rent'
-            )}
+            <span className="sm:hidden">Book Now</span>
+            <span className="hidden sm:inline">Available for your dates, Book This Package →</span>
           </button>
         )}
 
@@ -826,9 +806,6 @@ function PackageAddOnsSection({
   const catalogGearKinds = useDateAwareGearKinds(stockWindow);
   const { cart, setPackageAddOnQuantity } = useRental();
   const basketPromo = useBasketPromo();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { user } = useAuth();
   const [query, setQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>(ALL_ADD_ON_CATEGORIES);
 
@@ -1043,23 +1020,7 @@ function PackageAddOnsSection({
                       price={hasDuration ? getGearKindPrice(kind, cart.tripDetails) : null}
                       promoSaving={gearCardPromoSaving(basketPromo, kind.category, hasDuration ? getGearKindPrice(kind, cart.tripDetails) : null)}
                       promoNote={gearCardPromoNote(basketPromo, kind.category)}
-                      onQuantityChange={(next) => {
-                        // Only an increase needs an account — lowering/removing is always allowed,
-                        // matching every other cart mutation. RentalContext refuses the mutation
-                        // itself while signed out; this is just the friendly redirect layer.
-                        const current = selectedQuantities.get(key) ?? 0;
-                        if (next > current && !user) {
-                          navigate('/login', {
-                            state: {
-                              from: location.pathname,
-                              mode: 'login',
-                              reason: 'Please log in or create an account to add gear to your cart.',
-                            },
-                          });
-                          return;
-                        }
-                        setPackageAddOnQuantity(kitId, kind, next);
-                      }}
+                      onQuantityChange={(next) => setPackageAddOnQuantity(kitId, kind, next)}
                     />
                   );
                 })}
