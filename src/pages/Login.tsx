@@ -16,6 +16,11 @@ import {
   type PasswordStrength,
 } from '../utils/passwordPolicy';
 import { isValidPhoneNumber, normalizePhoneNumber } from '../utils/phone';
+import { inAppBrowserName } from '../utils/inAppBrowser';
+
+/** How long "Connecting…" waits for Google or Facebook to open before the button comes back. A
+ *  normal hand-off takes a second or two; the page is usually gone long before this. */
+const OAUTH_STALL_MS = 10_000;
 
 type Mode = 'login' | 'signup';
 
@@ -260,6 +265,8 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false);
   // Which sign-in provider is redirecting right now (both buttons stay disabled meanwhile).
   const [oauthSubmitting, setOauthSubmitting] = useState<'google' | 'facebook' | null>(null);
+  // Read once on the client: pre-rendered pages have no browser, so it starts empty there.
+  const [inAppBrowser] = useState(() => (typeof navigator === 'undefined' ? null : inAppBrowserName(navigator.userAgent)));
   const [formError, setFormError] = useState<string | null>(null);
   // True between "Sign Up" submit and the customer actually confirming — see performSignup.
   const [showSignupConfirm, setShowSignupConfirm] = useState(false);
@@ -318,6 +325,35 @@ export default function Login() {
   const passwordsMatch = mode === 'signup' && confirmPassword.length > 0 && password === confirmPassword;
   const passwordMismatch = mode === 'signup' && confirmPassword.length > 0 && password !== confirmPassword;
   const passwordStrength = getPasswordStrength(password);
+
+  // "Connecting…" must never get stuck. Coming back to this page (Back from Facebook or Google, or
+  // returning from the Facebook app that the link handed off to) restores it, sometimes from the
+  // browser's page cache with the button still disabled; and if the page simply never moves on
+  // (common inside the Facebook or Messenger app), the button comes back with a hint.
+  useEffect(() => {
+    if (!oauthSubmitting) return;
+    const provider = oauthSubmitting === 'google' ? 'Google' : 'Facebook';
+    let leftPage = false;
+    const reset = () => setOauthSubmitting(null);
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) reset();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') leftPage = true;
+      else if (leftPage) reset();
+    };
+    const timer = window.setTimeout(() => {
+      reset();
+      setFormError(`${provider} didn't open. Please try again, or log in with your email below.`);
+    }, OAUTH_STALL_MS);
+    window.addEventListener('pageshow', onPageShow);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('pageshow', onPageShow);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [oauthSubmitting]);
 
   async function handleOAuthClick(provider: 'google' | 'facebook') {
     setFormError(null);
@@ -740,6 +776,13 @@ export default function Login() {
         {formError && (
           <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-600">
             {formError}
+          </p>
+        )}
+
+        {inAppBrowser && (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 sm:text-sm">
+            You&rsquo;re browsing inside the {inAppBrowser} app, where Google and Facebook log in may not open. If they
+            don&rsquo;t, tap the menu (&bull;&bull;&bull;) and choose <strong>Open in browser</strong>, or log in with your email below.
           </p>
         )}
 
