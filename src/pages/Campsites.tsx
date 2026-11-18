@@ -45,7 +45,7 @@ const DIRECTORY_FAQ = [
   {
     question: 'Where can I rent camping gear for my trip?',
     answer:
-      'GearBnB rents tents, beds, chairs, coolers, fans, lights and complete camping packages. Pick up in Las Piñas City or book Lalamove or Grab delivery.',
+      'GearBnB rents tents, beds, chairs, coolers, fans, lights and complete camping packages. Pick up in Las Piñas City or have us book a Lalamove or Grab for the delivery and the return.',
   },
 ];
 

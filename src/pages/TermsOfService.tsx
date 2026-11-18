@@ -174,11 +174,11 @@ const SECTIONS: LegalSection[] = [
         <li>
           Collect your gear at our{' '}
           <a className={legalLinkClass} href={MAPS_URL} target="_blank" rel="noopener noreferrer">location</a> on your
-          start date, in person or through your own Lalamove or Grab.
+          start date in person, or choose delivery and we book a Lalamove or Grab to bring it to you.
         </li>
-        <li>Choose self pickup or Lalamove or Grab delivery. You book and pay for your own Lalamove or Grab. GearBnB does not charge or arrange delivery. Confirm your pickup or delivery arrangements with us at least 24 hours before your start date.</li>
+        <li>Choose self pickup or Lalamove or Grab delivery. For delivery, we book the Lalamove or Grab for both the delivery and the return, and you pay the fare to the driver. GearBnB does not add a delivery fee. Confirm your pickup or delivery arrangements with us at least 24 hours before your start date.</li>
         <li>At handover we complete a condition checklist with you. Check the checklist and report any issue before you leave. The checklist is the record of the gear condition at handover. We assume any issue you do not report at receipt happened during the rental period.</li>
-        <li>Return all gear and accessories on your end date at the same time of day you picked up the gear. Return the gear clean and dry.</li>
+        <li>Return all gear and accessories on your end date at the same time of day you picked up the gear. Return the gear clean and dry. If you chose delivery, we book the Lalamove or Grab that collects the gear from you.</li>
         <li>A late return costs you your full security deposit plus a late fee of 50% of the package fee for each day you are late. If you expect to be late, tell us as early as possible.</li>
         <li>An early return does not qualify for a partial refund unless we agreed in writing beforehand.</li>
         <li>We complete a return inspection and record the condition of each item.</li>
@@ -385,7 +385,7 @@ export default function TermsOfService() {
   return (
     <LegalLayout
       title="Terms of Service"
-      updated="October 2026"
+      updated="November 2026"
       lead={
         <>
           These Terms govern your use of gearbnbrental.com and your rental of camping gear from GearBnB. Read them

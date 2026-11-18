@@ -46,7 +46,7 @@ const PROCESS_STEPS: ProcessStep[] = [
   },
   {
     title: 'Pick Up or Delivery',
-    description: 'Pick up your camping gear in Las Piñas City or have it delivered by Lalamove or Grab on your start date.',
+    description: 'Pick up your camping gear in Las Piñas City, or we book a Lalamove or Grab to deliver it on your start date and collect it at the end.',
   },
 ];
 

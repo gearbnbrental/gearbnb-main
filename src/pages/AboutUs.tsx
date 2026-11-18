@@ -95,7 +95,7 @@ const PROCESS_STEPS: ProcessStep[] = [
     number: 2,
     title: 'Book your dates and verify',
     description:
-      'Choose a 48-hour, 72-hour or longer rental, pick self pickup or Lalamove or Grab delivery, and upload your IDs so we can confirm it is really you.',
+      'Choose a 48-hour, 72-hour or longer rental, pick self pickup or delivery by a Lalamove or Grab we book for you, and upload your IDs so we can confirm it is really you.',
   },
   {
     number: 3,
@@ -107,7 +107,7 @@ const PROCESS_STEPS: ProcessStep[] = [
     number: 4,
     title: 'Pick it up or get it delivered',
     description:
-      'Collect your gear in Las Piñas City or have it brought to you by Lalamove or Grab on your start date. Our chat support operates 24/7, so let us know your preferred time at least 24 hours before your rental date.',
+      'Collect your gear in Las Piñas City, or we book a Lalamove or Grab to bring it to you on your start date and to collect it at the end. Our chat support operates 24/7, so let us know your preferred time at least 24 hours before your rental date.',
   },
 ];
 
@@ -139,7 +139,7 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: 'How do I rent camping gear from GearBnB?',
     answer:
-      'If you need help, you can send us a message on Messenger or TikTok. You can also directly browse available gear or packages and select your rental period. Choose pickup or Lalamove or Grab delivery, and confirm your time at least 24 hours before your rental date.',
+      'If you need help, you can send us a message on Messenger or TikTok. You can also directly browse available gear or packages and select your rental period. Choose pickup, or delivery by a Lalamove or Grab that we book for both the delivery and the return (you pay the fare to the driver), and confirm your time at least 24 hours before your rental date.',
   },
   {
     question: 'How much does camping gear cost to rent?',

@@ -17,7 +17,7 @@ const FULFILLMENT_OPTIONS: FulfillmentOptionConfig[] = [
   {
     value: 'delivery',
     title: 'Lalamove / Grab Delivery',
-    description: 'You book and pay for your own Lalamove or Grab to your address, GearBnB does not charge a delivery fee.',
+    description: 'We book the Lalamove or Grab to bring the gear to your address and to collect it at the end. You pay the fare to the driver. GearBnB adds no delivery fee.',
     icon: TruckIcon,
   },
   {

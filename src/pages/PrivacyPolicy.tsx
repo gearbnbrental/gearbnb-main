@@ -347,14 +347,16 @@ const SECTIONS: LegalSection[] = [
             ['Google (sign-in)', 'You choose to sign in with your Google Account', 'Google knows you signed in to GearBnB'],
             ['Meta Platforms (Facebook Login)', 'You choose to sign in with your Facebook account', 'Facebook knows you signed in to GearBnB'],
             ['Meta Platforms (Meta Pixel and Conversions API)', 'Count website visits and bookings and measure our Facebook and Instagram ads, only if you accept cookies', 'Pages you visit, your IP address, browser and device data, cookie identifiers, your phone number and, if you did not sign in with Google or Facebook, your email address (both in hashed form), and the rental amount'],
+            ['Lalamove or Grab', 'Book the delivery and return of your gear, only if you choose delivery', 'Your name, phone number and delivery address'],
             ['Government bodies, courts and law enforcement', 'Meet legal duties', 'Data the law requires'],
             ['Accountants and lawyers', 'Tax, accounting and legal advice', 'Data needed for their work'],
             ['A buyer or partner in a business sale or merger', 'Transfer the business', 'Business records'],
           ]}
         />
         <p>
-          We do not use payment providers or delivery partners. GCash, your bank, Lalamove and Grab handle your data under their
-          own privacy policies when you use their services.
+          We do not use payment providers. If you choose delivery, we book the Lalamove or Grab for you, so they receive your name,
+          phone number and delivery address. GCash, your bank, Lalamove and Grab handle your data under their own privacy
+          policies.
         </p>
         <p>
           We do not sell your personal data. We do not share your data for third-party marketing or advertising. The only advertising use is the ad measurement with Meta that this policy describes, and only if you accept cookies. We
@@ -613,7 +615,7 @@ export default function PrivacyPolicy() {
   return (
     <LegalLayout
       title="Privacy Policy"
-      updated="October 2026"
+      updated="November 2026"
       lead="This policy explains how GearBnB Camping Gear Rental collects, uses, stores, shares and protects your personal data. We follow the Data Privacy Act of 2012 (Republic Act No. 10173) and its Implementing Rules and Regulations. Read this policy before you create an account, book a rental or request an event quote."
       sections={SECTIONS}
     />

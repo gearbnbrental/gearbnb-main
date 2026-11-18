@@ -821,7 +821,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
                 label={isDelivery ? 'Lalamove / Grab' : 'Pickup'}
                 sublabel={
                   isDelivery
-                    ? 'GearBnB does not charge or arrange this, you book and pay for your own Lalamove or Grab.'
+                    ? 'We book the Lalamove or Grab for the delivery and the return. You pay the fare to the driver.'
                     : 'No fee for in-store pickup'
                 }
                 feeAmount={isDelivery ? null : 0}

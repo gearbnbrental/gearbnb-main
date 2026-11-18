@@ -478,7 +478,7 @@ export function campsiteFaq(campsite: Campsite): CampsiteFaqItem[] {
       : null,
     {
       question: `Where can I rent camping gear for ${name}?`,
-      answer: `GearBnB rents tents, beds, chairs, coolers, fans, lights and complete camping packages. Pick up in Las Piñas City or book Lalamove or Grab delivery, and book online at gearbnbrental.com.`,
+      answer: `GearBnB rents tents, beds, chairs, coolers, fans, lights and complete camping packages. Pick up in Las Piñas City or have us book a Lalamove or Grab for the delivery and the return, and book online at gearbnbrental.com.`,
     },
   ];
   return items.filter((item): item is CampsiteFaqItem => item !== null);

@@ -78,7 +78,7 @@ export function packagePageMeta(kit: PackageKit): PageMeta {
   const description = fitDescription([
     `Rent ${kit.name} for ${priceSentence(kit.pricing)}.`,
     bestForSentence(kit.description),
-    'Pick up in Las Piñas City or book Lalamove or Grab delivery.',
+    'Pick up in Las Piñas City, or we book a Lalamove or Grab to deliver and collect it (you pay the driver).',
   ]);
   const images = [kit.imageUrl, ...(kit.images ?? [])].filter((src, i, all) => src && all.indexOf(src) === i);
   return {
@@ -110,7 +110,7 @@ export function gearPageMeta(kind: BookableGearKind): PageMeta {
   const description = fitDescription([
     `Rent the ${name} for ${priceSentence(kind.pricing)}.`,
     bestForSentence(kind.description),
-    'Pick up in Las Piñas City or book Lalamove or Grab delivery.',
+    'Pick up in Las Piñas City, or we book a Lalamove or Grab to deliver and collect it (you pay the driver).',
   ]);
   const images = (kind.images?.length ? kind.images : kind.imageUrl ? [kind.imageUrl] : []).filter(Boolean);
   return {

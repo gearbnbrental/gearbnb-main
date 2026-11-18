@@ -150,7 +150,7 @@ export function rentalTools(snapshot: () => CatalogSnapshot): WebMcpTool[] {
     },
     {
       name: 'get_rental_policies',
-      description: 'How renting from GearBnB works: booking steps, ID verification, the security deposit tiers and deadline, payment, pickup or Lalamove/Grab delivery, and contact details.',
+      description: 'How renting from GearBnB works: booking steps, ID verification, the security deposit tiers and deadline, payment, pickup or Lalamove/Grab delivery and return (booked by GearBnB, fare paid to the driver), and contact details.',
       inputSchema: { type: 'object', properties: {} },
       annotations: { readOnlyHint: true },
       async execute() {
