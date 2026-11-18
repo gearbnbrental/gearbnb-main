@@ -38,7 +38,7 @@ const PROCESS_STEPS: ProcessStep[] = [
   },
   {
     title: 'Verify & Book',
-    description: 'Submit trip dates, fulfillment preference (pickup/delivery), and identity verification documents.',
+    description: 'Submit trip dates, fulfillment preference (pickup or Lalamove/Grab delivery), and identity verification documents.',
   },
   {
     title: 'Deposit & Admin Review',

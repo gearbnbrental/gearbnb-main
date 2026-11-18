@@ -1531,7 +1531,7 @@ function BookingCard({
                 <div className="min-w-0">
                   <p className="text-xs text-ink-faint">Fulfillment</p>
                   <p className="break-words text-sm font-medium text-ink">
-                    {booking.fulfillmentType === 'DELIVERY' ? 'Delivery' : 'Self Pickup'}
+                    {booking.fulfillmentType === 'DELIVERY' ? 'Lalamove / Grab Delivery' : 'Self Pickup'}
                   </p>
                 </div>
               </div>

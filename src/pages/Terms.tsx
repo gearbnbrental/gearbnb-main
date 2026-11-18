@@ -86,8 +86,8 @@ const GENERAL_TERMS: TermsSection[] = [
     id: '4.7',
     title: '4.7 Delivery and Pick-Up',
     bullets: [
-      'All delivery and pick-up arrangements must be confirmed at least 24 hours in advance.',
-      'Delivery fees, where applicable, are separate from the rental fee and agreed upon prior to the start of the rental.',
+      'Delivery is by Lalamove or Grab only, booked and paid for by the Renter. GearBnB does not arrange delivery or charge a delivery fee.',
+      'All pick-up and Lalamove or Grab delivery arrangements must be confirmed at least 24 hours in advance.',
       'The Renter must inspect all items upon receipt and immediately report any discrepancies or pre-existing damage, issues not reported at receipt are assumed to have occurred during the rental period.',
     ],
   },
