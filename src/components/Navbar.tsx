@@ -38,17 +38,16 @@ function XMarkIcon({ className }: { className?: string }) {
  * desktop row already shows inline via its own `hidden sm:inline-block` links. Kept as a single
  * list here so the drawer and the desktop row can never silently drift apart.
  *
- * Deliberately no Profile entry: the account pill's own dropdown (which renders at every width,
- * not just desktop) is the single way into Profile, so it's never reachable from two different
- * menus at the same breakpoint. Catalog/Packages/Build Your Own are rendered separately below
+ * Deliberately no Profile or My Bookings entry: the account pill's own dropdown (which renders at
+ * every width, not just desktop) is the single way into both, so neither is reachable from two
+ * different menus at the same breakpoint. Catalog/Packages/Build Your Own are rendered separately below
  * (an expandable group, not a flat link) since mobile needs its own non-hover way into the same
  * two catalog routes the desktop dropdown offers. */
-function mobileNavLinks(user: unknown) {
+function mobileNavLinks() {
   return [
     { to: '/', label: 'Home' },
     { to: '/about-us', label: 'About Us' },
     { to: '/campsites', label: 'Find A Campsite' },
-    ...(user ? [{ to: '/my-bookings', label: 'My Bookings' }] : []),
     { to: '/plan-an-event', label: 'Plan An Event' },
   ];
 }
@@ -265,19 +264,6 @@ export default function Navbar() {
               Plan An Event
             </Link>
 
-            {user && (
-              // Inline from `lg` up only. Below that, My Bookings is the menu drawer's own entry
-              // (see mobileNavLinks) — it used to also sit inline here at every width, so a
-              // signed-in phone header carried it twice while squeezing a named account pill,
-              // cart and menu button into the same row.
-              <Link
-                to="/my-bookings"
-                className="hidden whitespace-nowrap rounded-md px-2 py-1.5 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-strong hover:text-ink lg:inline-block"
-              >
-                My Bookings
-              </Link>
-            )}
-
             <Link
               to="/cart"
               aria-label={`Cart, ${cartItemCount} item${cartItemCount === 1 ? '' : 's'}`}
@@ -332,6 +318,15 @@ export default function Navbar() {
                     >
                       Profile
                     </Link>
+                    <Link
+                      to="/my-bookings"
+                      role="menuitem"
+                      onClick={() => setAccountMenuOpen(false)}
+                      className="block px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface-strong"
+                    >
+                      My Bookings
+                    </Link>
+                    <div role="separator" className="my-1 border-t border-line-soft" />
                     <button
                       type="button"
                       role="menuitem"
@@ -423,7 +418,7 @@ export default function Navbar() {
                 </div>
               )}
 
-              {mobileNavLinks(user)
+              {mobileNavLinks()
                 .filter((link) => link.to !== '/' && link.to !== '/about-us')
                 .map((link) => (
                   <Link
