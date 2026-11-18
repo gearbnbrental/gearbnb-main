@@ -18,6 +18,8 @@ export function resolveGearVariant(kind: BookableGearKind, color: string | undef
   const { variants: _variants, ...rest } = kind;
   return {
     ...rest,
+    // The colour's own AI catalog id; a multi-colour kind has none of its own to fall back to.
+    catalogId: variant.catalogId,
     color: variant.color,
     name: `${kind.name} (${variant.color})`,
     imageUrl: variant.imageUrl ?? kind.imageUrl,

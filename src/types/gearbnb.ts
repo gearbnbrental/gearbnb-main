@@ -216,6 +216,10 @@ export interface BookableAddOn {
  * category+brand+model triple (see byoGearKey in RentalContext.tsx), and that same triple is
  * what gets submitted in the booking payload. */
 export interface BookableGearKind {
+  /** The AI camp guide's id for this gear (RmsCatalogGearKind.id): only matched against an AI cart
+   *  link, never part of the cart line's identity or the booking payload. On a kind resolved to one
+   *  colour (see resolveGearVariant) it is that colour's id. */
+  catalogId?: string;
   category: string;
   brand: string;
   model: string | null;
@@ -260,6 +264,8 @@ export interface BookableGearKind {
 /** One color of a Build Your Own gear kind, as reported by the RMS. `pricing`/`extraPerDayPrice`
  *  are present only when this color's price differs from the kind's own. */
 export interface BookableGearVariant {
+  /** The AI camp guide's id for this colour (RmsCatalogGearVariant.id). */
+  catalogId?: string;
   color: string;
   imageUrl: string | null;
   quantity: number;

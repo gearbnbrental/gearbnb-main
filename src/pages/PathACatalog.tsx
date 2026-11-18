@@ -26,6 +26,7 @@ import { cartStockUses, subtractStock } from '../utils/packageStock';
 import { decidePackageCheck, type PackageDateStock } from '../utils/packageDateStock';
 import { usePackageDateStock } from '../hooks/usePackageDateStock';
 import { useDateAwareGearKinds } from '../hooks/useGearDateStock';
+import { kitForEdition } from '../utils/kitEdition';
 import {
   DURATION_PRESETS,
   DURATION_PROMO_BADGES,
@@ -277,21 +278,10 @@ function PackageCard({ kit, dateRange, selectedDuration, dateStock, color, detai
 
   function handleAdd() {
     if (selectedEdition) {
-      // The edition's own price/deposit/extra-day rate/stock status — never the parent kit's own
-      // (see effectivePricing's own comment above) — so what's added to the cart, priced, and
-      // charged always matches the specific edition the customer actually picked.
-      addKit({
-        ...kit,
-        id: selectedEdition.id,
-        name: `${kit.name} (${selectedEdition.label})`,
-        imageUrl: selectedEdition.imageUrl,
-        pricing: selectedEdition.pricing,
-        depositAmount: selectedEdition.depositAmount,
-        extraPerDayPrice: selectedEdition.extraPerDayPrice,
-        isOutOfStock: effectiveIsOutOfStock,
-        description: selectedEdition.description,
-        editions: undefined,
-      });
+      // The edition's own package number, price, deposit, extra-day rate and stock status, never the
+      // parent kit's (see effectivePricing's own comment above), so what's added to the cart, priced,
+      // charged and booked always matches the specific edition the customer actually picked.
+      addKit(kitForEdition(kit, selectedEdition, effectiveIsOutOfStock));
     } else {
       addKit({ ...kit, isOutOfStock: effectiveIsOutOfStock });
     }

@@ -1,5 +1,5 @@
-﻿import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+﻿import { useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { GearPlaceholderIcon } from '../components/icons';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -26,6 +26,10 @@ import { useBasketPromo } from '../hooks/useBasketPromo';
 import { checkoutBlocker, datesBlocker } from '../utils/checkoutRules';
 import { BarPromoNote, BarRentalFee } from '../components/promo/PromoTotals';
 import { useStickyBarRef } from '../utils/stickyBar';
+import { useCatalog } from '../context/useCatalog';
+import { cartEntriesSignature, createCartLinkRunner, withoutCartLinkParams, type CartLinkEffects } from '../utils/aiCartLink';
+import { trackAddToCart } from '../utils/metaTracking';
+import { localTodayISO } from '../utils/duration';
 
 function CheckboxInput({
   checked,
@@ -144,6 +148,72 @@ function Thumbnail({ src, alt }: { src: string; alt: string }) {
   );
 }
 
+const AI_CART_BANNER = 'Your AI camp guide prepared this cart. Review it before checkout.';
+
+/**
+ * Fills the cart from an AI camp guide link (`/cart?ai=1&...`, see aiCartLink.ts) once the catalog is loaded. Returns
+ * the notice to show (a bad link, or lines left out) and whether the "prepared by your AI camp guide" banner is up: it
+ * stays until the camper dismisses it or changes what is in the cart.
+ */
+function useAiCartLink() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { loading: authLoading } = useAuth();
+  const { kits, catalogState, gearKinds, gearCatalogState } = useCatalog();
+  const { cart, applyCartLink } = useRental();
+  const [notice, setNotice] = useState<string | null>(null);
+  // 'pending' right after the link is applied (the cart updates in the same render), then the cart it produced.
+  const [bannerFor, setBannerFor] = useState<string | null>(null);
+
+  // The effects read the latest values through this ref, so the runner (and the record of which links it has already
+  // handled) is created once and survives every re-render.
+  const effectsRef = useRef<CartLinkEffects | null>(null);
+  effectsRef.current = {
+    apply: (plan) => {
+      applyCartLink(plan);
+      setBannerFor('pending');
+    },
+    notify: setNotice,
+    clearLink: () =>
+      navigate({ pathname: location.pathname, search: withoutCartLinkParams(location.search), hash: location.hash }, { replace: true }),
+    track: (kind, valuePesos) => trackAddToCart(kind, valuePesos),
+  };
+  const runnerRef = useRef<ReturnType<typeof createCartLinkRunner> | null>(null);
+  runnerRef.current ??= createCartLinkRunner(
+    {
+      apply: (plan) => effectsRef.current?.apply(plan),
+      notify: (text) => effectsRef.current?.notify(text),
+      clearLink: () => effectsRef.current?.clearLink(),
+      track: (kind, value) => effectsRef.current?.track(kind, value),
+    },
+    localTodayISO,
+  );
+
+  useEffect(() => {
+    runnerRef.current?.run(location.search, {
+      authReady: !authLoading,
+      packagesState: catalogState,
+      kits,
+      gearState: gearCatalogState,
+      gearKinds,
+      tripDetails: cart.tripDetails,
+    });
+  }, [location.search, authLoading, catalogState, kits, gearCatalogState, gearKinds, cart.tripDetails]);
+
+  const signature = cartEntriesSignature(cart);
+  useEffect(() => {
+    if (bannerFor === 'pending') setBannerFor(signature);
+    else if (bannerFor !== null && bannerFor !== signature) setBannerFor(null);
+  }, [bannerFor, signature]);
+
+  return {
+    notice,
+    dismissNotice: () => setNotice(null),
+    showBanner: bannerFor !== null,
+    dismissBanner: () => setBannerFor(null),
+  };
+}
+
 export default function Cart() {
   // Lets the floating corner buttons sit just above this page's sticky bar, whatever its height.
   const stickyBarRef = useStickyBarRef();
@@ -211,6 +281,28 @@ export default function Cart() {
     selectedCart.selectedItems.length +
     selectedCart.byoGears.reduce((sum, gear) => sum + gear.quantity, 0);
 
+  const aiLink = useAiCartLink();
+  const aiLinkMessages = (
+    <>
+      {aiLink.showBanner && (
+        <div className="flex items-start justify-between gap-3 rounded-xl border border-brand-forest/30 bg-brand-forest/5 px-4 py-3 text-sm text-ink">
+          <p className="font-medium">{AI_CART_BANNER}</p>
+          <button type="button" onClick={aiLink.dismissBanner} className="shrink-0 text-xs font-semibold underline underline-offset-2">
+            Dismiss
+          </button>
+        </div>
+      )}
+      {aiLink.notice && (
+        <div className="flex items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <p>{aiLink.notice}</p>
+          <button type="button" onClick={aiLink.dismissNotice} className="shrink-0 text-xs font-semibold underline underline-offset-2">
+            Dismiss
+          </button>
+        </div>
+      )}
+    </>
+  );
+
   const removedNotice = removedItemNames.length > 0 && (
     <div className="flex items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
       <p>
@@ -232,6 +324,7 @@ export default function Cart() {
   if (!hasSelection) {
     return (
       <div className="mx-auto flex w-full max-w-2xl flex-col items-center gap-4 px-5 py-12 text-center sm:px-6 sm:py-20">
+        {aiLink.notice && <div className="w-full text-left">{aiLinkMessages}</div>}
         {removedNotice && <div className="w-full">{removedNotice}</div>}
         <h1 className="font-serif text-xl font-semibold text-ink">Your Cart is Empty</h1>
         <p className="text-sm text-ink-muted">Add a package or build your own to get started.</p>
@@ -262,6 +355,7 @@ export default function Cart() {
           </Link>
         </div>
 
+        {aiLinkMessages}
         {removedNotice}
 
 

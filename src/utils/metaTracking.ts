@@ -124,9 +124,18 @@ function track(eventName: string, params: Record<string, unknown>, env: PixelEnv
 
 export type CartEntryKind = 'package' | 'gear' | 'build_your_own';
 
-/** The customer added something to the cart (a package, an individual item, or one more Build Your Own gear). */
-export function trackAddToCart(kind: CartEntryKind, env: PixelEnvironment = pixelEnvironment()): void {
-  track('AddToCart', { content_category: kind }, env);
+/**
+ * The customer added something to the cart (a package, an individual item, or one more Build Your Own gear). With
+ * `valuePesos` (the rental fee of what was added, e.g. a whole AI camp guide cart link), it is sent as the event's value.
+ */
+export function trackAddToCart(kind: CartEntryKind, valuePesos?: number, env: PixelEnvironment = pixelEnvironment()): void {
+  track(
+    'AddToCart',
+    valuePesos === undefined
+      ? { content_category: kind }
+      : { value: Math.max(0, valuePesos), currency: 'PHP', content_type: 'product', content_category: kind },
+    env,
+  );
 }
 
 /** The customer opened checkout with something selected. `valuePesos` is the site's own estimate of the rental fee. */

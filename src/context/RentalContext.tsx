@@ -31,6 +31,8 @@ import { requiredDeposit, type DepositReason } from '../utils/securityDeposit';
 import { useCatalog } from './useCatalog';
 import { useAuth } from './AuthContext';
 import { trackAddToCart } from '../utils/metaTracking';
+import { kitForEdition } from '../utils/kitEdition';
+import type { CartLinkPlan } from '../utils/aiCartLink';
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
@@ -518,14 +520,10 @@ function buildBookableKitLookup(kits: PackageKit[]): Map<string, PackageKit> {
 
   for (const kit of kits) {
     if (kit.editions && kit.editions.length > 0) {
+      // Each edition with its OWN package number, price and deposit (kitForEdition), never the first
+      // edition's: checkout books the package number stored on the cart entry.
       for (const edition of kit.editions) {
-        lookup.set(edition.id, {
-          ...kit,
-          id: edition.id,
-          name: `${kit.name} (${edition.label})`,
-          imageUrl: edition.imageUrl,
-          editions: undefined,
-        });
+        lookup.set(edition.id, kitForEdition(kit, edition));
       }
     } else {
       lookup.set(kit.id, kit);
@@ -597,7 +595,9 @@ type CartAction =
   // guest) storage key — dispatched only when the authenticated user actually changes (see
   // RentalProvider), never on every render. Deliberately a full replacement, not a merge: an
   // account switch must never let one account's in-progress cart bleed into another's.
-  | { type: 'LOAD_CART'; cart: CartState };
+  | { type: 'LOAD_CART'; cart: CartState }
+  // Everything an AI camp guide cart link adds, in one step (see applyCartLinkPlan).
+  | { type: 'APPLY_CART_LINK'; plan: CartLinkPlan };
 
 /** Adds an id to a checkout-selection list if it isn't already there — used wherever an entry is
  * newly added to the cart, so it starts selected for checkout like every other entry. */
@@ -609,6 +609,30 @@ function withSelected(ids: string[], id: string): string[] {
  * so a stale reference never lingers in the selection. */
 function withoutSelected(ids: string[], id: string): string[] {
   return ids.filter((existing) => existing !== id);
+}
+
+/**
+ * Adds what an AI camp guide cart link names (already validated and looked up in the live catalog, see
+ * resolveCartLink) exactly as if the camper had added it by hand: the link's dates become the dates being browsed,
+ * then the package and its extra gear, or the Build Your Own gear, go in through the same cart steps the catalog pages
+ * use. Whatever was already in the cart stays there but is unticked, so checkout starts with what the link prepared.
+ */
+export function applyCartLinkPlan(state: CartState, plan: CartLinkPlan): CartState {
+  let next = cartReducer(state, { type: 'SET_ALL_CHECKOUT_SELECTED', selected: false });
+  next = cartReducer(next, { type: 'UPDATE_TRIP_DETAILS', details: { startDate: plan.startDate, returnDate: plan.returnDate } });
+  if (plan.kit) {
+    // Taken out first so it comes back for the link's dates, not whatever dates it was added for before.
+    next = cartReducer(next, { type: 'REMOVE_KIT', kitId: plan.kit.id });
+    next = cartReducer(next, { type: 'ADD_KIT', kit: plan.kit });
+    for (const { gear, quantity } of plan.gears) {
+      next = cartReducer(next, { type: 'SET_PACKAGE_ADDON_QUANTITY', kitId: plan.kit.id, gear, quantity });
+    }
+  } else {
+    for (const { gear, quantity } of plan.gears) {
+      next = cartReducer(next, { type: 'SET_BYO_GEAR_QUANTITY', gear, quantity });
+    }
+  }
+  return next;
 }
 
 function cartReducer(state: CartState, action: CartAction): CartState {
@@ -893,6 +917,8 @@ function cartReducer(state: CartState, action: CartAction): CartState {
       };
     }
 
+    case 'APPLY_CART_LINK':
+      return applyCartLinkPlan(state, action.plan);
     case 'UPDATE_TRIP_DETAILS': {
       // Only the dates being browsed (and trip details). Entries already in the cart keep their own.
       return { ...state, tripDetails: { ...state.tripDetails, ...action.details } };
@@ -1486,6 +1512,9 @@ interface RentalContextValue {
    *  page's "Select All" / "Deselect All" control. */
   setAllCheckoutSelected: (selected: boolean) => void;
   clearCart: () => void;
+  /** Fills the cart from an AI camp guide cart link (see applyCartLinkPlan). Sends no Pixel event of its own: the cart
+   *  page sends one for the whole link. */
+  applyCartLink: (plan: CartLinkPlan) => void;
   /** Dismisses the "some items were removed" notice — see CartState.removedItemNames. */
   dismissRemovedNotice: () => void;
 }
@@ -1640,6 +1669,7 @@ export function RentalProvider({ children }: { children: ReactNode }) {
       toggleByoAddOnSelected: (gearKey, addOnKey) => dispatch({ type: 'TOGGLE_BYO_ADDON_SELECTED', gearKey, addOnKey }),
       setAllCheckoutSelected: (selected) => dispatch({ type: 'SET_ALL_CHECKOUT_SELECTED', selected }),
       clearCart: () => dispatch({ type: 'CLEAR_CART' }),
+      applyCartLink: (plan) => dispatch({ type: 'APPLY_CART_LINK', plan }),
       dismissRemovedNotice: () => dispatch({ type: 'DISMISS_REMOVED_NOTICE' }),
     }),
     [cart, totals],

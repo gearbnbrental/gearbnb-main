@@ -111,7 +111,7 @@ describe('trackLead: the browser Pixel half', () => {
 describe('funnel events: sign-up, add to cart, checkout', () => {
   it('fire only for a visitor who accepted cookies and only when the Pixel is loaded', () => {
     for (const run of [
-      (e: { consent: 'granted' | 'denied' | null; fbq?: (...a: unknown[]) => void }) => trackAddToCart('package', e),
+      (e: { consent: 'granted' | 'denied' | null; fbq?: (...a: unknown[]) => void }) => trackAddToCart('package', undefined, e),
       (e: { consent: 'granted' | 'denied' | null; fbq?: (...a: unknown[]) => void }) => trackInitiateCheckout(1000, e),
       (e: { consent: 'granted' | 'denied' | null; fbq?: (...a: unknown[]) => void }) => trackCompleteRegistration('email', e),
     ]) {
@@ -127,7 +127,7 @@ describe('funnel events: sign-up, add to cart, checkout', () => {
 
   it('send only a category, an amount or a method: nothing personal', () => {
     const fbq = vi.fn();
-    trackAddToCart('build_your_own', { consent: 'granted', fbq });
+    trackAddToCart('build_your_own', undefined, { consent: 'granted', fbq });
     trackInitiateCheckout(2040.5, { consent: 'granted', fbq });
     trackCompleteRegistration('google', { consent: 'granted', fbq });
     expect(fbq.mock.calls).toEqual([
@@ -141,7 +141,7 @@ describe('funnel events: sign-up, add to cart, checkout', () => {
     const fbq = vi.fn(() => {
       throw new Error('blocked');
     });
-    expect(() => trackAddToCart('gear', { consent: 'granted', fbq })).not.toThrow();
+    expect(() => trackAddToCart('gear', undefined, { consent: 'granted', fbq })).not.toThrow();
   });
 
   it('a negative checkout amount is reported as 0', () => {

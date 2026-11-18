@@ -824,9 +824,13 @@ export interface RmsCatalogAddOn {
   images?: string[];
 }
 
-/** Matches the RMS's CustomerCatalogGearKind exactly. No id field — a kind is identified by its
- * category+brand+model triple, both here and in the booking submission payload. */
+/** Matches the RMS's CustomerCatalogGearKind exactly. A kind is identified by its category+brand+model
+ * triple, both here and in the booking submission payload; `id` is only the AI camp guide's name for it. */
 export interface RmsCatalogGearKind {
+  /** The AI camp guide's id for this gear, the one a `/cart?ai=1` link carries (a slug of category, brand,
+   *  model and colour). Present only on a kind with at most one colour; a multi-colour kind has one per
+   *  colour on `variants[].id` instead. Absent on an RMS that doesn't send it yet. */
+  id?: string;
   category: string;
   brand: string;
   model: string | null;
@@ -857,6 +861,8 @@ export interface RmsCatalogGearKind {
 
 /** One color of a gear kind — matches the RMS's CustomerCatalogGearVariant. */
 export interface RmsCatalogGearVariant {
+  /** The AI camp guide's id for this colour of this gear (see RmsCatalogGearKind.id). */
+  id?: string;
   color: string;
   imageUrl: string | null;
   quantity: number;

@@ -32,6 +32,7 @@ function mapAddOn(addOn: RmsCatalogAddOn): BookableAddOn {
 function mapGearVariant(kind: RmsCatalogGearKind, variant: RmsCatalogGearVariant): BookableGearVariant {
   const hasOwnPricing = variant.price48hCentavos !== undefined || variant.price72hCentavos !== undefined;
   return {
+    ...(variant.id ? { catalogId: variant.id } : {}),
     color: variant.color,
     imageUrl: variant.imageUrl,
     quantity: variant.quantity,
@@ -56,6 +57,7 @@ function mapGearVariant(kind: RmsCatalogGearKind, variant: RmsCatalogGearVariant
 
 function mapGearKind(kind: RmsCatalogGearKind): BookableGearKind {
   return {
+    ...(kind.id ? { catalogId: kind.id } : {}),
     category: kind.category,
     brand: kind.brand,
     model: kind.model,
