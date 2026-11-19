@@ -1,4 +1,5 @@
 ﻿import { useEffect, useRef, useState } from 'react';
+import { MY_BOOKINGS_STEPS } from '../../config/bookingHelp';
 import { useLocation, useNavigate } from 'react-router-dom';
 import ConfirmDialog from '../ConfirmDialog';
 import { useAuth } from '../../context/AuthContext';
@@ -659,7 +660,7 @@ export default function PaymentBreakdown({ onSubmit }: PaymentBreakdownProps) {
         setSubmitError('Some of the selected items are no longer available for these dates. Please review your selection.');
       } else if (failure.kind === 'duplicate') {
         setSubmitError(
-          `You already have a booking request for the same items and dates${failure.bookingNumber ? ` (${failure.bookingNumber})` : ''}. Please check My Bookings instead of submitting another request.`,
+          `You already have a booking request for the same items and dates${failure.bookingNumber ? ` (${failure.bookingNumber})` : ''}. Please check My Bookings (${MY_BOOKINGS_STEPS}) instead of submitting another request.`,
         );
       } else if (failure.kind === 'saved_document_unavailable') {
         // A saved document stopped being usable between loading this page and booking (it expired or was

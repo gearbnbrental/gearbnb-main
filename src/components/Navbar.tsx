@@ -38,17 +38,21 @@ function XMarkIcon({ className }: { className?: string }) {
  * desktop row already shows inline via its own `hidden sm:inline-block` links. Kept as a single
  * list here so the drawer and the desktop row can never silently drift apart.
  *
- * Deliberately no Profile or My Bookings entry: the account pill's own dropdown (which renders at
- * every width, not just desktop) is the single way into both, so neither is reachable from two
- * different menus at the same breakpoint. Catalog/Packages/Build Your Own are rendered separately below
+ * No Profile entry: the account pill's own dropdown (which renders at every width) is the way into
+ * it. My Bookings is in that dropdown too, and also here for signed-in customers, since the phone
+ * menu is where they look first. Catalog/Packages/Build Your Own are rendered separately below
  * (an expandable group, not a flat link) since mobile needs its own non-hover way into the same
  * two catalog routes the desktop dropdown offers. */
-function mobileNavLinks() {
+function mobileNavLinks(signedIn: boolean) {
   return [
     { to: '/', label: 'Home' },
     { to: '/about-us', label: 'About Us' },
+    // Its own line on phones (not only inside Catalog) so the shop is easy to find.
+    { to: '/catalog/camping-gear-sale', label: 'Camping Gear for Sale' },
     { to: '/campsites', label: 'Find A Campsite' },
     { to: '/plan-an-event', label: 'Plan An Event' },
+    // Also in the account menu; repeated here because the phone menu is where people look first.
+    ...(signedIn ? [{ to: '/my-bookings', label: 'My Bookings' }] : []),
   ];
 }
 
@@ -409,16 +413,10 @@ export default function Navbar() {
                   >
                     Build Your Own
                   </Link>
-                  <Link
-                    to="/catalog/camping-gear-sale"
-                    className="rounded-lg px-3 py-2 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-strong hover:text-ink"
-                  >
-                    Camping Gear for Sale
-                  </Link>
                 </div>
               )}
 
-              {mobileNavLinks()
+              {mobileNavLinks(Boolean(user))
                 .filter((link) => link.to !== '/' && link.to !== '/about-us')
                 .map((link) => (
                   <Link

@@ -1,4 +1,5 @@
 ﻿import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import AuthRequiredMessage from '../components/AuthRequiredMessage';
 import ConfirmDialog from '../components/ConfirmDialog';
 import PasswordInput from '../components/PasswordInput';
@@ -132,6 +133,19 @@ function ProfileContent() {
         <h1 className="font-serif text-xl font-semibold text-ink">Profile</h1>
         <p className="text-sm text-ink-muted">Manage your account information and security.</p>
       </div>
+
+      <SectionCard title="Your Bookings">
+        <p className="text-sm text-ink-muted">
+          See each booking&rsquo;s status and your security deposit, and upload your proof of payment. You can always get
+          there from the menu under your name at the top right of the page.
+        </p>
+        <Link
+          to="/my-bookings"
+          className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-brand-forest px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-forest-dark sm:w-auto sm:self-start sm:px-6"
+        >
+          Go to My Bookings
+        </Link>
+      </SectionCard>
 
       <SectionCard title="Your Information">
         <label className="flex flex-col gap-1.5">

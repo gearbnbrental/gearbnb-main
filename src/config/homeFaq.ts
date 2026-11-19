@@ -5,6 +5,7 @@
  */
 import { CAMPSITES_COMING_SOON } from './features.ts';
 import { MESSENGER_URL } from './social.ts';
+import { MY_BOOKINGS_STEPS } from './bookingHelp.ts';
 
 export interface HomeFaqEntry {
   question: string;
@@ -56,5 +57,10 @@ export const HOME_FAQ: HomeFaqEntry[] = [
     question: 'How do I get started?',
     answer:
       "Browse our packages or build your own kit. Pick your dates and book. We'll guide you through verification and payment from there.",
+  },
+  {
+    question: 'How do I check my booking?',
+    answer: `Log in, then ${MY_BOOKINGS_STEPS}. There you can see each booking's status and your security deposit, and upload your proof of payment.`,
+    link: { href: '/my-bookings', label: 'Go to My Bookings' },
   },
 ];

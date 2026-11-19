@@ -4,6 +4,7 @@
  * (src/utils/webMcp.ts) both use these, so they always agree with each other and with the deposit
  * rule itself.
  */
+import { MY_BOOKINGS_STEPS } from './bookingHelp.ts';
 import { DEPOSIT_TIERS, TOP_TIER_DEPOSIT_CENTAVOS } from '../utils/securityDeposit';
 import { CONTACT_EMAIL, CONTACT_PHONE_DISPLAY, MESSENGER_URL } from './social';
 
@@ -17,6 +18,7 @@ export const HOW_RENTING_WORKS = [
   "The deposit is refunded in full if a booking isn't approved; after approval, refunds follow the rental agreement.",
   'Pay the rental fee on or before the rental date. Pick up in Las Piñas City, or choose delivery: GearBnB books the Lalamove or Grab for both the delivery and the return, and the renter pays the fare to the driver.',
   'Payment is by GCash or bank transfer.',
+  `Follow a booking (status, deposit, proof of payment upload) in My Bookings: log in at gearbnbrental.com, then ${MY_BOOKINGS_STEPS}.`,
 ];
 
 export const DEPOSIT_RULE =

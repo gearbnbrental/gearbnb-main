@@ -1,4 +1,5 @@
 ﻿import { useEffect, useRef, useState } from 'react';
+import { FIND_MY_BOOKINGS } from '../config/bookingHelp';
 import { useNavigate } from 'react-router-dom';
 import AuthRequiredMessage from '../components/AuthRequiredMessage';
 import BackLink from '../components/BackLink';
@@ -157,6 +158,13 @@ export default function Checkout() {
             </div>
           </>
         )}
+
+        <div className="rounded-xl border border-brand-forest/30 bg-brand-forest/5 px-4 py-3 text-sm text-ink">
+          <p className="font-semibold">How to find this booking later</p>
+          <p className="mt-1 text-ink-muted">
+            {FIND_MY_BOOKINGS} You&rsquo;ll see its status, your security deposit and where to upload your proof of payment.
+          </p>
+        </div>
 
         <button
           type="button"
